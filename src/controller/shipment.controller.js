@@ -309,6 +309,27 @@ const hasSavedStorageArrivalData = (container) => {
   );
 };
 
+const hasAssignedWarehouse = (container) => {
+  const rows = container?.actual?.storageAllocations || [];
+  return Array.isArray(rows) && rows.some((row) => String(row?.warehouse || '').trim().length > 0);
+};
+
+const hasTransitActualMilestone = (container) => {
+  const actual = Array.isArray(container?.actual) ? container.actual[0] || {} : container?.actual || {};
+  return (
+    hasValue(actual?.BLNo) &&
+    hasValue(actual?.commercialInvoiceNo) &&
+    !!toDateOrNull(actual?.shipOnBoardDate) &&
+    !!toDateOrNull(actual?.updatedETD) &&
+    !!toDateOrNull(actual?.updatedETA)
+  );
+};
+
+const hasPortOfDischargeMilestone = (container) => {
+  const actual = Array.isArray(container?.actual) ? container.actual[0] || {} : container?.actual || {};
+  return hasValue(actual?.portOfDischarge);
+};
+
 const getApprovalActorName = (user) => user?.name || user?.email || 'A user';
 
 const getContainerSerialNo = (container) =>
@@ -782,8 +803,7 @@ const SHIPMENT_REPORT_COLUMNS = [
   { header: 'Rice Name', key: 'riceName', width: 18 },
   { header: 'Packing', key: 'packing', width: 12 },
   { header: 'PI No.', key: 'piNo', width: 20 },
-  // { header: 'CI No.', key: 'ciNo', width: 20 },
-  // { header: 'FCL', key: 'fcl', width: 10 },
+  { header: 'FCL', key: 'fcl', width: 10 },
   { header: 'Cont. Size', key: 'containerSize', width: 12 },
   { header: 'Buying Unit', key: 'buyingUnit', width: 14 },
   { header: 'Buying Qty (MT)', key: 'buyingQtyMT', width: 16 },
@@ -793,12 +813,11 @@ const SHIPMENT_REPORT_COLUMNS = [
   { header: 'FPO Number', key: 'fpoNo', width: 20 },
   { header: 'Bank Name', key: 'bankName', width: 18 },
   { header: 'Payment Terms', key: 'paymentTerms', width: 18 },
-  { header: 'Current Stage', key: 'currentStage', width: 18 },
+  { header: 'Shipment Status', key: 'shipmentStatus', width: 22 },
   { header: 'No. of Shipments', key: 'noOfShipments', width: 16 },
   { header: 'Port of Loading', key: 'portOfLoading', width: 20 },
   { header: 'Port of Discharge', key: 'portOfDischarge', width: 20 },
-  { header: 'Planned ETD', key: 'plannedETD', width: 14 },
-  { header: 'Planned ETA', key: 'plannedETA', width: 14 },
+  { header: 'Month', key: 'month', width: 12 },
   { header: 'Week', key: 'weekWiseShipment', width: 12 },
   { header: 'Advance Amount', key: 'advanceAmount', width: 16 },
   { header: 'Bags', key: 'bags', width: 12 },
@@ -823,6 +842,90 @@ const getDisplayStageName = (stage) => {
   const normalizedStage = String(stage || '').trim();
   if (normalizedStage === 'Planned Split') return 'Shipment Split';
   return normalizedStage;
+};
+
+const hasMeaningfulActualData = (container) => {
+  const actual = Array.isArray(container?.actual) ? container.actual[0] || {} : container?.actual || {};
+  return (
+    hasValue(actual?.actualSerialNo) ||
+    hasValue(actual?.commercialInvoiceNo) ||
+    !!toDateOrNull(actual?.shipOnBoardDate) ||
+    !!toDateOrNull(actual?.updatedETD) ||
+    !!toDateOrNull(actual?.updatedETA) ||
+    hasValue(actual?.BLNo) ||
+    hasValue(actual?.portOfLoading) ||
+    hasValue(actual?.portOfDischarge) ||
+    Number(actual?.qtyMT || 0) > 0 ||
+    Number(actual?.bags || 0) > 0 ||
+    Number(actual?.FCL || 0) > 0 ||
+    Number(actual?.pallet || 0) > 0
+  );
+};
+
+const getStartOfToday = () => {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+};
+
+const getShipmentMonthLabel = (shipment, shipmentContainers = []) => {
+  const candidateDates = [
+    ...shipmentContainers.flatMap((container) => [
+      container?.planned?.eta,
+      container?.planned?.etd,
+      container?.actual?.updatedETA,
+      container?.actual?.updatedETD,
+    ]),
+    shipment?.plannedETA,
+    shipment?.plannedETD,
+    shipment?.orderDate,
+    shipment?.createdAt,
+  ]
+    .map((value) => toDateOrNull(value))
+    .filter(Boolean)
+    .sort((a, b) => a.getTime() - b.getTime());
+
+  const firstDate = candidateDates[0];
+  return firstDate ? firstDate.toLocaleString('en-US', { month: 'short' }) : '';
+};
+
+const getComputedContainerShipmentStatus = (shipment, container) => {
+  if (!container) return getDisplayStageName(shipment?.currentStage || 'Shipment Entry');
+  if (hasPortOfDischargeMilestone(container)) return 'At Port of Discharge';
+  if (hasTransitActualMilestone(container)) return 'On Transit';
+
+  const scheduledEtd = toDateOrNull(container?.planned?.etd || shipment?.plannedETD);
+  if (scheduledEtd) {
+    return 'ETD yet to due';
+  }
+
+  return getDisplayStageName(shipment?.currentStage || 'Shipment Entry');
+};
+
+const getComputedShipmentStatus = (shipment, shipmentContainers = []) => {
+  if (shipmentContainers.some((container) => hasPortOfDischargeMilestone(container))) {
+    return 'At Port of Discharge';
+  }
+
+  if (shipmentContainers.some((container) => hasTransitActualMilestone(container))) {
+    return 'On Transit';
+  }
+
+  const pendingScheduledDates = shipmentContainers
+    .filter((container) => !hasTransitActualMilestone(container) && !hasPortOfDischargeMilestone(container))
+    .map((container) => toDateOrNull(container?.planned?.etd || shipment?.plannedETD))
+    .filter(Boolean)
+    .sort((a, b) => a.getTime() - b.getTime());
+
+  if (pendingScheduledDates.length) {
+    return 'ETD yet to due';
+  }
+
+  const shipmentLevelEtd = toDateOrNull(shipment?.plannedETD);
+  if (shipmentLevelEtd) {
+    return 'ETD yet to due';
+  }
+
+  return getDisplayStageName(shipment?.currentStage || 'Shipment Entry');
 };
 
 const getFirstMeaningfulNumber = (...values) => {
@@ -1031,6 +1134,7 @@ const buildShipmentReportRows = async () => {
     const firstContainer = shipmentContainers[0] || null;
     const actual = firstContainer?.actual || {};
     const planned = firstContainer?.planned || {};
+    const shipmentStatus = getComputedShipmentStatus(shipment, shipmentContainers);
     const children = shipmentContainers.map((container, childIndex) => {
       const childActual = container?.actual || {};
       const childPlanned = container?.planned || {};
@@ -1038,6 +1142,7 @@ const buildShipmentReportRows = async () => {
       const scheduledEtaSource = childPlanned.eta || shipment.plannedETA;
       const actualEtdSource = childActual.updatedETD || '';
       const actualEtaSource = childActual.updatedETA || '';
+      const childMonthSource = scheduledEtaSource || scheduledEtdSource || actualEtaSource || actualEtdSource;
       return {
         rowType: 'child',
         shipmentNo: getScheduledShipmentId(shipment, childIndex),
@@ -1052,8 +1157,10 @@ const buildShipmentReportRows = async () => {
         buyingQtyMT: childActual.qtyMT ?? childPlanned.qtyMT ?? '',
         bags: getFirstMeaningfulNumber(childActual.bags, childPlanned.bags, shipment.bags),
         pallet: getFirstMeaningfulNumber(childActual.pallet, childPlanned.pallet, shipment.pallet),
+        month: getShipmentMonthLabel({ plannedETA: childMonthSource, plannedETD: childMonthSource }, []),
         weekWiseShipment: childActual.weekWiseShipment || childPlanned.weekWiseShipment || '',
-        currentStage: getDisplayStageName(shipment.currentStage || ''),
+        shipmentStatus: getComputedContainerShipmentStatus(shipment, container),
+        currentStage: getComputedContainerShipmentStatus(shipment, container),
       };
     });
 
@@ -1083,12 +1190,12 @@ const buildShipmentReportRows = async () => {
       fpoNo: shipment.fpoNo || '',
       bankName: shipment.bankName || '',
       paymentTerms: shipment.paymentTerms || '',
+      shipmentStatus,
       currentStage: getDisplayStageName(shipment.currentStage || ''),
       noOfShipments: shipment.noOfShipments ?? shipment.assumedContainerCount ?? 0,
       portOfLoading: shipment.portOfLoading || actual.portOfLoading || '',
       portOfDischarge: shipment.portOfDischarge || actual.portOfDischarge || '',
-      plannedETD: formatDateValue(shipment.plannedETD || planned.etd || actual.updatedETD),
-      plannedETA: formatDateValue(shipment.plannedETA || planned.eta || actual.updatedETA),
+      month: getShipmentMonthLabel(shipment, shipmentContainers),
       weekWiseShipment: planned.weekWiseShipment || actual.weekWiseShipment || '',
       advanceAmount: shipment.advanceAmount ?? '',
       bags: getFirstMeaningfulNumber(actual.bags, planned.bags, shipment.bags),
@@ -1117,14 +1224,14 @@ const flattenShipmentReportRowsForExport = (rows = []) => {
           country: child.actualETD || '',
           variant: child.actualETA || '',
           itemDescription: child.etaDifference || '',
-          riceName: child.weekWiseShipment || '',
-          packing: child.currentStage || '',
+          riceName: '',
+          packing: '',
           piNo: '',
           ciNo: '',
-          fcl: '',
-          containerSize: '',
+          fcl: child.fcl || '',
+          containerSize: child.containerSize || '',
           buyingUnit: '',
-          buyingQtyMT: '',
+          buyingQtyMT: child.buyingQtyMT || '',
           fcPerUnit: '',
           totalFC: '',
           incoterms: '',
@@ -1132,16 +1239,16 @@ const flattenShipmentReportRowsForExport = (rows = []) => {
           fpoNo: '',
           bankName: '',
           paymentTerms: '',
-          currentStage: child.currentStage || '',
+          shipmentStatus: child.shipmentStatus || child.currentStage || '',
+          currentStage: '',
           noOfShipments: '',
           portOfLoading: '',
           portOfDischarge: '',
-          plannedETD: '',
-          plannedETA: '',
-          weekWiseShipment: '',
+          month: child.month || '',
+          weekWiseShipment: child.weekWiseShipment || '',
           advanceAmount: '',
-          bags: '',
-          pallet: '',
+          bags: child.bags || '',
+          pallet: child.pallet || '',
         }))
       : [];
 
@@ -1175,12 +1282,12 @@ const flattenShipmentReportRowsForExport = (rows = []) => {
       fpoNo: '',
       bankName: '',
       paymentTerms: '',
+      shipmentStatus: '',
       currentStage: '',
       noOfShipments: '',
       portOfLoading: '',
       portOfDischarge: '',
-      plannedETD: '',
-      plannedETA: '',
+      month: '',
       weekWiseShipment: '',
       advanceAmount: '',
       bags: '',
@@ -1198,14 +1305,14 @@ const flattenShipmentReportRowsForExport = (rows = []) => {
       country: 'Actual ETD',
       variant: 'Actual ETA',
       itemDescription: 'ETA Difference',
-      riceName: 'Week',
-      packing: 'Stage',
+      riceName: '',
+      packing: '',
       piNo: '',
       ciNo: '',
-      fcl: '',
-      containerSize: '',
+      fcl: 'FCL',
+      containerSize: 'Cont. Size',
       buyingUnit: '',
-      buyingQtyMT: '',
+      buyingQtyMT: 'Buying Qty (MT)',
       fcPerUnit: '',
       totalFC: '',
       incoterms: '',
@@ -1213,16 +1320,16 @@ const flattenShipmentReportRowsForExport = (rows = []) => {
       fpoNo: '',
       bankName: '',
       paymentTerms: '',
-      currentStage: 'Stage',
+      shipmentStatus: 'Status',
+      currentStage: '',
       noOfShipments: '',
       portOfLoading: '',
       portOfDischarge: '',
-      plannedETD: '',
-      plannedETA: '',
-      weekWiseShipment: '',
+      month: 'Month',
+      weekWiseShipment: 'Week',
       advanceAmount: '',
-      bags: '',
-      pallet: '',
+      bags: 'Bags',
+      pallet: 'Pallet',
     };
 
     return [parentRow, spacerRow, childHeaderRow, ...childRows, spacerRow];
@@ -3469,6 +3576,17 @@ const fetchShipmentList = async ({ page = 1, limit = 20, search = '', status = '
     .limit(limit)
     .sort({ createdAt: -1 });
 
+  const shipmentIds = shipments.map((shipment) => shipment._id);
+  const containers = await Container.find({ shipmentId: { $in: shipmentIds } }).lean();
+  const containerMap = new Map();
+  containers.forEach((container) => {
+    const key = String(container.shipmentId);
+    if (!containerMap.has(key)) {
+      containerMap.set(key, []);
+    }
+    containerMap.get(key).push(container);
+  });
+
   const formatted = shipments.map(s => ({
     _id: s._id,
     year: s.year,
@@ -3481,7 +3599,7 @@ const fetchShipmentList = async ({ page = 1, limit = 20, search = '', status = '
     fcPerUnit: s.fcPerUnit || 0,
     totalFC: s.totalFC || 0,
     noOfShipments: s.noOfShipments || s.assumedContainerCount || 0,
-    status: getDisplayStageName(s.currentStage)
+    status: getDisplayStageName(s.currentStage || '')
   }));
 
   return {
@@ -3554,8 +3672,13 @@ exports.downloadShipmentReportExcel = async (req, res) => {
       'country',
       'variant',
       'itemDescription',
-      'riceName',
-      'packing',
+      'fcl',
+      'containerSize',
+      'buyingQtyMT',
+      'bags',
+      'pallet',
+      'weekWiseShipment',
+      'shipmentStatus',
     ];
     const childExcelStartCol = 2;
     const workbook = new ExcelJS.Workbook();
@@ -3770,7 +3893,7 @@ exports.downloadShipmentReportPdf = async (req, res) => {
           ? Math.max(baseWidth * 1.8, 120)
           : column.key === 'shipmentNo'
             ? Math.max(baseWidth * 1.6, 90)
-            : ['supplier', 'portOfLoading', 'portOfDischarge', 'paymentTerms', 'currentStage'].includes(column.key)
+            : ['supplier', 'portOfLoading', 'portOfDischarge', 'paymentTerms', 'shipmentStatus'].includes(column.key)
               ? Math.max(baseWidth * 1.45, 72)
               : Math.max(baseWidth * 1.3, 64);
 
@@ -3787,7 +3910,7 @@ exports.downloadShipmentReportPdf = async (req, res) => {
       if (totalDesiredWidth <= usableWidth) {
         const extra = usableWidth - totalDesiredWidth;
         const weights = SHIPMENT_REPORT_COLUMNS.map((column) =>
-          ['shipmentNo', 'supplier', 'itemDescription', 'portOfLoading', 'portOfDischarge', 'paymentTerms', 'currentStage'].includes(column.key) ? 2 : 1
+          ['shipmentNo', 'supplier', 'itemDescription', 'portOfLoading', 'portOfDischarge', 'paymentTerms', 'shipmentStatus'].includes(column.key) ? 2 : 1
         );
         const weightTotal = weights.reduce((sum, weight) => sum + weight, 0) || 1;
         return desiredWidths.map((width, index) => width + ((extra * weights[index]) / weightTotal));
@@ -3954,6 +4077,19 @@ exports.getShipmentSummary = async (req, res) => {
       .sort({ orderDate: -1, createdAt: -1 })
       .lean();
 
+    const shipmentIds = shipments.map((shipment) => shipment._id);
+    const containers = await Container.find({ shipmentId: { $in: shipmentIds } })
+      .sort({ createdAt: 1 })
+      .lean();
+    const containerMap = new Map();
+    containers.forEach((container) => {
+      const key = String(container.shipmentId);
+      if (!containerMap.has(key)) {
+        containerMap.set(key, []);
+      }
+      containerMap.get(key).push(container);
+    });
+
     const total = shipments.length;
     const completed = shipments.filter((s) => s.currentStage === 'GRN Completed').length;
     const inProgress = Math.max(total - completed, 0);
@@ -3963,7 +4099,7 @@ exports.getShipmentSummary = async (req, res) => {
 
     const stageMap = new Map();
     shipments.forEach((s) => {
-      const stage = getDisplayStageName(s.currentStage || 'Shipment Entry');
+      const stage = getComputedShipmentStatus(s, containerMap.get(String(s._id)) || []);
       stageMap.set(stage, (stageMap.get(stage) || 0) + 1);
     });
 
@@ -4049,7 +4185,7 @@ exports.getShipmentSummary = async (req, res) => {
       shipmentNo: s.shipmentNo,
       orderDate: s.orderDate || s.createdAt,
       plannedETA: s.plannedETA || null,
-      status: getDisplayStageName(s.currentStage || 'Shipment Entry'),
+      status: getComputedShipmentStatus(s, containerMap.get(String(s._id)) || []),
       totalAmount: Number(s?.payment?.totalAmount || 0),
       supplier: s?.supplierId?.name || '',
       item: s?.itemId?.description || ''
@@ -4125,20 +4261,20 @@ exports.getShipmentSummary = async (req, res) => {
     ];
 
     // Chart Data Generation
-    const mapStageToStatus = (stage) => {
-      if (['Shipment Entry', 'Planned Split'].includes(stage)) return 'Yet to be scheduled';
-      if (['Shipment Split', 'B/L Details'].includes(stage)) return 'Goods on transit';
-      if (['Documentation'].includes(stage)) return 'At Port / Waiting for document';
-      if (['Port & Customs', 'Under Clearance'].includes(stage)) return 'At Port / Clearance on progress';
-      if (['Storage', 'Quality', 'Payment Costing', 'GRN Completed', 'Completed', 'Cleared', 'Released'].includes(stage)) return 'Delivered WH';
-      return 'Yet to be scheduled';
+    const mapStageToStatus = (status) => {
+      if (status === 'ETD yet to due') return 'ETA yet to due';
+      if (status === 'On Transit') return 'Goods on transit';
+      if (status === 'At Port of Discharge') return 'At the Port';
+      if (status === 'Reached WH') return 'Delivered WH';
+      return String(status || 'Shipment Entry');
     };
 
-    const mapStageToYearlyStatus = (stage) => {
-      if (['Shipment Entry', 'Planned Split', 'Shipment Split', 'B/L Details'].includes(stage)) return 'ETA yet to due';
-      if (['Documentation', 'Port & Customs', 'Under Clearance'].includes(stage)) return 'At the Port';
-      if (['Storage', 'Quality', 'Payment Costing', 'GRN Completed', 'Completed', 'Cleared', 'Released'].includes(stage)) return 'Delivered WH';
-      return 'ETA yet to due';
+    const mapStageToYearlyStatus = (status) => {
+      if (status === 'Reached WH') return 'Delivered WH';
+      if (status === 'At Port of Discharge') return 'At the Port';
+      if (status === 'On Transit') return 'On Transit';
+      if (status === 'ETD yet to due') return 'ETD yet to due';
+      return String(status || 'ETD yet to due');
     };
 
     const qtyMappingMap = new Map();
@@ -4150,8 +4286,9 @@ exports.getShipmentSummary = async (req, res) => {
     shipments.forEach(s => {
       const itemDesc = s.itemId?.description || s.itemDescription || 'Unknown Item';
       const supplierName = s.supplierId?.name || s.supplierName || 'Unknown Supplier';
-      const status = mapStageToStatus(s.currentStage);
-      const yearlyStatus = mapStageToYearlyStatus(s.currentStage);
+      const shipmentStatus = getComputedShipmentStatus(s, containerMap.get(String(s._id)) || []);
+      const status = mapStageToStatus(shipmentStatus);
+      const yearlyStatus = mapStageToYearlyStatus(shipmentStatus);
       const qty = Number(s.plannedQtyMT || 0);
       const fc = Number(s.totalFC || 0);
       const fcPerUnit = Number(s.fcPerUnit || 0);
@@ -4274,7 +4411,8 @@ exports.getShipmentById = async (req, res) => {
       eta: c.planned?.eta,
       weekWiseShipment: c.planned?.weekWiseShipment,
       buyingUnit: c.planned?.buyingUnit,
-      status: c.status
+      status: c.status,
+      shipmentStatus: getComputedContainerShipmentStatus(shipment, c),
     }));
 
     // Actual array
@@ -4287,6 +4425,7 @@ exports.getShipmentById = async (req, res) => {
 
           const actualData = {
             containerId: c._id,
+            shipmentStatus: getComputedContainerShipmentStatus(shipment, c),
             actualSerialNo: a.actualSerialNo,
             commercialInvoiceNo: a.commercialInvoiceNo,
             shipOnBoardDate: a.shipOnBoardDate,
@@ -4729,7 +4868,8 @@ exports.getShipmentById = async (req, res) => {
         plannedETD: shipment.plannedETD,
         plannedETA: shipment.plannedETA,
         containerSize: shipment.containersize,
-        noOfShipments: shipment.noOfShipments
+        noOfShipments: shipment.noOfShipments,
+        shipmentStatus: getComputedShipmentStatus(shipment, containers),
       },
       planned,
       actual,
