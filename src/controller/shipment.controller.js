@@ -928,20 +928,29 @@ const getComputedShipmentStatus = (shipment, shipmentContainers = []) => {
   return getDisplayStageName(shipment?.currentStage || 'Shipment Entry');
 };
 
-const getFirstMeaningfulNumber = (...values) => {
-  for (const value of values) {
-    if (value == null || value === '') continue;
-    const parsed = Number(value);
-    if (Number.isFinite(parsed) && parsed !== 0) return parsed;
-  }
+const getMeaningfulNumber = (value) => {
+  if (value == null || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed !== 0 ? parsed : null;
+};
 
-  for (const value of values) {
-    if (value == null || value === '') continue;
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) return parsed;
-  }
+const getShipmentSplitCount = (shipment, shipmentContainers = []) => {
+  return Number(shipment?.noOfShipments || shipment?.assumedContainerCount || shipmentContainers.length || 0) || 0;
+};
 
-  return '';
+const getContainerDividendValue = (totalValue, splitCount) => {
+  const total = Number(totalValue) || 0;
+  const count = Number(splitCount) || 0;
+  if (!total || !count) return '';
+  return Math.round(total / count);
+};
+
+const getContainerReportNumber = (actualValue, plannedValue, totalValue, splitCount) => {
+  return (
+    getMeaningfulNumber(actualValue) ??
+    getMeaningfulNumber(plannedValue) ??
+    getContainerDividendValue(totalValue, splitCount)
+  );
 };
 
 const hasValue = (value) => String(value ?? '').trim().length > 0;
@@ -1134,7 +1143,8 @@ const buildShipmentReportRows = async () => {
     const firstContainer = shipmentContainers[0] || null;
     const actual = firstContainer?.actual || {};
     const planned = firstContainer?.planned || {};
-    const shipmentStatus = getComputedShipmentStatus(shipment, shipmentContainers);
+    const splitCount = getShipmentSplitCount(shipment, shipmentContainers);
+    const shipmentStatus = getDisplayStageName(shipment.currentStage || '');
     const children = shipmentContainers.map((container, childIndex) => {
       const childActual = container?.actual || {};
       const childPlanned = container?.planned || {};
@@ -1155,8 +1165,8 @@ const buildShipmentReportRows = async () => {
         fcl: childActual.FCL ?? childPlanned.FCL ?? '',
         containerSize: childActual.size || childPlanned.size || shipment.containersize || '',
         buyingQtyMT: childActual.qtyMT ?? childPlanned.qtyMT ?? '',
-        bags: getFirstMeaningfulNumber(childActual.bags, childPlanned.bags, shipment.bags),
-        pallet: getFirstMeaningfulNumber(childActual.pallet, childPlanned.pallet, shipment.pallet),
+        bags: getContainerReportNumber(childActual.bags, childPlanned.bags, shipment.bags, splitCount),
+        pallet: getContainerReportNumber(childActual.pallet, childPlanned.pallet, shipment.pallet, splitCount),
         month: getShipmentMonthLabel({ plannedETA: childMonthSource, plannedETD: childMonthSource }, []),
         weekWiseShipment: childActual.weekWiseShipment || childPlanned.weekWiseShipment || '',
         shipmentStatus: getComputedContainerShipmentStatus(shipment, container),
@@ -1179,10 +1189,10 @@ const buildShipmentReportRows = async () => {
       packing: shipment.packing || '',
       piNo: shipment.piNo || '',
       ciNo: actual.commercialInvoiceNo || '',
-      fcl: actual.FCL ?? planned.FCL ?? shipment.fcl ?? '',
-      containerSize: actual.size || planned.size || shipment.containersize || '',
-      buyingUnit: actual.buyingUnit || planned.buyingUnit || shipment.buyunit || '',
-      buyingQtyMT: actual.qtyMT ?? planned.qtyMT ?? shipment.plannedQtyMT ?? '',
+      fcl: shipment.fcl ?? '',
+      containerSize: shipment.containersize || actual.size || planned.size || '',
+      buyingUnit: shipment.buyunit || actual.buyingUnit || planned.buyingUnit || '',
+      buyingQtyMT: shipment.plannedQtyMT ?? shipment.totalOrderedQtyMT ?? '',
       fcPerUnit: shipment.fcPerUnit ?? '',
       totalFC: shipment.totalFC ?? '',
       incoterms: shipment.incoterms || '',
@@ -1198,8 +1208,8 @@ const buildShipmentReportRows = async () => {
       month: getShipmentMonthLabel(shipment, shipmentContainers),
       weekWiseShipment: planned.weekWiseShipment || actual.weekWiseShipment || '',
       advanceAmount: shipment.advanceAmount ?? '',
-      bags: getFirstMeaningfulNumber(actual.bags, planned.bags, shipment.bags),
-      pallet: actual.pallet ?? shipment.pallet ?? '',
+      bags: shipment.bags ?? '',
+      pallet: shipment.pallet ?? '',
       children,
     };
   });
