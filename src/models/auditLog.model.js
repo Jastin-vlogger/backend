@@ -6,7 +6,7 @@ const auditLogSchema = new mongoose.Schema({
     ref: "User", 
     required: true 
   },
-  module: { 
+  module: { // e.g
     type: String, 
     required: true // e.g., "Purchase", "Logistics", "FAS", "Auth", "Master"
   },
