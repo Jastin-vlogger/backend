@@ -1,7 +1,0 @@
-node_modules
-.angular
-.git
-*.log
-.DS_Store
-dist
-.vscode
