@@ -1,0 +1,108 @@
+<div class="flex flex-col gap-6">
+
+  <section class="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-sm">
+    <div class="flex flex-col gap-4 lg:flex-row lg:items-center">
+      <div class="relative flex-1 w-full">
+        <i class="pi pi-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+        <input
+          pInputText
+          class="w-full !pl-11"
+          placeholder="Search by supplier code, name, contact, or country"
+          [(ngModel)]="searchText" />
+      </div>
+
+      <div class="w-full lg:w-[240px] shrink-0">
+        <p-select
+          [options]="statusOptions"
+          [(ngModel)]="statusFilter"
+          optionLabel="label"
+          optionValue="value"
+          styleClass="w-full"
+          class="w-full"
+          placeholder="Filter status">
+        </p-select>
+      </div>
+
+      <div class="flex w-full shrink-0 flex-col gap-3 sm:flex-row lg:w-auto">
+        <button pButton type="button" label="Filter" icon="pi pi-filter" class="w-full sm:w-auto" (click)="applyFilters()"></button>
+        <button pButton type="button" label="Refresh" icon="pi pi-refresh" severity="secondary" class="w-full sm:w-auto" [loading]="refreshing()" (click)="refresh()"></button>
+      </div>
+    </div>
+  </section>
+
+  <section class="rounded-[1.75rem] border border-slate-200 bg-white shadow-sm">
+    @if (loading()) {
+      <div class="space-y-4 p-6">
+        @for (row of [1, 2, 3, 4, 5]; track row) {
+          <p-skeleton height="4rem" styleClass="mb-3"></p-skeleton>
+        }
+      </div>
+    } @else if (!suppliers().length) {
+      <div class="px-6 py-16 text-center">
+        <p class="text-lg font-black tracking-tight text-slate-900">No suppliers found</p>
+        <p class="mt-2 text-sm text-slate-500">Try clearing the filters or review your source data.</p>
+      </div>
+    } @else {
+      <p-table [value]="suppliers()" styleClass="p-datatable-sm">
+        <ng-template pTemplate="header">
+          <tr>
+            <th>Supplier</th>
+            <th>Contact</th>
+            <th>Registration</th>
+            <th>Status</th>
+            <th>Updated</th>
+            <th class="text-right">Actions</th>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-supplier>
+          <tr>
+            <td>
+              <div class="flex flex-col">
+                <span class="font-black text-slate-900">{{ supplier.name }}</span>
+                <span class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{{ supplier.supplierCode }}</span>
+                <span class="mt-1 text-xs text-slate-500">{{ supplier.country || 'N/A' }}</span>
+              </div>
+            </td>
+            <td>
+              <div class="flex flex-col">
+                <span class="text-sm font-semibold text-slate-900">{{ supplier.contactPerson || 'N/A' }}</span>
+                <span class="text-xs text-slate-500">{{ supplier.email || supplier.portalEmail || 'No email on file' }}</span>
+                <span class="text-xs text-slate-500">{{ supplier.phone || 'No phone on file' }}</span>
+              </div>
+            </td>
+            <td>
+              <div class="flex flex-col gap-2">
+                <p-tag [severity]="getRegistrationSeverity(supplier.registrationStage)" [value]="supplier.registrationStage || 'Draft'"></p-tag>
+                <span class="text-xs text-slate-500">{{ supplier.profileCompletionPercent ?? 100 }}% complete</span>
+              </div>
+            </td>
+            <td>
+              <p-tag [severity]="getSupplierSeverity(supplier.status)" [value]="supplier.status"></p-tag>
+            </td>
+            <td class="text-sm text-slate-500">{{ formatDate(supplier.updatedAt) }}</td>
+            <td>
+              <div class="flex justify-end gap-2">
+                <a pButton class="p-button-sm" [routerLink]="['/suppliers', supplier._id]" label="Open" icon="pi pi-eye"></a>
+                @if ((supplier.status || '').toLowerCase() !== 'active') {
+                  <button pButton type="button" class="p-button-sm" label="Activate" icon="pi pi-check" severity="success" (click)="setSupplierStatus(supplier, 'Active')"></button>
+                } @else {
+                  <button pButton type="button" class="p-button-sm" label="Deactivate" icon="pi pi-ban" severity="secondary" (click)="setSupplierStatus(supplier, 'Inactive')"></button>
+                }
+              </div>
+            </td>
+          </tr>
+        </ng-template>
+      </p-table>
+
+      <div class="flex items-center justify-between gap-3 border-t border-slate-200 px-6 py-4">
+        <p class="text-sm font-medium text-slate-500">
+          Showing {{ suppliers().length }} of {{ totalRecords() }} records
+        </p>
+        <div class="flex items-center gap-2">
+          <button pButton type="button" label="Prev" severity="secondary" [disabled]="page() <= 1" (click)="changePage(page() - 1)"></button>
+          <button pButton type="button" label="Next" severity="secondary" [disabled]="totalPages() && page() >= totalPages()" (click)="changePage(page() + 1)"></button>
+        </div>
+      </div>
+    }
+  </section>
+</div>

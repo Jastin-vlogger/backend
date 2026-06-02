@@ -1,0 +1,238 @@
+<div class="page-transition-wrapper flex flex-col gap-6 md:gap-8">
+    @if (loading()) {
+        <div class="animate-pulse">
+            <div class="sl-panel h-[520px]"></div>
+        </div>
+    } @else if (error()) {
+        <section class="sl-panel flex flex-col items-center justify-center gap-4 py-16 text-center">
+            <div class="w-14 h-14 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center">
+                <i class="pi pi-exclamation-triangle text-2xl"></i>
+            </div>
+            <div>
+                <h2 class="text-lg font-bold text-slate-900">Dashboard unavailable</h2>
+                <p class="text-sm text-slate-500">{{ error() }}</p>
+            </div>
+        </section>
+    } @else if (dashboard(); as summary) {
+        <header class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+                <h1 class="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">Dashboard</h1>
+            </div>
+            <div class="flex flex-col gap-3 sm:flex-row">
+                <a routerLink="/shipments" class="sl-cta secondary">
+                    <i class="pi pi-table"></i>
+                    <span>Open Shipments</span>
+                </a>
+                @if (canCreateShipment()) {
+                    <a routerLink="/shipments/create" class="sl-cta primary">
+                        <i class="pi pi-plus-circle"></i>
+                        <span>Create Shipment</span>
+                    </a>
+                }
+            </div>
+        </header>
+
+        <section class="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-6">
+            <!-- Left Side Column -->
+            <div class="flex flex-col gap-6 lg:col-span-1">
+                <!-- Operational Snapshot Metrics -->
+                <article class="status-panel border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm flex flex-col flex-1">
+                    <div class="status-panel-title bg-slate-50/50 py-3 px-6 border-b border-slate-100 font-bold text-slate-700">Shipment Activity Snapshot</div>
+                    <div class="p-4 flex flex-col gap-4 flex-1">
+                        @for (metric of volumeTodayStats(); track metric.label) {
+                            <div class="status-metric p-4 bg-slate-50/50 border border-slate-100 rounded-lg flex flex-col justify-center text-center">
+                                <span class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">{{ metric.label }}</span>
+                                <strong class="text-3xl font-black text-slate-900">{{ metric.value }}</strong>
+                            </div>
+                        }
+                    </div>
+                </article>
+            </div>
+
+            <!-- Right Side: Dynamic Metrics Explorer -->
+            <article class="sl-panel flex flex-col p-6 bg-white border border-slate-200 rounded-xl shadow-sm lg:col-span-3">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
+                    <h3 class="font-bold text-slate-800 text-lg">Dynamic Metrics Explorer</h3>
+                    <div class="flex items-center gap-2">
+                        <label for="chartType" class="text-sm font-medium text-slate-500">Metric:</label>
+                        <select id="chartType" class="sl-input py-2 pl-3 pr-8 text-sm w-full sm:w-auto"
+                            [value]="selectedChartType()"
+                            (change)="onChartTypeChange($event)">
+                            <option value="qtyMapping">Quantity by Status (MT)</option>
+                            <option value="valueMapping">Total Value by Status (FC)</option>
+                            <option value="yearlyQtyMapping">Quantity by Status (Yearly)</option>
+                            <option value="supplierAvgFc">Average FC per Unit (by Supplier)</option>
+                            <option value="supplierYearlyQty">Supplier Quantity (Yearly)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="relative w-full h-[400px] flex-1">
+                    @if (chartDataConfig().labels?.length) {
+                        <canvas baseChart [data]="chartDataConfig()" [options]="chartOptions" [type]="'bar'">
+                        </canvas>
+                    } @else {
+                        <div class="absolute inset-0 flex items-center justify-center text-slate-400">
+                            No data available for the selected metric.
+                        </div>
+                    }
+                </div>
+            </article>
+        </section>
+
+        <!-- New Average FC per Unit Comparison Chart -->
+        <section class="sl-panel p-6 bg-white border-slate-200 rounded-xl shadow-sm mb-6">
+            <h3 class="font-bold text-slate-800 text-lg mb-6">Average FC per Unit by Supplier</h3>
+            <div class="relative w-full h-[400px]">
+                @if (comparisonChartConfig().labels?.length) {
+                    <canvas baseChart [data]="comparisonChartConfig()" [options]="chartOptions" [type]="'bar'">
+                    </canvas>
+                } @else {
+                    <div class="absolute inset-0 flex items-center justify-center text-slate-400">
+                        No average FC per unit data available.
+                    </div>
+                }
+            </div>
+        </section>
+
+        <!-- <section class="shipping-status-card mt-6">
+            <div class="shipping-status-grid">
+                <article class="status-panel">
+                    <div class="status-panel-title">Orders</div>
+                    <div class="status-filter-row">
+                        <label for="orderStatusFilter">Filter Order Status:</label>
+                        <select
+                            id="orderStatusFilter"
+                            [value]="orderStatusFilter()"
+                            (change)="onOrderStatusChange($event)">
+                            @for (status of orderStatusOptions(); track status) {
+                                <option [value]="status">{{ status }}</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="status-table-wrap">
+                        <table class="status-table">
+                            <thead>
+                                <tr>
+                                    <th>Customer</th>
+                                    <th>Order Status</th>
+                                    <th>Order Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @for (row of filteredOrders().slice(0, 8); track row._id) {
+                                    <tr>
+                                        <td>{{ row.customer || '-' }}</td>
+                                        <td>{{ row.orderStatus }}</td>
+                                        <td>{{ row.orderDate | date:'MMM d, y' }}</td>
+                                    </tr>
+                                } @empty {
+                                    <tr>
+                                        <td colspan="3" class="status-empty">No order data.</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </article>
+
+                <article class="status-panel">
+                    <div class="status-panel-title">Global Financial Performance</div>
+                    <div class="perf-legend">
+                        <span><i class="dot cash"></i>Cash-to-Cash Cycle Time</span>
+                        <span><i class="dot rec"></i>Account Rec. Days</span>
+                        <span><i class="dot inv"></i>Inventory Days</span>
+                        <span><i class="dot pay"></i>Accounts Payable Days</span>
+                    </div>
+                    <div class="perf-chart">
+                        @for (row of performanceRows(); track row.label) {
+                            <div class="perf-col">
+                                <div class="perf-bars">
+                                    <div class="bar cash" [style.height]="getPerfBarHeight(row.cashToCash)"></div>
+                                    <div class="bar rec" [style.height]="getPerfBarHeight(row.accountRec)"></div>
+                                    <div class="bar inv" [style.height]="getPerfBarHeight(row.inventoryDays)"></div>
+                                    <div class="bar pay" [style.height]="getPerfBarHeight(row.payableDays)"></div>
+                                </div>
+                                <span>{{ row.label }}</span>
+                            </div>
+                        }
+                    </div>
+                </article>
+
+                <article class="status-panel">
+                    <div class="status-panel-title">Inventory</div>
+                    <div class="status-table-wrap">
+                        <table class="status-table compact">
+                            <thead>
+                                <tr>
+                                    <th>Category</th>
+                                    <th>Product</th>
+                                    <th>SKU</th>
+                                    <th>In Stock</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @for (item of inventoryRows(); track item.sku) {
+                                    <tr>
+                                        <td>{{ item.category }}</td>
+                                        <td>{{ item.product }}</td>
+                                        <td>{{ item.sku }}</td>
+                                        <td>{{ item.inStock }}</td>
+                                    </tr>
+                                } @empty {
+                                    <tr>
+                                        <td colspan="4" class="status-empty">No inventory rows.</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="stage-donut-wrap">
+                        <div class="stage-donut" [style.background]="getStagePieGradient()"></div>
+                        <div class="stage-legend">
+                            @for (entry of dashboard()?.stageBreakdown ?? []; track entry.stage; let idx = $index) {
+                                <div class="legend-item">
+                                    <i [style.background]="['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'][idx % 6]"></i>
+                                    <span>{{ entry.stage }} ({{ entry.count }})</span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </article>
+
+                <article class="status-panel">
+                    <div class="status-panel-title">KPIs - Monthly</div>
+                    <div class="status-table-wrap">
+                        <table class="status-table compact">
+                            <thead>
+                                <tr>
+                                    <th>Metric</th>
+                                    <th>This Month</th>
+                                    <th>Past Month</th>
+                                    <th>Change</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @for (kpi of kpiMonthlyRows(); track kpi.metric) {
+                                    <tr>
+                                        <td>{{ kpi.metric }}</td>
+                                        <td>{{ kpi.thisMonth }}</td>
+                                        <td>{{ kpi.pastMonth }}</td>
+                                        <td [class.text-emerald-600]="kpi.change >= 0" [class.text-rose-600]="kpi.change < 0">
+                                            {{ kpi.change | number:'1.0-1' }}%
+                                        </td>
+                                    </tr>
+                                } @empty {
+                                    <tr>
+                                        <td colspan="4" class="status-empty">No monthly KPI rows.</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </article>
+            </div>
+        </section> -->
+
+    }
+</div>

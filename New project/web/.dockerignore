@@ -1,0 +1,48 @@
+# Dockerignore file for Angular application
+# This reduces the build context size and speeds up builds
+
+# Node modules
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Build outputs
+dist/
+.angular/
+.cache/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Git
+.git/
+.gitignore
+
+# Testing
+coverage/
+*.spec.ts
+e2e/
+karma.conf.js
+protractor.conf.js
+
+# Documentation
+*.md
+docs/
+
+# Environment files (be careful with these)
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+tmp/
+temp/

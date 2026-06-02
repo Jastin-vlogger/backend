@@ -1,0 +1,41 @@
+<div class="stepper-container custom-scrollbar">
+  <div class="stepper-wrapper">
+    @for (step of visibleSteps; track i; let i = $index; let last = $last) {
+    <div class="step" 
+         [class.active]="visibleCurrentStep === i"
+         [class.completed]="visibleCurrentStep > i || step.completed"
+         [class.pending]="visibleCurrentStep < i && !step.completed"
+         [class.opacity-50]="maxEnabledStep != null && getOriginalIndex(i) > maxEnabledStep"
+         [class.cursor-not-allowed]="maxEnabledStep != null && getOriginalIndex(i) > maxEnabledStep"
+         [attr.title]="step.label"
+         (click)="onStepClick(i)">
+      
+      <!-- Connector Line -->
+      @if (!last) {
+        <div class="connector" [class.filled]="visibleCurrentStep > i || step.completed"></div>
+      }
+
+      <!-- Step Indicator -->
+      <div class="step-indicator">
+        <div class="indicator-ring">
+          <div class="indicator-core">
+            @if (visibleCurrentStep > i || step.completed) {
+                <i class="pi pi-check"></i>
+            } @else {
+                <span>{{ i + 1 }}</span>
+            }
+          </div>
+        </div>
+      </div>
+
+      <!-- Step Content -->
+      <div class="step-content">
+        @if (step.subLabel) {
+            <span class="step-sublabel">{{ step.subLabel }}</span>
+        }
+        <span class="step-label">{{ step.label }}</span>
+      </div>
+    </div>
+    }
+  </div>
+</div>

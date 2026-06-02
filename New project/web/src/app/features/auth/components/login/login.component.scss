@@ -1,0 +1,60 @@
+// Custom input styling to match app theme
+:host ::ng-deep {
+  .p-inputtext {
+    font-size: 0.875rem;
+    
+    &:focus {
+      box-shadow: none;
+    }
+
+    // Ensure proper padding for icons
+    &[type="email"],
+    &[type="password"],
+    &[type="text"] {
+      &::placeholder {
+        color: rgb(148, 163, 184);
+        font-size: 0.875rem;
+      }
+    }
+  }
+
+  .p-checkbox {
+    .p-checkbox-box {
+      width: 1.25rem;
+      height: 1.25rem;
+      border-radius: 0.375rem;
+      border: 2px solid rgb(226, 232, 240);
+      transition: all 0.2s;
+
+      &:hover {
+        border-color: rgb(148, 163, 184);
+      }
+
+      &.p-highlight {
+        background: linear-gradient(to right, rgb(37, 99, 235), rgb(29, 78, 216));
+        border-color: rgb(37, 99, 235);
+      }
+
+      .p-checkbox-icon {
+        font-size: 0.75rem;
+      }
+    }
+
+    &:not(.p-disabled):has(.p-checkbox-input:hover) .p-checkbox-box {
+      border-color: rgb(148, 163, 184);
+    }
+
+    &:not(.p-disabled):has(.p-checkbox-input:focus-visible) .p-checkbox-box {
+      outline: 2px solid rgb(191, 219, 254);
+      outline-offset: 2px;
+    }
+  }
+}
+
+// Prevent any layout shifts
+input {
+  &::-ms-reveal,
+  &::-ms-clear {
+    display: none;
+  }
+}

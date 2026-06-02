@@ -1,0 +1,370 @@
+@reference "tailwindcss";
+
+:host {
+    display: block;
+}
+
+.sl-panel {
+    @apply rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6;
+}
+
+.sl-panel-header {
+    @apply mb-6 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between;
+
+    h2 {
+        @apply text-lg font-black tracking-tight text-slate-900;
+    }
+}
+
+.sl-eyebrow {
+    @apply text-[11px] font-bold uppercase tracking-[0.28em] text-blue-600;
+}
+
+.sl-muted {
+    @apply text-xs text-slate-400;
+}
+
+.sl-kpi-card {
+    @apply rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm;
+}
+
+.sl-kpi-card[data-tone='blue'] .sl-kpi-icon {
+    @apply bg-blue-50 text-blue-600;
+}
+
+.sl-kpi-card[data-tone='emerald'] .sl-kpi-icon {
+    @apply bg-emerald-50 text-emerald-600;
+}
+
+.sl-kpi-card[data-tone='amber'] .sl-kpi-icon {
+    @apply bg-amber-50 text-amber-600;
+}
+
+.sl-kpi-card[data-tone='slate'] .sl-kpi-icon {
+    @apply bg-slate-100 text-slate-700;
+}
+
+.sl-kpi-label {
+    @apply text-[11px] font-bold uppercase tracking-[0.22em] text-slate-400;
+}
+
+.sl-kpi-value {
+    @apply mt-3 text-3xl font-black tracking-tight text-slate-900;
+}
+
+.sl-kpi-icon {
+    @apply flex h-12 w-12 items-center justify-center rounded-2xl text-lg;
+}
+
+.sl-cta {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] transition-all;
+}
+
+.sl-cta.primary {
+    @apply bg-slate-900 text-white hover:bg-slate-800;
+}
+
+.sl-cta.secondary {
+    @apply border border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:text-blue-600;
+}
+
+.trend-chart {
+    @apply flex h-[260px] items-end gap-3 sm:gap-5;
+}
+
+.trend-column {
+    @apply flex flex-1 flex-col items-center gap-3;
+}
+
+.trend-bar-wrap {
+    @apply flex h-[220px] w-full items-end justify-center rounded-[24px] bg-slate-50 px-2 py-3;
+}
+
+.trend-bar {
+    @apply flex w-full items-start justify-center rounded-[20px] bg-linear-to-t from-slate-900 via-blue-700 to-blue-500 pt-3 text-xs font-bold text-white shadow-lg shadow-blue-200/70;
+    min-height: 12%;
+}
+
+.trend-label {
+    @apply text-xs font-bold uppercase tracking-[0.18em] text-slate-400;
+}
+
+.sl-money-card {
+    @apply rounded-[24px] border border-blue-100 bg-linear-to-br from-blue-50 via-white to-slate-50 p-5;
+
+    span {
+        @apply text-[11px] font-bold uppercase tracking-[0.22em] text-blue-600;
+    }
+
+    strong {
+        @apply mt-3 block text-3xl font-black tracking-tight text-slate-900;
+    }
+
+    small {
+        @apply mt-2 block text-sm text-slate-500;
+    }
+}
+
+.sl-mini-stat {
+    @apply rounded-2xl border border-slate-200 bg-slate-50/80 p-4;
+
+    span {
+        @apply text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400;
+    }
+
+    strong {
+        @apply mt-2 block text-lg font-black tracking-tight text-slate-900;
+    }
+}
+
+.sl-mini-stat.compact {
+    @apply p-3;
+
+    strong {
+        @apply text-base;
+    }
+}
+
+.stage-row, .arrival-row {
+    @apply space-y-2;
+}
+
+.stage-meta, .arrival-meta {
+    @apply flex items-center justify-between gap-4 text-sm;
+}
+
+.stage-name {
+    @apply font-semibold text-slate-700;
+}
+
+.stage-count {
+    @apply font-black text-slate-900;
+}
+
+.stage-track, .arrival-track {
+    @apply h-3 overflow-hidden rounded-full bg-slate-100;
+}
+
+.stage-fill {
+    @apply h-full rounded-full bg-linear-to-r from-slate-900 via-blue-700 to-blue-500;
+}
+
+.arrival-fill {
+    @apply h-full rounded-full;
+}
+
+.arrival-fill[data-tone='emerald'] {
+    @apply bg-emerald-500;
+}
+
+.arrival-fill[data-tone='blue'] {
+    @apply bg-blue-500;
+}
+
+.arrival-fill[data-tone='amber'] {
+    @apply bg-amber-500;
+}
+
+.arrival-fill[data-tone='rose'] {
+    @apply bg-rose-500;
+}
+
+.sl-table-head {
+    @apply border-b border-slate-200 px-4 py-3 text-left text-[10px] font-black uppercase tracking-[0.18em] text-slate-400;
+}
+
+.sl-table-cell {
+    @apply px-4 py-4 text-sm text-slate-600;
+}
+
+.sl-status-chip {
+    @apply inline-flex rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-blue-700;
+}
+
+.sl-inline-link {
+    @apply text-xs font-bold uppercase tracking-[0.18em] text-blue-600 hover:text-blue-800;
+}
+
+.sl-empty {
+    @apply text-center text-sm text-slate-500;
+}
+
+.shipping-status-card {
+    @apply rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm sm:p-6;
+}
+
+.shipping-status-head {
+    @apply mb-4 border-b border-slate-200 pb-3;
+
+    h2 {
+        @apply text-lg font-black tracking-tight text-slate-900 sm:text-xl;
+    }
+}
+
+.shipping-status-grid {
+    @apply grid grid-cols-1 gap-4 xl:grid-cols-2;
+}
+
+.status-panel {
+    @apply rounded-2xl border border-slate-200 bg-slate-50/40 p-4 sm:p-5;
+}
+
+.status-panel-title {
+    @apply mb-3 text-sm font-black uppercase tracking-[0.16em] text-slate-700;
+}
+
+.status-filter-row {
+    @apply mb-3 flex flex-col gap-2 text-sm text-slate-600 sm:flex-row sm:items-center;
+
+    label {
+        @apply text-xs font-bold uppercase tracking-[0.12em] text-slate-500;
+    }
+
+    select {
+        @apply min-w-[180px] rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition;
+    }
+
+    select:focus {
+        @apply border-blue-500 ring-2 ring-blue-100;
+    }
+}
+
+.status-table-wrap {
+    @apply max-h-[235px] overflow-auto;
+}
+
+.status-table {
+    @apply w-full border-separate border-spacing-0;
+
+    th {
+        @apply border-b border-slate-200 px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.12em] text-slate-400;
+    }
+
+    td {
+        @apply border-b border-slate-100 px-3 py-2 text-sm text-slate-700;
+    }
+}
+
+.status-table.compact {
+    th {
+        @apply text-[9px];
+    }
+
+    td {
+        @apply py-2 text-xs;
+    }
+}
+
+.status-empty {
+    @apply py-6 text-center text-sm text-slate-500;
+}
+
+.status-metric-grid {
+    @apply grid grid-cols-2 gap-3;
+}
+
+.status-metric {
+    @apply rounded-xl border border-slate-200 bg-white p-3;
+
+    span {
+        @apply text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500;
+    }
+
+    strong {
+        @apply mt-1 block text-2xl font-black text-slate-900;
+    }
+}
+
+.perf-legend {
+    @apply mb-3 flex flex-wrap gap-x-4 gap-y-2;
+
+    span {
+        @apply inline-flex items-center gap-2 text-[11px] text-slate-600;
+    }
+}
+
+.dot {
+    @apply h-2.5 w-2.5 rounded-full;
+}
+
+.dot.cash {
+    @apply bg-blue-500;
+}
+
+.dot.rec {
+    @apply bg-emerald-500;
+}
+
+.dot.inv {
+    @apply bg-amber-500;
+}
+
+.dot.pay {
+    @apply bg-rose-500;
+}
+
+.perf-chart {
+    @apply flex h-[230px] items-end gap-3 overflow-x-auto pb-1;
+}
+
+.perf-col {
+    @apply flex min-w-[96px] flex-1 flex-col items-center gap-2;
+
+    span {
+        @apply text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500;
+    }
+}
+
+.perf-bars {
+    @apply flex h-[190px] w-full items-end justify-center gap-1 rounded-xl bg-white p-2;
+}
+
+.bar {
+    @apply w-4 rounded-t-md transition-all;
+}
+
+.bar.cash {
+    @apply bg-blue-500;
+}
+
+.bar.rec {
+    @apply bg-emerald-500;
+}
+
+.bar.inv {
+    @apply bg-amber-500;
+}
+
+.bar.pay {
+    @apply bg-rose-500;
+}
+
+.stage-donut-wrap {
+    @apply mt-4 flex flex-col gap-3 sm:flex-row sm:items-center;
+}
+
+.stage-donut {
+    @apply h-[150px] w-[150px] rounded-full border border-slate-200 bg-slate-100;
+}
+
+.stage-legend {
+    @apply grid flex-1 grid-cols-1 gap-2;
+}
+
+.legend-item {
+    @apply flex items-center gap-2 text-xs text-slate-600;
+
+    i {
+        @apply h-2.5 w-2.5 rounded-full;
+    }
+}
+
+@media (max-width: 767px) {
+    .shipping-status-grid {
+        @apply grid-cols-1;
+    }
+
+    .status-metric-grid {
+        @apply grid-cols-1;
+    }
+}

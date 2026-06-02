@@ -1,0 +1,38 @@
+/* ─── BL Details — Ship Route Animation ────────────────────────────────── */
+
+@keyframes blShipSlide {
+  0%   { left: 0%; }
+  100% { left: var(--ship-target, 50%); }
+}
+
+@keyframes blShipBob {
+  0%, 100% { margin-bottom: 0px; }
+  50%       { margin-bottom: 3px; }
+}
+
+@keyframes blWaveScroll {
+  0%   { background-position: 0 0; }
+  100% { background-position: 60px 0; }
+}
+
+.bl-ship-moving {
+  animation:
+    blShipSlide 1.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards,
+    blShipBob   1.8s ease-in-out 1.4s infinite;
+  left: var(--ship-target, 50%);
+}
+
+.bl-ship-wave {
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+    90deg,
+    transparent 0px,
+    transparent 8px,
+    rgba(255, 255, 255, 0.4) 8px,
+    rgba(255, 255, 255, 0.4) 10px
+  );
+  background-size: 20px 100%;
+  animation: blWaveScroll 1s linear infinite;
+  border-radius: 9999px;
+}

@@ -1,0 +1,40 @@
+<aside class="sidebar-shell" [class.is-collapsed]="collapsed">
+  <span class="sidebar-divider" aria-hidden="true"></span>
+  <button
+    type="button"
+    class="sidebar-divider-handle"
+    [attr.aria-label]="collapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+    (click)="onToggleCollapse()">
+    <i class="pi" [class.pi-angle-right]="collapsed" [class.pi-angle-left]="!collapsed"></i>
+  </button>
+
+  <div class="brand-block">
+    <!-- Full Royal Horizon wordmark — shown when expanded -->
+    <img
+      src="royal-horizon-logo.svg"
+      alt="Royal Horizon"
+      class="brand-logo"
+      [class.hidden]="collapsed" />
+    <!-- Compact R-mark — shown when collapsed -->
+    <img
+      src="rh-mark.svg"
+      alt="Royal Horizon"
+      class="brand-mark"
+      [class.hidden]="!collapsed" />
+  </div>
+
+  <nav class="menu-list" aria-label="Primary navigation">
+    @for (item of menuItems(); track item.route) {
+      <a
+        [routerLink]="item.route"
+        routerLinkActive="is-active"
+        [routerLinkActiveOptions]="{ exact: item.route === '/dashboard' }"
+        class="menu-item"
+        [attr.aria-label]="item.label"
+        [attr.title]="collapsed ? item.label : null">
+        <i [class]="item.icon"></i>
+        <span [class.hidden]="collapsed">{{ item.label }}</span>
+      </a>
+    }
+  </nav>
+</aside>

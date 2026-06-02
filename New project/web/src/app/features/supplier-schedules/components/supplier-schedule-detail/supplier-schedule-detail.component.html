@@ -1,0 +1,154 @@
+<div class="flex flex-col gap-6">
+  <div class="flex items-center justify-between gap-3">
+    <div>
+      <p class="text-[11px] font-black uppercase tracking-[0.3em] text-slate-400">Schedule Review</p>
+      <h1 class="mt-2 text-3xl font-black tracking-tight text-slate-950">{{ schedule()?.title || schedule()?.scheduleCode || 'Loading schedule...' }}</h1>
+    </div>
+    <a pButton routerLink="/supplier-schedules" label="Back to schedules" icon="pi pi-arrow-left" severity="secondary"></a>
+  </div>
+
+  @if (loading()) {
+    <div class="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+      <p-card><p-skeleton height="22rem"></p-skeleton></p-card>
+      <p-card><p-skeleton height="22rem"></p-skeleton></p-card>
+    </div>
+  } @else {
+    <div class="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+      <section class="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
+        <div class="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Supplier</p>
+            <div class="mt-2 flex flex-wrap items-center gap-3">
+              <h2 class="text-2xl font-black tracking-tight text-slate-950">{{ schedule()?.supplier?.name || 'Unknown supplier' }}</h2>
+              <p-tag [severity]="getSeverity(scheduleStatus)" [value]="scheduleStatus || 'Unknown'"></p-tag>
+            </div>
+            <p class="mt-2 text-sm text-slate-500">{{ schedule()?.supplier?.country || 'Country not set' }}</p>
+          </div>
+          @if (scheduleStatus === 'Submitted' || scheduleStatus === 'Draft') {
+            <div class="flex flex-wrap gap-2">
+              <button pButton type="button" label="Approve" icon="pi pi-check" severity="success" [loading]="approving()" (click)="approveSchedule()"></button>
+              <button pButton type="button" label="Reject" icon="pi pi-times" severity="danger" [loading]="rejecting()" (click)="rejectSchedule()"></button>
+            </div>
+          }
+        </div>
+
+        <p-divider></p-divider>
+
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div class="rounded-2xl bg-slate-50 px-4 py-3">
+            <p class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Schedule No</p>
+            <p class="mt-1 text-sm font-bold text-slate-900">{{ schedule()?.scheduleNo || schedule()?._id }}</p>
+          </div>
+          <div class="rounded-2xl bg-slate-50 px-4 py-3">
+            <p class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Reference</p>
+            <p class="mt-1 text-sm font-bold text-slate-900">{{ schedule()?.referenceNo || schedule()?.scheduleCode || 'N/A' }}</p>
+          </div>
+          <div class="rounded-2xl bg-slate-50 px-4 py-3">
+            <p class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">ETD</p>
+            <p class="mt-1 text-sm font-bold text-slate-900">{{ formatDate(schedule()?.plannedDepartureDate) }}</p>
+          </div>
+          <div class="rounded-2xl bg-slate-50 px-4 py-3">
+            <p class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">ETA</p>
+            <p class="mt-1 text-sm font-bold text-slate-900">{{ formatDate(schedule()?.plannedArrivalDate) }}</p>
+          </div>
+          <div class="rounded-2xl bg-slate-50 px-4 py-3 md:col-span-2">
+            <p class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Route</p>
+            <p class="mt-1 text-sm font-bold text-slate-900">{{ schedule()?.route || 'N/A' }}</p>
+          </div>
+          <div class="rounded-2xl bg-slate-50 px-4 py-3 md:col-span-2">
+            <p class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Notes</p>
+            <p class="mt-1 text-sm font-medium leading-6 text-slate-700">{{ schedule()?.notes || 'No additional notes provided.' }}</p>
+          </div>
+        </div>
+
+        <div class="mt-6 rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4">
+          <p class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Feedback Log</p>
+          <div class="mt-4 grid gap-4 md:grid-cols-2">
+            <div>
+              <label class="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Suggestion</label>
+              <textarea pTextarea rows="5" class="mt-2 w-full" [formControl]="form.controls.suggestion" placeholder="Leave feedback or suggested corrections for the supplier"></textarea>
+              <button pButton type="button" label="Save Suggestion" icon="pi pi-comment" class="mt-3" [loading]="savingSuggestion()" (click)="saveSuggestion()"></button>
+            </div>
+            <div>
+              <label class="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Rejection Reason</label>
+              <textarea pTextarea rows="5" class="mt-2 w-full" [formControl]="form.controls.rejectionReason" placeholder="Required when rejecting a schedule"></textarea>
+              <p class="mt-2 text-xs text-slate-500">The reason is stored and shown to the supplier immediately after rejection.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="flex flex-col gap-6">
+        <section class="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
+          <p class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Timeline</p>
+          <div class="mt-4 space-y-3 text-sm">
+            <div class="rounded-2xl bg-slate-50 px-4 py-3">
+              <span class="block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Submitted</span>
+              <p class="mt-1 font-bold text-slate-900">{{ formatDate(schedule()?.submittedAt) }}</p>
+            </div>
+            <div class="rounded-2xl bg-slate-50 px-4 py-3">
+              <span class="block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Reviewed</span>
+              <p class="mt-1 font-bold text-slate-900">{{ formatDate(schedule()?.reviewedAt) }}</p>
+            </div>
+            <div class="rounded-2xl bg-slate-50 px-4 py-3">
+              <span class="block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Rejected Reason</span>
+              <p class="mt-1 font-medium text-slate-700">{{ schedule()?.rejectionReason || 'No rejection reason stored yet.' }}</p>
+            </div>
+            <div class="rounded-2xl bg-slate-50 px-4 py-3">
+              <span class="block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Suggestion</span>
+              <p class="mt-1 font-medium text-slate-700">{{ schedule()?.suggestion || 'No suggestion stored yet.' }}</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
+          <p class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Supplier Snapshot</p>
+          <div class="mt-4 space-y-3">
+            <div class="rounded-2xl border border-slate-200 px-4 py-3">
+              <p class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Code</p>
+              <p class="mt-1 font-bold text-slate-900">{{ schedule()?.supplier?.supplierCode || 'N/A' }}</p>
+            </div>
+            <div class="rounded-2xl border border-slate-200 px-4 py-3">
+              <p class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Country</p>
+              <p class="mt-1 font-bold text-slate-900">{{ schedule()?.supplier?.country || 'N/A' }}</p>
+            </div>
+            <div class="rounded-2xl border border-slate-200 px-4 py-3">
+              <p class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Supplier Status</p>
+              <p class="mt-1 font-bold text-slate-900">{{ schedule()?.supplier?.status || 'N/A' }}</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
+          <p class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">ETA / ETD History</p>
+          @if (schedule()?.scheduleHistory?.length) {
+            <div class="mt-4 space-y-3">
+              @for (entry of schedule()?.scheduleHistory; track $index) {
+                <div class="rounded-2xl border border-slate-200 px-4 py-3">
+                  <div class="flex flex-wrap items-start justify-between gap-2">
+                    <strong class="text-sm text-slate-900">{{ entry.action }}</strong>
+                    <span class="text-xs text-slate-500">
+                      {{ entry.actorType }}{{ entry.actorName ? ' • ' + entry.actorName : '' }} • {{ formatDate(entry.createdAt) }}
+                    </span>
+                  </div>
+                  @if (entry.changes.length) {
+                    <div class="mt-3 space-y-2">
+                      @for (change of entry.changes; track $index) {
+                        <p class="text-sm text-slate-700">
+                          <span class="font-bold text-slate-900">{{ change.label }}:</span>
+                          {{ change.previousValue || '—' }} → {{ change.nextValue || '—' }}
+                        </p>
+                      }
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+          } @else {
+            <p class="mt-4 text-sm text-slate-500">No ETA/ETD history yet.</p>
+          }
+        </section>
+      </aside>
+    </div>
+  }
+</div>

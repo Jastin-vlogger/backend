@@ -1,0 +1,67 @@
+@reference "tailwindcss";
+
+:host {
+  display: block;
+  height: 100%;
+}
+
+.sidebar-shell {
+  @apply relative flex h-full flex-col gap-8 bg-white px-4 py-5 text-slate-900;
+}
+
+.sidebar-shell.is-collapsed {
+  @apply items-center px-3;
+}
+
+.sidebar-divider {
+  @apply absolute inset-y-4 right-0 w-px bg-slate-200;
+}
+
+.sidebar-divider-handle {
+  @apply absolute right-[-0.7rem] top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-slate-300 hover:text-slate-700;
+}
+
+.brand-block {
+  @apply flex items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3;
+  min-height: 64px;
+}
+
+.sidebar-shell.is-collapsed .brand-block {
+  @apply px-2;
+}
+
+.brand-logo {
+  @apply block h-12 w-auto object-contain;
+}
+
+.brand-mark {
+  @apply h-10 w-10 shrink-0 rounded-xl border border-slate-200 bg-white p-1.5;
+}
+
+.menu-list {
+  @apply flex flex-col gap-2;
+}
+
+.menu-item {
+  @apply inline-flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-bold text-slate-600 transition-all;
+}
+
+.sidebar-shell.is-collapsed .menu-list {
+  @apply w-full items-center;
+}
+
+.sidebar-shell.is-collapsed .menu-item {
+  @apply h-12 w-12 justify-center rounded-2xl px-0;
+}
+
+.sidebar-shell.is-collapsed .menu-item span.hidden {
+  display: none;
+}
+
+.menu-item.is-active {
+  @apply bg-blue-600 text-white shadow-lg shadow-blue-200/70;
+}
+
+.menu-item:not(.is-active):hover {
+  @apply bg-slate-100 text-slate-900;
+}

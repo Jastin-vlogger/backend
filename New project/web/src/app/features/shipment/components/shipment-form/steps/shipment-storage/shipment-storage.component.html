@@ -1,0 +1,344 @@
+@if (formArray.controls.length === 0 || !hasVisibleShipments()) {
+  <div class="p-16 text-center bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+    <div class="flex flex-col items-center justify-center gap-3">
+      <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+        <i class="pi pi-warehouse text-xl"></i>
+      </div>
+      <span class="text-[11px] font-black text-slate-900 uppercase tracking-widest">Waiting for Containers</span>
+      <p class="text-[10px] text-slate-500 max-w-[220px] mx-auto">
+        Complete the previous tracker steps first. Storage allocations will appear shipment by shipment here.
+      </p>
+    </div>
+  </div>
+} @else {
+  <p-accordion
+    [multiple]="true"
+    [value]="openAccordionPanels()"
+    (valueChange)="onAccordionChange($any($event))"
+    styleClass="flex flex-col gap-3">
+    @for (group of formArray.controls; track $index; let i = $index) {
+      @if (shouldShowShipment(i)) {
+      <p-accordion-panel [value]="'storage-' + i" styleClass="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+        <p-accordion-header styleClass="bg-white hover:bg-slate-50 px-4 py-3">
+          <div class="flex items-center justify-between w-full pr-2 gap-3">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <span class="w-6 h-6 rounded-full bg-slate-800 text-white text-[10px] font-black flex items-center justify-center shrink-0">
+                {{ i + 1 }}
+              </span>
+              <span class="text-xs font-bold text-slate-700 truncate">
+                Shipment No: {{ getShipmentNoLabel(i) }}
+              </span>
+            </div>
+            <div class="flex items-center gap-3 shrink-0">
+              <span class="text-[9px] font-semibold text-slate-400 shrink-0">
+                {{ getContainersArray(group).length }} Container(s)
+              </span>
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  (click)="$event.stopPropagation(); clickGlobalFileInput(i)"
+                  class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-blue-600"
+                >
+                  <i class="pi pi-upload"></i>
+                </button>
+                @if (getGlobalFile(i)) {
+                  <button type="button" (click)="$event.stopPropagation(); openDocumentPreview(getGlobalFile(i)!, 'Storage Document')" class="w-10 h-10 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-blue-600">
+                    <i class="pi pi-eye"></i>
+                  </button>
+                } @else if (getSavedGlobalDocumentUrl(group)) {
+                  <button type="button" (click)="$event.stopPropagation(); openRemoteDocumentPreview(getSavedGlobalDocumentUrl(group), getSavedGlobalDocumentName(group) || 'Storage Document')" class="w-10 h-10 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-blue-600">
+                    <i class="pi pi-eye"></i>
+                  </button>
+                }
+              </div>
+            </div>
+          </div>
+        </p-accordion-header>
+        <p-accordion-content styleClass="bg-white">
+          <div class="px-5 pb-5 pt-3 flex flex-col gap-4">
+
+            <!-- Single tab toggle for the whole shipment -->
+            <div class="flex items-center gap-2">
+              @if (canViewShipmentTab('allocation')) {
+              <button
+                type="button"
+                (click)="setShipmentTab(i, 'allocation')"
+                class="rbac-allow-interaction px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors"
+                [class.bg-slate-900]="getShipmentTab(i) === 'allocation'"
+                [class.text-white]="getShipmentTab(i) === 'allocation'"
+                [class.bg-slate-100]="getShipmentTab(i) !== 'allocation'"
+                [class.text-slate-500]="getShipmentTab(i) !== 'allocation'"
+              >
+                Storage Allocation
+              </button>
+              }
+              @if (canViewShipmentTab('arrival')) {
+              <button
+                type="button"
+                (click)="setShipmentTab(i, 'arrival')"
+                class="rbac-allow-interaction px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors"
+                [class.bg-slate-900]="getShipmentTab(i) === 'arrival'"
+                [class.text-white]="getShipmentTab(i) === 'arrival'"
+                [class.bg-slate-100]="getShipmentTab(i) !== 'arrival'"
+                [class.text-slate-500]="getShipmentTab(i) !== 'arrival'"
+              >
+                Storage Arrival
+              </button>
+              }
+            </div>
+
+            <!-- ===== STORAGE ALLOCATION TABLE ===== -->
+            @if (getShipmentTab(i) === 'allocation') {
+              <div class="storage-allocation-shell rounded-xl border border-slate-200 overflow-hidden">
+                <div class="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-200">
+                  <span class="text-[10px] font-black text-slate-500 uppercase tracking-wider">Storage Allocation</span>
+                  <span
+                    class="inline-flex items-center rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider"
+                    [class.bg-emerald-50]="getStorageAllocationApprovalStatus(i) === 'approved'"
+                    [class.text-emerald-600]="getStorageAllocationApprovalStatus(i) === 'approved'"
+                    [class.bg-amber-50]="getStorageAllocationApprovalStatus(i) === 'pending_warehouse_manager'"
+                    [class.text-amber-600]="getStorageAllocationApprovalStatus(i) === 'pending_warehouse_manager'"
+                    [class.bg-slate-100]="getStorageAllocationApprovalStatus(i) === 'draft'"
+                    [class.text-slate-500]="getStorageAllocationApprovalStatus(i) === 'draft'"
+                  >
+                    {{ getStorageAllocationApprovalLabel(i) }}
+                  </span>
+                </div>
+                <div class="storage-allocation-viewport overflow-x-auto">
+                  <table class="w-full border-separate border-spacing-0" style="min-width: 1040px;">
+                    <thead>
+                      <tr class="bg-slate-50 border-b border-slate-200">
+                        <th class="px-4 py-2.5 text-left text-[9px] font-black text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 w-10">#</th>
+                        <th class="px-4 py-2.5 text-left text-[9px] font-black text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 w-52">Container Serial No</th>
+                        <th class="px-4 py-2.5 text-left text-[9px] font-black text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 w-36">Bags</th>
+                        <th class="px-4 py-2.5 text-left text-[9px] font-black text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 w-72">Warehouse</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (cGroup of getContainersArray(group); track $index; let c = $index) {
+                        <tr [formGroup]="$any(cGroup)" class="border-b border-slate-100 last:border-b-0 hover:bg-slate-50/50 transition-colors">
+                          <td class="px-4 py-2.5 text-xs font-bold text-slate-500">{{ c + 1 }}</td>
+                          <td class="px-4 py-2.5">
+                            <input pInputText formControlName="containerSerialNo" class="table-input-text w-full bg-slate-50" readonly placeholder="Container Serial No" />
+                          </td>
+                          <td class="px-4 py-2.5">
+                            <input pInputText class="table-input-text w-full bg-slate-50" [value]="$any(cGroup).get('bags')?.value ?? ''" readonly placeholder="0" />
+                          </td>
+                          <td class="px-4 py-2.5">
+                            <input pInputText class="table-input-text w-full bg-slate-50" [value]="$any(cGroup).get('warehouse')?.value || ''" readonly placeholder="Warehouse" />
+                          </td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            }
+
+            <!-- ===== STORAGE ARRIVAL TABLE ===== -->
+            @if (getShipmentTab(i) === 'arrival') {
+              <div class="storage-arrival-shell rounded-xl border border-slate-200 overflow-hidden">
+                <!-- POINT 13: Global Save All button -->
+                <div class="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-200">
+                  <span class="text-[10px] font-black text-slate-500 uppercase tracking-wider">Storage Arrival</span>
+                  <div class="flex items-center gap-2">
+                    <span
+                      class="inline-flex items-center rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider"
+                      [class.bg-emerald-50]="getStorageArrivalApprovalStatus(i) === 'approved'"
+                      [class.text-emerald-600]="getStorageArrivalApprovalStatus(i) === 'approved'"
+                      [class.bg-amber-50]="getStorageArrivalApprovalStatus(i) === 'pending_warehouse_manager'"
+                      [class.text-amber-600]="getStorageArrivalApprovalStatus(i) === 'pending_warehouse_manager'"
+                      [class.bg-slate-100]="getStorageArrivalApprovalStatus(i) === 'draft'"
+                      [class.text-slate-500]="getStorageArrivalApprovalStatus(i) === 'draft'"
+                    >
+                      {{ getStorageArrivalApprovalLabel(i) }}
+                    </span>
+                    @if (canApproveStorageArrival(i)) {
+                      <button
+                        type="button"
+                        (click)="approveStorageArrival(i)"
+                        [disabled]="isApprovingStorageArrival(i)"
+                        class="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-blue-600 hover:bg-blue-100 disabled:opacity-50"
+                      >
+                        @if (isApprovingStorageArrival(i)) {
+                          <i class="pi pi-spin pi-spinner text-[10px]"></i>
+                          Approving...
+                        } @else {
+                          <i class="pi pi-check-circle text-[10px]"></i>
+                          Approve
+                        }
+                      </button>
+                    }
+                    @if (saveAllProgress(); as progress) {
+                      <span class="text-[10px] text-slate-500 font-semibold">
+                        Saving {{ progress.current }} / {{ progress.total }}...
+                      </span>
+                    }
+                    @if (!isStorageArrivalLocked(i)) {
+                    <button
+                      type="button"
+                      (click)="saveAllArrivalRows(i)"
+                      [disabled]="savingAllRows()"
+                      class="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-violet-600 hover:bg-violet-100 disabled:opacity-50"
+                    >
+                      @if (savingAllRows()) {
+                        <i class="pi pi-spin pi-spinner text-[10px]"></i>
+                        Saving All...
+                      } @else {
+                        <i class="pi pi-list-check text-[10px]"></i>
+                        Save All
+                      }
+                    </button>
+                    }
+                  </div>
+                </div>
+                <div class="storage-arrival-viewport overflow-x-auto">
+                  <table class="w-full border-separate border-spacing-0" [style.min-width]="isStorageArrivalLocked(i) ? '1800px' : '2100px'">
+                    <thead>
+                      <tr class="bg-slate-50 border-b border-slate-200">
+                        <th class="px-3 py-2.5 text-left text-[9px] font-black text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 w-10">#</th>
+                        <th class="px-3 py-2.5 text-left text-[9px] font-black text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 w-52">Container No</th>
+                        <th class="px-3 py-2.5 text-left text-[9px] font-black text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 w-36">Bags</th>
+                        <th class="px-3 py-2.5 text-left text-[9px] font-black text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 w-72">Warehouse</th>
+                        <th class="px-3 py-2.5 text-left text-[9px] font-black text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 w-40">Received On Date<span class="text-red-500 ml-0.5">*</span></th>
+                        <th class="px-3 py-2.5 text-left text-[9px] font-black text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 w-36">Received On Time<span class="text-red-500 ml-0.5">*</span></th>
+                        <th class="px-3 py-2.5 text-left text-[9px] font-black text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 w-72">GRN #<span class="text-red-500 ml-0.5">*</span></th>
+                        <th class="px-3 py-2.5 text-left text-[9px] font-black text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 w-72">Batch #<span class="text-red-500 ml-0.5">*</span></th>
+                        <th class="px-3 py-2.5 text-left text-[9px] font-black text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 w-40">Production Date<span class="text-red-500 ml-0.5">*</span></th>
+                        <th class="px-3 py-2.5 text-left text-[9px] font-black text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 w-40">Expiry Date<span class="text-red-500 ml-0.5">*</span></th>
+                        <th class="px-3 py-2.5 text-left text-[9px] font-black text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 w-80">Remarks</th>
+                        @if (!isStorageArrivalLocked(i)) {
+                        <th class="px-3 py-2.5 text-left text-[9px] font-black text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 w-24">Document</th>
+                        <th class="px-3 py-2.5 text-left text-[9px] font-black text-slate-400 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 w-28">Action</th>
+                        }
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (cGroup of getContainersArray(group); track $index; let c = $index) {
+                        <tr [formGroup]="$any(cGroup)" class="border-b border-slate-100 last:border-b-0 hover:bg-slate-50/30 transition-colors">
+                          <td class="px-3 py-2 text-xs font-bold text-slate-500">{{ c + 1 }}</td>
+                          <td class="px-3 py-2">
+                            <input pInputText formControlName="containerSerialNo" class="table-input-text w-full bg-slate-50" readonly placeholder="Container No" />
+                          </td>
+                          <td class="px-3 py-2">
+                            <input pInputText class="table-input-text w-full bg-slate-50" [value]="$any(cGroup).get('bags')?.value ?? ''" readonly placeholder="0" />
+                          </td>
+                          <td class="px-3 py-2">
+                            <input pInputText class="table-input-text w-full bg-slate-50" [value]="$any(cGroup).get('warehouse')?.value || ''" readonly placeholder="Warehouse" />
+                          </td>
+                          <td class="px-3 py-2">
+                            <p-datepicker formControlName="receivedOnDate" appendTo="body" inputStyleClass="table-input" placeholder="Select date" styleClass="w-full" dateFormat="dd/mm/yy" [disabled]="isStorageArrivalLocked(i)" />
+                          </td>
+                          <td class="px-3 py-2">
+                            <p-datepicker formControlName="receivedOnTime" appendTo="body" inputStyleClass="table-input" placeholder="HH:MM" styleClass="w-full" [timeOnly]="true" hourFormat="24" [disabled]="isStorageArrivalLocked(i)" />
+                          </td>
+                          <td class="px-3 py-2">
+                            <input pInputText formControlName="grn" class="table-input-text w-full" placeholder="GRN #" [readonly]="isStorageArrivalLocked(i)" />
+                          </td>
+                          <td class="px-3 py-2">
+                            <input pInputText formControlName="batch" class="table-input-text w-full" placeholder="Batch #" [readonly]="isStorageArrivalLocked(i)" />
+                          </td>
+                          <td class="px-3 py-2">
+                            <p-datepicker formControlName="productionDate" appendTo="body" inputStyleClass="table-input" placeholder="Select date" styleClass="w-full" dateFormat="dd/mm/yy" [disabled]="isStorageArrivalLocked(i)" />
+                          </td>
+                          <td class="px-3 py-2">
+                            <p-datepicker formControlName="expiryDate" appendTo="body" inputStyleClass="table-input" placeholder="Select date" styleClass="w-full" dateFormat="dd/mm/yy" [disabled]="isStorageArrivalLocked(i)" />
+                          </td>
+                          <td class="px-3 py-2">
+                            <input pInputText formControlName="remarks" class="table-input-text w-full" placeholder="Remarks" [readonly]="isStorageArrivalLocked(i)" />
+                          </td>
+                          @if (!isStorageArrivalLocked(i)) {
+                          <td class="px-3 py-2">
+                            <div class="flex items-center gap-1">
+                              @if (!isStorageArrivalLocked(i)) {
+                              <button type="button" (click)="clickRowFileInput(i, c)" class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-blue-600">
+                                <i class="pi pi-upload text-[10px]"></i>
+                              </button>
+                              }
+                              @if (getRowFile(i, c)) {
+                                <button type="button" (click)="openDocumentPreview(getRowFile(i, c)!, 'Storage Row Document')" class="h-8 w-8 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-blue-600 inline-flex items-center justify-center">
+                                  <i class="pi pi-eye text-[10px]"></i>
+                                </button>
+                                @if (!isStorageArrivalLocked(i)) {
+                                <button type="button" (click)="clearRowFile(i, c)" class="h-8 w-8 rounded-lg border border-red-100 bg-red-50 text-red-500 hover:bg-red-100 inline-flex items-center justify-center">
+                                  <i class="pi pi-trash text-[10px]"></i>
+                                </button>
+                                }
+                              } @else if (getSavedRowDocumentUrl(cGroup)) {
+                                <button type="button" (click)="openRemoteDocumentPreview(getSavedRowDocumentUrl(cGroup), getSavedRowDocumentName(cGroup) || 'Storage Row Document')" class="h-8 w-8 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-blue-600 inline-flex items-center justify-center">
+                                  <i class="pi pi-eye text-[10px]"></i>
+                                </button>
+                              }
+                            </div>
+                          </td>
+                          <td class="px-3 py-2">
+                            @if (!isStorageArrivalLocked(i)) {
+                            <button
+                              type="button"
+                              (click)="saveArrivalRow(i, c)"
+                              class="inline-flex min-w-[5.75rem] items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-emerald-600 hover:bg-emerald-100"
+                            >
+                              @if (isSavingArrivalRow(i, c)) {
+                                <i class="pi pi-spin pi-spinner text-[10px]"></i>
+                                Saving...
+                              } @else {
+                                <i class="pi pi-check text-[10px]"></i>
+                                Save
+                              }
+                            </button>
+                            }
+                          </td>
+                          }
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            }
+
+          </div>
+        </p-accordion-content>
+      </p-accordion-panel>
+      }
+    }
+  </p-accordion>
+}
+
+<input #storageRowFileInput type="file" class="!hidden" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" (change)="onRowFileInputChange($event)" />
+<input #storageGlobalFileInput type="file" class="!hidden" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" (change)="onGlobalFileInputChange($event)" />
+
+<p-dialog
+  [header]="previewTitle()"
+  [visible]="showPreviewModal()"
+  (visibleChange)="onPreviewVisibleChange($event)"
+  [modal]="true"
+  [dismissableMask]="true"
+  [style]="{ width: '90vw', maxWidth: '900px' }"
+  [contentStyle]="{ overflow: 'auto', padding: '0' }"
+  [draggable]="false"
+  [resizable]="true"
+  appendTo="body">
+  <div class="flex items-center justify-end gap-2 border-b border-slate-200 bg-white px-4 py-3">
+    <button type="button" (click)="zoomOutPreview()" class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-blue-600">
+      <i class="pi pi-minus"></i>
+    </button>
+    <button type="button" (click)="zoomInPreview()" class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-blue-600">
+      <i class="pi pi-plus"></i>
+    </button>
+    <button type="button" (click)="resetPreviewZoom()" class="inline-flex rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-500 hover:text-blue-600">
+      Reset
+    </button>
+  </div>
+  <div class="document-preview-content flex items-center justify-center min-h-[70vh] bg-slate-100 p-4 overflow-auto">
+    @if (previewUrl(); as url) {
+      @if (previewIsImage()) {
+        <div class="overflow-auto rounded-xl border-2 border-dashed border-blue-100 bg-white/70 p-2">
+          <img [src]="url" [alt]="previewTitle()" class="max-w-full max-h-[80vh] object-contain rounded shadow-lg transition-transform duration-200 cursor-zoom-in" [style.transform]="'scale(' + previewZoom() + ')'" [style.transformOrigin]="previewTransformOrigin()" (dblclick)="onPreviewImageDoubleClick($event)" />
+        </div>
+      } @else {
+        <iframe [src]="previewSafeUrl()" class="w-full h-[80vh] min-h-[500px] rounded border-0 bg-white shadow-lg" title="Document preview"></iframe>
+      }
+    }
+  </div>
+</p-dialog>

@@ -1,0 +1,79 @@
+:host {
+  display: block;
+  min-width: 0;
+  width: 100%;
+}
+
+/*
+ * KEY FIX — DOM inspection showed:
+ *   quality-scroll-viewport clientWidth = 2710 = scrollWidth → no scrollbar.
+ *
+ * The accordion panels were expanding to the full table width (overflow:visible
+ * propagating outward). Solution: clamp every ancestor that sits ABOVE the
+ * scroll viewport to width:100% + overflow-x:hidden so they can't grow wider
+ * than the screen. Only .quality-scroll-viewport is allowed to scroll.
+ */
+
+/* 1. Lock accordion wrappers to the available width */
+:host ::ng-deep .p-accordionpanel {
+  width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+:host ::ng-deep .p-accordioncontent,
+:host ::ng-deep .p-accordioncontent-content {
+  width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: visible;
+}
+
+/*
+ * KEY FIX — PrimeNG's p-motion is an animation wrapper rendered INSIDE
+ * p-accordioncontent but OUTSIDE the user's content. The DOM chain shows
+ * it expands to the full table width (2788px) despite the accordion being 1190px.
+ * Constraining it here stops the leak.
+ */
+:host ::ng-deep p-motion {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+/* 2. The table-shell + sl-card must also stay within available width */
+:host ::ng-deep .quality-table-shell {
+  width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: visible;
+}
+
+:host ::ng-deep .quality-table-shell .sl-card {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* 3. THE SOLE SCROLL CONTAINER — owns the horizontal scrollbar */
+:host ::ng-deep .quality-table-shell .quality-scroll-viewport {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 4. PrimeNG internals — do NOT force overflow:visible here.
+      They must stay at their default so they don't fight the scroll viewport. */
+:host ::ng-deep .quality-table-shell .quality-scroll-table .p-datatable-wrapper,
+:host ::ng-deep .quality-table-shell .quality-scroll-table .p-datatable-table-container {
+  overflow: unset;
+}
+
+/* 5. Force the <table> to its minimum wide width */
+:host ::ng-deep .quality-table-shell .quality-scroll-table .p-datatable-table {
+  min-width: 2600px !important;
+  width: max-content;
+}

@@ -1,0 +1,66 @@
+@reference "tailwindcss";
+
+:host {
+    display: block;
+    position: relative;
+}
+
+.notification-panel {
+    @apply absolute right-0 top-[calc(100%+0.75rem)] z-30 w-[22rem] max-w-[85vw] rounded-[1.5rem] border border-slate-200 bg-white p-3 shadow-2xl;
+}
+
+.notification-panel__header {
+    @apply mb-3 flex items-center justify-between px-1;
+
+    h3 {
+        @apply text-sm font-black text-slate-900;
+    }
+
+    p {
+        @apply mt-1 text-[11px] font-medium text-slate-400;
+    }
+}
+
+.notification-panel__body {
+    @apply flex max-h-[24rem] flex-col gap-2 overflow-y-auto pr-1;
+}
+
+.notification-item {
+    @apply w-full rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-left transition-all;
+}
+
+.notification-item.is-unread {
+    @apply border-blue-200 bg-blue-50/70;
+}
+
+.notification-item__title-row {
+    @apply flex items-center justify-between gap-2;
+}
+
+.notification-item__title {
+    @apply text-sm font-bold text-slate-900;
+}
+
+.notification-item__badge {
+    @apply rounded-full bg-blue-600 px-2 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white;
+}
+
+.notification-item__message {
+    @apply mt-1 text-xs leading-5 text-slate-500;
+}
+
+.notification-item__time {
+    @apply mt-2 inline-flex text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400;
+}
+
+.password-field {
+    @apply flex items-center rounded-2xl border border-slate-200 bg-white px-3 shadow-sm;
+
+    input {
+        @apply h-12 flex-1 border-none bg-transparent text-sm font-medium text-slate-900 outline-none;
+    }
+
+    button {
+        @apply inline-flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-blue-600;
+    }
+}

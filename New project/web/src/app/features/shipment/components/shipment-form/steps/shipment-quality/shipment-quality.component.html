@@ -1,0 +1,326 @@
+@if (formArray.controls.length === 0 || !hasVisibleShipments()) {
+  <div class="p-16 text-center bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+    <div class="flex flex-col items-center justify-center gap-3">
+      <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+        <i class="pi pi-verified text-xl"></i>
+      </div>
+      <span class="text-[11px] font-black text-slate-900 uppercase tracking-widest">No Shipments Available</span>
+      <p class="text-[10px] text-slate-500 max-w-[220px] mx-auto">
+        Complete previous steps to start quality tracking.
+      </p>
+    </div>
+  </div>
+} @else {
+
+  <!-- ═══ S1 REPORT HIGHLIGHTS — outside accordion ═══ -->
+  @if (getQ1ReportData(); as q1) {
+    <div class="mx-4 mt-4 mb-2 flex flex-col gap-4">
+
+      <!-- Header row: label + Cooking Result (right) + View S1 button -->
+      <div class="flex items-center justify-between gap-3">
+        <span class="text-[10px] font-black text-slate-400 uppercase tracking-wider">S1 Report Highlights</span>
+        <div class="flex items-center gap-3">
+          <!-- Cooking Result — yellow, right of header -->
+          @if (getQ1CookingResult()) {
+            <div class="rounded-xl border-2 border-yellow-400 bg-yellow-50 px-4 py-2 flex items-center gap-3">
+              <div>
+                <p class="text-[9px] font-black text-yellow-600 uppercase tracking-wider">Cooking Result</p>
+                <p class="text-base font-black text-yellow-800">{{ getQ1CookingResult() }}</p>
+                @if (getQ1CookingResultOptions()) {
+                  <p class="text-[9px] text-yellow-600">{{ getQ1CookingResultOptions() }}</p>
+                }
+                @if (getQ1Remarks()) {
+                  <p class="text-[10px] font-semibold text-yellow-700 mt-1 border-t border-yellow-200 pt-1">{{ getQ1Remarks() }}</p>
+                }
+              </div>
+            </div>
+          } @else if (getQ1Remarks()) {
+            <!-- Show remarks alone if no cooking result -->
+            <div class="rounded-xl border-2 border-yellow-400 bg-yellow-50 px-4 py-2">
+              <p class="text-[9px] font-black text-yellow-600 uppercase tracking-wider">Remarks</p>
+              <p class="text-[10px] font-semibold text-yellow-700 mt-0.5">{{ getQ1Remarks() }}</p>
+            </div>
+          }
+          @if (hasS1Report()) {
+            <button type="button" (click)="openS1Report()"
+              class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-600 hover:bg-slate-50">
+              <i class="pi pi-eye"></i> View S1 Report
+            </button>
+          }
+        </div>
+      </div>
+
+      <!-- Original info card (restored) -->
+      <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-[11px]">
+          <div class="flex flex-col">
+            <span class="text-slate-400 font-medium">Shipment No / Batch No</span>
+            <span class="text-slate-700 font-bold">{{ q1.sample_details?.shipment_no_batch_no || '—' }}</span>
+          </div>
+          <div class="flex flex-col">
+            <span class="text-slate-400 font-medium">Report Date</span>
+            <span class="text-slate-700 font-bold">{{ q1.report_details?.report_date || '—' }}</span>
+          </div>
+          <div class="flex flex-col">
+            <span class="text-slate-400 font-medium">Report No</span>
+            <span class="text-slate-700 font-bold">{{ q1.report_details?.report_no || '—' }}</span>
+          </div>
+          <div class="flex flex-col">
+            <span class="text-slate-400 font-medium">Commodity</span>
+            <span class="text-slate-700 font-bold">{{ q1.sample_details?.commodity || '—' }}</span>
+          </div>
+          <div class="flex flex-col">
+            <span class="text-slate-400 font-medium">Variety of Grains</span>
+            <span class="text-slate-700 font-bold">{{ q1.sample_details?.variety_of_grains || '—' }}</span>
+          </div>
+          <div class="flex flex-col">
+            <span class="text-slate-400 font-medium">Vendor</span>
+            <span class="text-slate-700 font-bold">{{ q1.sample_details?.vendor || '—' }}</span>
+          </div>
+          <div class="flex flex-col">
+            <span class="text-slate-400 font-medium">Country of Origin</span>
+            <span class="text-slate-700 font-bold">{{ q1.sample_details?.country_of_origin || '—' }}</span>
+          </div>
+          <div class="flex flex-col">
+            <span class="text-slate-400 font-medium">Analyzed By</span>
+            <span class="text-slate-700 font-bold">{{ q1.analysis_details?.analyzed_by || '—' }}</span>
+          </div>
+          <div class="flex flex-col">
+            <span class="text-slate-400 font-medium">Analysis Date &amp; Time</span>
+            <span class="text-slate-700 font-bold">{{ getQ1AnalysisDateTime() || '—' }}</span>
+          </div>
+          @if (getQ1Purpose()) {
+            <div class="flex flex-col sm:col-span-2 lg:col-span-3">
+              <span class="text-slate-400 font-medium">Purpose</span>
+              <span class="text-slate-700 font-bold">{{ getQ1Purpose() }}</span>
+            </div>
+          }
+        </div>
+      </div>
+
+      <!-- Highlighted: Remarks shown inside Cooking Result card above -->
+
+      <!-- Quality Parameters table -->
+      @if (getQ1QualityParameterRows().length) {
+        <div class="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+          <div class="px-4 py-2.5 bg-slate-50 border-b border-slate-100">
+            <span class="text-[10px] font-black text-slate-500 uppercase tracking-wider">Quality Parameters</span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="border-b border-slate-100 bg-white">
+                  <th class="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-slate-400 w-12">#</th>
+                  <th class="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-slate-400">Criteria</th>
+                  <th class="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-slate-400">Preferred Standard</th>
+                  <th class="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-slate-400">Actual</th>
+                  <th class="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-slate-400">Remark</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of getQ1QualityParameterRows(); track row.sNo) {
+                  <tr class="border-b border-slate-50 last:border-b-0 hover:bg-slate-50/40 transition-colors">
+                    <td class="px-4 py-2.5 text-[11px] font-bold text-slate-400">{{ row.sNo }}</td>
+                    <td class="px-4 py-2.5 text-[11px] font-semibold text-slate-700">{{ row.criteria }}</td>
+                    <td class="px-4 py-2.5 text-[11px] text-slate-600">{{ row.preferredStandard }}</td>
+                    <td class="px-4 py-2.5 text-[11px] font-semibold"
+                      [class.text-emerald-600]="row.actual !== '—'"
+                      [class.text-slate-400]="row.actual === '—'">
+                      {{ row.actual }}
+                    </td>
+                    <td class="px-4 py-2.5 text-[11px] text-slate-500">{{ row.remark }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+      }
+
+    </div>
+  } @else if (hasS1Report()) {
+    <div class="mx-4 mt-4 mb-2 flex justify-end">
+      <button type="button" (click)="openS1Report()"
+        class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-600 hover:bg-slate-50">
+        <i class="pi pi-eye"></i> View S1 Report
+      </button>
+    </div>
+  }
+
+  <!-- ═══ ACCORDION — one panel per shipment ═══ -->
+  <p-accordion [multiple]="true" styleClass="flex flex-col gap-3 mx-4 mb-4 mt-2">
+    @for (group of formArray.controls; track $index; let i = $index) {
+      @if (shouldShowShipment(i)) {
+      <p-accordion-panel [value]="'quality-' + i" styleClass="border border-slate-200 rounded-xl shadow-sm">
+        <p-accordion-header styleClass="bg-white hover:bg-slate-50 px-4 py-3">
+          <div class="flex items-center justify-between gap-3 w-full pr-2">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <span class="w-6 h-6 rounded-full bg-slate-800 text-white text-[10px] font-black flex items-center justify-center shrink-0">{{ i + 1 }}</span>
+              <span class="text-xs font-bold text-slate-700 truncate">Shipment No: {{ getShipmentNoLabel(i) }}</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <button type="button" (click)="$event.stopPropagation(); addQualityRow(group)"
+                class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-bold uppercase text-slate-600 hover:bg-slate-50">
+                <i class="pi pi-plus"></i> Add Row
+              </button>
+              <button type="button" (click)="$event.stopPropagation(); saveRow(i)"
+                class="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-emerald-600 hover:bg-emerald-100">
+                @if (savingRowIndex() === i) {
+                  <i class="pi pi-spin pi-spinner text-[10px]"></i> Saving...
+                } @else {
+                  <i class="pi pi-check text-[10px]"></i> Save
+                }
+              </button>
+            </div>
+          </div>
+        </p-accordion-header>
+
+        <p-accordion-content styleClass="bg-white">
+          <div [formGroup]="$any(group)" class="px-4 sm:px-5 pb-5 pt-3 quality-table-shell">
+            <div class="sl-card">
+              <div class="sl-card-header bg-slate-50 flex items-center justify-between py-2.5 px-4">
+                <h2 class="text-[10px] font-black text-slate-500 uppercase">Quality Rows</h2>
+                <span class="text-[10px] font-bold text-slate-500">{{ getQualityRows(group).length }} row(s)</span>
+              </div>
+              <div class="quality-scroll-viewport">
+                <p-table [value]="getQualityRows(group).controls"
+                  styleClass="p-datatable-sm custom-tracker-table actual-table quality-scroll-table"
+                  [tableStyle]="{ 'min-width': '3000px' }">
+                  <ng-template pTemplate="header">
+                    <tr>
+                      <th class="min-w-[80px]">SN</th>
+                      <th class="min-w-[180px]">SHIPMENT NO</th>
+                      <th class="min-w-[140px]">PHASE<span class="text-red-500 ml-0.5">*</span></th>
+                      <th class="min-w-[200px]">PURPOSE</th>
+                      <th class="min-w-[150px]">DATE<span class="text-red-500 ml-0.5">*</span></th>
+                      <th class="min-w-[180px]">IN-HOUSE REPORT NO</th>
+                      <th class="min-w-[150px]">IN-HOUSE REPORT DATE</th>
+                      <th class="min-w-[120px] text-center">IN-HOUSE DOC</th>
+                      <th class="min-w-[190px]">STRATEGIC REPORT NO</th>
+                      <th class="min-w-[150px]">STRATEGIC REPORT DATE</th>
+                      <th class="min-w-[120px] text-center">STRATEGIC DOC</th>
+                      <th class="min-w-[190px]">THIRD PARTY REPORT NO</th>
+                      <th class="min-w-[150px]">THIRD PARTY REPORT DATE</th>
+                      <th class="min-w-[120px] text-center">THIRD PARTY DOC</th>
+                      <th class="min-w-[220px]">REMARKS</th>
+                      <th class="min-w-[120px] text-center">ATTACHMENT<span class="text-red-500 ml-0.5">*</span></th>
+                      <th class="min-w-[100px] text-center">ACTION</th>
+                    </tr>
+                  </ng-template>
+                  <ng-template pTemplate="body" let-row let-r="rowIndex">
+                    <tr [formGroup]="row">
+                      <td class="text-slate-700 font-semibold text-xs">{{ row.get('sn')?.value }}</td>
+                      <td><input pInputText formControlName="sampleNo" class="table-input-text w-full" placeholder="Shipment No" /></td>
+                      <td><p-select [options]="phaseOptions" formControlName="phase" optionLabel="label" optionValue="value" styleClass="w-full" appendTo="body"></p-select></td>
+                      <td><input pInputText formControlName="purpose" class="table-input-text w-full" placeholder="Purpose" /></td>
+                      <td><p-datepicker formControlName="date" appendTo="body" inputStyleClass="table-input w-full" styleClass="w-full" placeholder="Date" dateFormat="dd/mm/yy"></p-datepicker></td>
+                      <td><input pInputText formControlName="inhouseReportNo" class="table-input-text w-full" placeholder="Report no" /></td>
+                      <td>
+                        @if (row.get('inhouseReportNo')?.value) {
+                          <p-datepicker formControlName="inhouseReportDate" appendTo="body" inputStyleClass="table-input w-full" styleClass="w-full" placeholder="Date" dateFormat="dd/mm/yy"></p-datepicker>
+                        } @else {
+                          <div class="table-input-text w-full bg-slate-50 text-slate-400">Awaiting report no</div>
+                        }
+                      </td>
+                      <td class="text-center">
+                        <div class="flex justify-center gap-2">
+                          <button type="button" (click)="clickFileInput(i, r, 'inhouse', 'qualityRows')" class="w-9 h-9 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-blue-600"><i class="pi pi-upload"></i></button>
+                          @if (getFile(i, r, 'inhouse', 'qualityRows')) {
+                            <button type="button" (click)="openDocumentPreview(getFile(i, r, 'inhouse', 'qualityRows')!, 'In-house Report')" class="w-9 h-9 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-blue-600"><i class="pi pi-eye"></i></button>
+                          } @else if (getSavedUrl(row, 'inhouse', 'qualityRows')) {
+                            <button type="button" (click)="openRemoteDocumentPreview(getSavedUrl(row, 'inhouse', 'qualityRows'), getSavedName(row, 'inhouse', 'qualityRows') || 'In-house Report')" class="w-9 h-9 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-blue-600"><i class="pi pi-eye"></i></button>
+                          }
+                        </div>
+                      </td>
+                      <td><input pInputText formControlName="strategicReportNo" class="table-input-text w-full" placeholder="Report no" /></td>
+                      <td>
+                        @if (row.get('strategicReportNo')?.value) {
+                          <p-datepicker formControlName="strategicReportDate" appendTo="body" inputStyleClass="table-input w-full" styleClass="w-full" placeholder="Date" dateFormat="dd/mm/yy"></p-datepicker>
+                        } @else {
+                          <div class="table-input-text w-full bg-slate-50 text-slate-400">Awaiting report no</div>
+                        }
+                      </td>
+                      <td class="text-center">
+                        <div class="flex justify-center gap-2">
+                          <button type="button" (click)="clickFileInput(i, r, 'strategic', 'qualityRows')" class="w-9 h-9 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-blue-600"><i class="pi pi-upload"></i></button>
+                          @if (getFile(i, r, 'strategic', 'qualityRows')) {
+                            <button type="button" (click)="openDocumentPreview(getFile(i, r, 'strategic', 'qualityRows')!, 'Strategic Stock Report')" class="w-9 h-9 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-blue-600"><i class="pi pi-eye"></i></button>
+                          } @else if (getSavedUrl(row, 'strategic', 'qualityRows')) {
+                            <button type="button" (click)="openRemoteDocumentPreview(getSavedUrl(row, 'strategic', 'qualityRows'), getSavedName(row, 'strategic', 'qualityRows') || 'Strategic Stock Report')" class="w-9 h-9 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-blue-600"><i class="pi pi-eye"></i></button>
+                          }
+                        </div>
+                      </td>
+                      <td><input pInputText formControlName="thirdPartyReportNo" class="table-input-text w-full" placeholder="Report no" /></td>
+                      <td>
+                        @if (row.get('thirdPartyReportNo')?.value) {
+                          <p-datepicker formControlName="thirdPartyReportDate" appendTo="body" inputStyleClass="table-input w-full" styleClass="w-full" placeholder="Date" dateFormat="dd/mm/yy"></p-datepicker>
+                        } @else {
+                          <div class="table-input-text w-full bg-slate-50 text-slate-400">Awaiting report no</div>
+                        }
+                      </td>
+                      <td class="text-center">
+                        <div class="flex justify-center gap-2">
+                          <button type="button" (click)="clickFileInput(i, r, 'thirdParty', 'qualityRows')" class="w-9 h-9 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-blue-600"><i class="pi pi-upload"></i></button>
+                          @if (getFile(i, r, 'thirdParty', 'qualityRows')) {
+                            <button type="button" (click)="openDocumentPreview(getFile(i, r, 'thirdParty', 'qualityRows')!, 'Third Party Lab Report')" class="w-9 h-9 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-blue-600"><i class="pi pi-eye"></i></button>
+                          } @else if (getSavedUrl(row, 'thirdParty', 'qualityRows')) {
+                            <button type="button" (click)="openRemoteDocumentPreview(getSavedUrl(row, 'thirdParty', 'qualityRows'), getSavedName(row, 'thirdParty', 'qualityRows') || 'Third Party Lab Report')" class="w-9 h-9 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-blue-600"><i class="pi pi-eye"></i></button>
+                          }
+                        </div>
+                      </td>
+                      <td><input pInputText formControlName="remarks" class="table-input-text w-full" placeholder="Remarks" /></td>
+                      <td class="text-center">
+                        <div class="flex justify-center gap-2">
+                          <button type="button" (click)="clickFileInput(i, r, 'attachment', 'qualityRows')" class="w-9 h-9 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-blue-600"><i class="pi pi-upload"></i></button>
+                          @if (getFile(i, r, 'attachment', 'qualityRows')) {
+                            <button type="button" (click)="openDocumentPreview(getFile(i, r, 'attachment', 'qualityRows')!, 'Quality Attachment')" class="w-9 h-9 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-blue-600"><i class="pi pi-eye"></i></button>
+                            <button type="button" (click)="clearFile(i, r, 'attachment', 'qualityRows')" class="w-9 h-9 rounded-lg border border-red-100 bg-red-50 text-red-500 hover:bg-red-100"><i class="pi pi-trash"></i></button>
+                          } @else if (getSavedUrl(row, 'attachment', 'qualityRows')) {
+                            <button type="button" (click)="openRemoteDocumentPreview(getSavedUrl(row, 'attachment', 'qualityRows'), getSavedName(row, 'attachment', 'qualityRows') || 'Quality Attachment')" class="w-9 h-9 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-blue-600"><i class="pi pi-eye"></i></button>
+                          }
+                        </div>
+                      </td>
+                      <td class="text-center">
+                        <button type="button" (click)="removeQualityRow(group, r)"
+                          [disabled]="getQualityRows(group).length <= 1"
+                          class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-100 bg-red-50 text-red-500 hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                          title="Remove row">
+                          <i class="pi pi-trash"></i>
+                        </button>
+                      </td>
+                    </tr>
+                  </ng-template>
+                </p-table>
+              </div>
+            </div>
+          </div>
+        </p-accordion-content>
+      </p-accordion-panel>
+      }
+    }
+  </p-accordion>
+}
+
+<input #qualityDocInput type="file" class="!hidden" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" (change)="onFileInputChange($event)" />
+
+<p-dialog
+  [header]="previewTitle()"
+  [visible]="showPreviewModal()"
+  (visibleChange)="onPreviewVisibleChange($event)"
+  [modal]="true"
+  [dismissableMask]="true"
+  [style]="{ width: '90vw', maxWidth: '900px' }"
+  [contentStyle]="{ overflow: 'auto', padding: '0' }"
+  [draggable]="false"
+  [resizable]="true"
+  appendTo="body">
+  <div class="document-preview-content flex items-center justify-center min-h-[70vh] bg-slate-100 p-4">
+    @if (previewUrl(); as url) {
+      @if (previewIsImage()) {
+        <img [src]="url" [alt]="previewTitle()" class="max-w-full max-h-[80vh] object-contain rounded shadow-lg" />
+      } @else {
+        <iframe [src]="previewSafeUrl()" class="w-full h-[80vh] min-h-[500px] rounded border-0 bg-white shadow-lg" title="Document preview"></iframe>
+      }
+    }
+  </div>
+</p-dialog>

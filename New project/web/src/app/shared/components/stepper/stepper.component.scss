@@ -1,0 +1,137 @@
+@reference "tailwindcss";
+
+.stepper-container {
+    @apply w-full overflow-x-auto py-1 px-1;
+    -webkit-overflow-scrolling: touch;
+}
+
+.stepper-wrapper {
+    @apply flex items-start justify-between min-w-max lg:min-w-0 w-full gap-2 sm:gap-3;
+}
+
+.step {
+    @apply flex flex-col items-center gap-2 relative cursor-pointer transition-all duration-300 rounded-2xl px-2 py-2;
+    flex: 1;
+    min-width: 120px;
+    min-height: 118px;
+    z-index: 1;
+    --indicator-size: 2rem;
+    --step-top-padding: 0.5rem;
+
+    &:hover .indicator-ring {
+        @apply scale-105 shadow-md;
+    }
+}
+
+/* Connector Line */
+.connector {
+    @apply absolute h-[3px] rounded-full bg-slate-200;
+    top: calc(var(--step-top-padding) + ((var(--indicator-size) - 3px) / 2));
+    left: calc(50% + (var(--indicator-size) / 2));
+    width: calc(100% - var(--indicator-size));
+    z-index: 0;
+    transition: background-color 0.3s ease;
+}
+
+.connector.filled {
+    @apply bg-emerald-500;
+}
+
+/* Step Indicator Design */
+.step-indicator {
+    @apply relative flex items-center justify-center h-8 w-8 sm:h-9 sm:w-9;
+    z-index: 2;
+}
+
+.indicator-ring {
+    @apply w-full h-full rounded-full border-2 border-slate-200 bg-white flex items-center justify-center transition-all duration-300;
+}
+
+.indicator-core {
+    @apply flex items-center justify-center text-sm font-bold;
+}
+
+/* States */
+.step.pending {
+    .indicator-ring {
+        @apply border-slate-200 bg-slate-50 text-slate-400;
+    }
+    .step-label { @apply text-slate-400; }
+}
+
+.step.active {
+    .indicator-ring {
+        @apply border-blue-600 bg-blue-50 text-blue-600 ring-4 ring-blue-50;
+    }
+    .step-label { @apply text-blue-900 font-bold; }
+    .indicator-core { @apply scale-110; }
+}
+
+.step.completed {
+    .indicator-ring {
+        @apply border-emerald-500 bg-emerald-500 text-white;
+    }
+    .step-label { @apply text-slate-900; }
+    .step-sublabel { @apply text-emerald-600 font-medium; }
+}
+
+/* Content Styling */
+.step-content {
+    @apply flex flex-col items-center text-center px-1 min-h-[56px] justify-start;
+    gap: 0.35rem;
+}
+
+.step-label {
+    @apply text-[11px] sm:text-[12px] font-semibold text-slate-600 tracking-tight transition-colors duration-300 leading-tight;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-height: 2.6rem;
+    max-width: 9rem;
+}
+
+.step-sublabel {
+    @apply text-[9px] text-slate-400 uppercase font-bold tracking-[0.18em];
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    order: -1;
+    margin-top: 0;
+    line-height: 1.1;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1024px) {
+    .step {
+        min-width: 110px;
+    }
+}
+
+@media (max-width: 640px) {
+    .stepper-container {
+        @apply pb-2;
+    }
+
+    .step {
+        min-width: 104px;
+        min-height: 108px;
+    }
+
+    .step-label {
+        max-width: 7rem;
+        min-height: 2.4rem;
+    }
+
+    .step {
+        --indicator-size: 2rem;
+    }
+}
+
+@media (min-width: 640px) {
+    .step {
+        --indicator-size: 2.25rem;
+    }
+}

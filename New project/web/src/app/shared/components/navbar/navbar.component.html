@@ -1,0 +1,138 @@
+<nav class="bg-white/90 px-4 py-3 sm:px-5 md:px-6">
+  <div class="mx-auto flex items-center justify-between gap-4">
+    <div class="min-w-0">
+      <p class="text-[11px] font-black uppercase tracking-[0.28em] text-slate-400">Royal Horizon</p>
+      <h2 class="truncate text-lg font-black tracking-tight text-slate-900">Operations Workspace</h2>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <div class="relative">
+        <button
+          type="button"
+          (click)="toggleNotificationPanel()"
+          class="relative inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 shadow-sm transition-colors hover:border-blue-200 hover:text-blue-600"
+          aria-label="Notifications">
+          <i class="pi pi-bell text-base"></i>
+          @if (unreadCount() > 0) {
+            <span class="absolute -right-1 -top-1 inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] font-black text-white">
+              {{ unreadCount() }}
+            </span>
+          }
+        </button>
+
+        @if (showNotificationPanel()) {
+          <div class="notification-panel">
+            <div class="notification-panel__header">
+              <div>
+                <h3>Notifications</h3>
+                <p>{{ unreadCount() }} unread</p>
+              </div>
+            </div>
+
+            <div class="notification-panel__body">
+              @for (notification of notifications(); track notification._id) {
+                <button
+                  type="button"
+                  (click)="openNotification(notification)"
+                  class="notification-item"
+                  [class.is-unread]="!notification.isRead">
+                  <div class="notification-item__copy">
+                    <div class="notification-item__title-row">
+                      <span class="notification-item__title">{{ notification.title }}</span>
+                      @if (!notification.isRead) {
+                        <span class="notification-item__badge">New</span>
+                      }
+                    </div>
+                    <p class="notification-item__message">{{ notification.message }}</p>
+                    <span class="notification-item__time">{{ formatNotificationTime(notification.createdAt) }}</span>
+                  </div>
+                </button>
+              } @empty {
+                <div class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center">
+                  <p class="text-sm font-semibold text-slate-700">No notifications yet</p>
+                  <p class="mt-1 text-xs text-slate-500">Supplier registration activity will appear here.</p>
+                </div>
+              }
+            </div>
+          </div>
+        }
+      </div>
+
+      <button
+        type="button"
+        (click)="openChangePassword()"
+        class="hidden rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black uppercase tracking-[0.2em] text-slate-600 shadow-sm transition-colors hover:border-blue-200 hover:text-blue-600 sm:inline-flex">
+        Change Password
+      </button>
+
+      <div class="hidden items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm sm:flex">
+        <div class="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+          <i class="pi pi-user text-sm"></i>
+        </div>
+        <div class="hidden min-w-0 md:block">
+          <p class="truncate text-sm font-bold text-slate-900">{{ (userName$ | async) || 'User' }}</p>
+          <p class="text-[11px] font-medium text-slate-400">{{ (userRole$ | async) || 'Role' }}</p>
+        </div>
+      </div>
+
+      <button
+        (click)="onLogout()"
+        class="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-red-200 bg-red-50 text-red-600 shadow-sm transition-colors hover:bg-red-100"
+        title="Logout"
+        aria-label="Logout">
+        <i class="pi pi-sign-out text-sm md:text-base"></i>
+      </button>
+    </div>
+  </div>
+</nav>
+
+<p-dialog
+  header="Change Password"
+  [visible]="showPasswordDialog()"
+  (visibleChange)="showPasswordDialog.set($event)"
+  [modal]="true"
+  [dismissableMask]="true"
+  [draggable]="false"
+  [style]="{ width: 'min(92vw, 32rem)' }"
+  appendTo="body">
+  <form [formGroup]="changePasswordForm" class="flex flex-col gap-4" (ngSubmit)="submitChangePassword()">
+    <div class="flex flex-col gap-2">
+      <label class="text-xs font-black uppercase tracking-[0.2em] text-slate-500">Current Password</label>
+      <div class="password-field">
+        <input [type]="showCurrentPassword() ? 'text' : 'password'" formControlName="currentPassword" placeholder="Enter current password" />
+        <button type="button" (click)="showCurrentPassword.set(!showCurrentPassword())">
+          <i [class]="showCurrentPassword() ? 'pi pi-eye-slash' : 'pi pi-eye'"></i>
+        </button>
+      </div>
+    </div>
+
+    <div class="flex flex-col gap-2">
+      <label class="text-xs font-black uppercase tracking-[0.2em] text-slate-500">New Password</label>
+      <div class="password-field">
+        <input [type]="showNewPassword() ? 'text' : 'password'" formControlName="newPassword" placeholder="Enter new password" />
+        <button type="button" (click)="showNewPassword.set(!showNewPassword())">
+          <i [class]="showNewPassword() ? 'pi pi-eye-slash' : 'pi pi-eye'"></i>
+        </button>
+      </div>
+    </div>
+
+    <div class="flex flex-col gap-2">
+      <label class="text-xs font-black uppercase tracking-[0.2em] text-slate-500">Confirm Password</label>
+      <div class="password-field">
+        <input [type]="showConfirmPassword() ? 'text' : 'password'" formControlName="confirmPassword" placeholder="Confirm new password" />
+        <button type="button" (click)="showConfirmPassword.set(!showConfirmPassword())">
+          <i [class]="showConfirmPassword() ? 'pi pi-eye-slash' : 'pi pi-eye'"></i>
+        </button>
+      </div>
+    </div>
+
+    <div class="flex justify-end gap-3 pt-2">
+      <button type="button" (click)="showPasswordDialog.set(false)" class="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
+        Cancel
+      </button>
+      <button type="submit" [disabled]="changingPassword()" class="rounded-xl bg-blue-600 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-white">
+        {{ changingPassword() ? 'Updating...' : 'Update Password' }}
+      </button>
+    </div>
+  </form>
+</p-dialog>

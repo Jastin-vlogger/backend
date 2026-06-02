@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 100" fill="none">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400&amp;display=swap');
+    </style>
+  </defs>
+
+  <!-- English wordmark: ROYAL / HORIZON stacked -->
+  <text
+    x="0" y="44"
+    font-family="'Outfit', 'Helvetica Neue', Arial, sans-serif"
+    font-weight="300"
+    font-size="38"
+    letter-spacing="6"
+    fill="#2D3580">ROYAL</text>
+  <text
+    x="0" y="90"
+    font-family="'Outfit', 'Helvetica Neue', Arial, sans-serif"
+    font-weight="300"
+    font-size="38"
+    letter-spacing="3"
+    fill="#2D3580">HORIZON</text>
+
+  <!-- Arabic wordmark: رويال / هورايزن stacked (right-aligned) -->
+  <text
+    x="400" y="44"
+    text-anchor="end"
+    font-family="'Noto Sans Arabic', 'Arial Unicode MS', sans-serif"
+    font-weight="300"
+    font-size="34"
+    fill="#2D3580">رويال</text>
+  <text
+    x="400" y="90"
+    text-anchor="end"
+    font-family="'Noto Sans Arabic', 'Arial Unicode MS', sans-serif"
+    font-weight="300"
+    font-size="34"
+    fill="#2D3580">هورايزن</text>
+</svg>
