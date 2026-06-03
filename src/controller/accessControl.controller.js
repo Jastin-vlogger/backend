@@ -111,6 +111,7 @@ function blRowDefinitionResponse(row) {
     defaultQty: normalizeNumericDefault(row.defaultQty, 1),
     defaultRate: normalizeNumericDefault(row.defaultRate, 0),
     isActive: row.isActive,
+    isDeleted: row.isDeleted === true,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -128,9 +129,10 @@ async function ensureBlRowDefinitionsSeeded() {
         defaultQty: normalizeNumericDefault(row.defaultQty, 1),
         defaultRate: normalizeNumericDefault(row.defaultRate, 0),
         isActive: true,
+        isDeleted: false,
       }))
     );
-    return BLRowDefinition.find().sort({ sn: 1 });
+    return BLRowDefinition.find({ isDeleted: { $ne: true } }).sort({ sn: 1 });
   }
 
   const existingKeys = new Set(existingRows.map((row) => row.key || slugifyKey(row.description)));
@@ -149,6 +151,7 @@ async function ensureBlRowDefinitionsSeeded() {
       defaultQty: normalizeNumericDefault(row.defaultQty, 1),
       defaultRate: normalizeNumericDefault(row.defaultRate, 0),
       isActive: true,
+      isDeleted: false,
     });
     existingKeys.add(row.key);
     existingDescriptions.add(normalizedDescription);
@@ -158,7 +161,7 @@ async function ensureBlRowDefinitionsSeeded() {
     await BLRowDefinition.insertMany(toInsert);
   }
 
-  return BLRowDefinition.find().sort({ sn: 1 });
+  return BLRowDefinition.find({ isDeleted: { $ne: true } }).sort({ sn: 1 });
 }
 
 async function getAssignedPermissionKeys(roleKey) {
@@ -307,6 +310,33 @@ exports.createBlRowDefinition = async (req, res) => {
         { description: new RegExp(`^${normalizedDescription.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
       ],
     });
+    if (existing && existing.isDeleted === true) {
+      const before = blRowDefinitionResponse(existing);
+      existing.description = description;
+      existing.key = key;
+      existing.visibleTo = visibleTo;
+      existing.defaultQty = defaultQty;
+      existing.defaultRate = defaultRate;
+      existing.isActive = true;
+      existing.isDeleted = false;
+      existing.deletedAt = null;
+      existing.deletedBy = null;
+      await existing.save();
+
+      await logAudit({
+        userId: req.user._id,
+        module: 'Access Control',
+        entity: 'BLRowDefinition',
+        entityId: existing._id,
+        action: 'Created',
+        before,
+        after: blRowDefinitionResponse(existing),
+        remarks: `Restored BL row definition ${existing.key}`,
+      });
+
+      return res.status(201).json({ message: 'BL row definition created', row: blRowDefinitionResponse(existing) });
+    }
+
     if (existing) {
       return res.status(400).json({ message: 'A BL row definition with this description already exists' });
     }
@@ -320,6 +350,7 @@ exports.createBlRowDefinition = async (req, res) => {
       defaultQty,
       defaultRate,
       isActive: true,
+      isDeleted: false,
     });
 
     await logAudit({
@@ -342,7 +373,7 @@ exports.createBlRowDefinition = async (req, res) => {
 
 exports.updateBlRowDefinition = async (req, res) => {
   try {
-    const row = await BLRowDefinition.findById(req.params.id);
+    const row = await BLRowDefinition.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
     if (!row) {
       return res.status(404).json({ message: 'BL row definition not found' });
     }
@@ -357,6 +388,7 @@ exports.updateBlRowDefinition = async (req, res) => {
     const normalizedDescription = normalizeDescription(description);
     const duplicate = await BLRowDefinition.findOne({
       _id: { $ne: row._id },
+      isDeleted: { $ne: true },
       $or: [
         { key: nextKey },
         { description: new RegExp(`^${normalizedDescription.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
@@ -394,13 +426,17 @@ exports.updateBlRowDefinition = async (req, res) => {
 
 exports.deleteBlRowDefinition = async (req, res) => {
   try {
-    const row = await BLRowDefinition.findById(req.params.id);
+    const row = await BLRowDefinition.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
     if (!row) {
       return res.status(404).json({ message: 'BL row definition not found' });
     }
 
     const before = blRowDefinitionResponse(row);
-    await row.deleteOne();
+    row.isActive = false;
+    row.isDeleted = true;
+    row.deletedAt = new Date();
+    row.deletedBy = req.user?._id || null;
+    await row.save();
 
     await logAudit({
       userId: req.user._id,
@@ -409,7 +445,7 @@ exports.deleteBlRowDefinition = async (req, res) => {
       entityId: row._id,
       action: 'Deleted',
       before,
-      after: {},
+      after: blRowDefinitionResponse(row),
       remarks: `Deleted BL row definition ${row.key}`,
     });
 

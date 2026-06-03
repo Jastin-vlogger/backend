@@ -252,8 +252,9 @@ const ensureBlRowDefinitionsSeeded = async () => {
       defaultQty: normalizeNumericDefault(row.defaultQty, 1),
       defaultRate: normalizeNumericDefault(row.defaultRate, 0),
       isActive: true,
+      isDeleted: false,
     })));
-    return BLRowDefinition.find({ isActive: true }).sort({ sn: 1 }).lean();
+    return BLRowDefinition.find({ isActive: true, isDeleted: { $ne: true } }).sort({ sn: 1 }).lean();
   }
 
   const existingKeys = new Set(existingRows.map((row) => row.key || slugifyKey(row.description)));
@@ -275,6 +276,7 @@ const ensureBlRowDefinitionsSeeded = async () => {
       defaultQty: normalizeNumericDefault(row.defaultQty, 1),
       defaultRate: normalizeNumericDefault(row.defaultRate, 0),
       isActive: true,
+      isDeleted: false,
     });
     existingKeys.add(row.key);
     existingDescriptions.add(normalizedDescription);
@@ -284,7 +286,7 @@ const ensureBlRowDefinitionsSeeded = async () => {
     await BLRowDefinition.insertMany(toInsert);
   }
 
-  return BLRowDefinition.find({ isActive: true }).sort({ sn: 1 }).lean();
+  return BLRowDefinition.find({ isActive: true, isDeleted: { $ne: true } }).sort({ sn: 1 }).lean();
 };
 
 const hasSavedStorageAllocationData = (container) => {

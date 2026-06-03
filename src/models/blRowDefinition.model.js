@@ -9,6 +9,9 @@ const blRowDefinitionSchema = new mongoose.Schema(
     defaultQty: { type: Number, default: 1 },
     defaultRate: { type: Number, default: 0 },
     isActive: { type: Boolean, default: true },
+    isDeleted: { type: Boolean, default: false },
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   },
   { timestamps: true }
 );
