@@ -3763,7 +3763,7 @@ const getActualWorkflowShipmentIds = async () => {
 };
 
 const shouldRestrictShipmentListForPendingBlRoles = (user) =>
-  ['Purchase', 'Logistic'].includes(normalizeRole(user?.role || ''));
+  normalizeRole(user?.role || '') === 'Logistic';
 
 const fetchShipmentList = async ({ page = 1, limit = 20, search = '', status = '', user = null }) => {
   const actualWorkflowShipmentIds = shouldRestrictShipmentListForPendingBlRoles(user)
