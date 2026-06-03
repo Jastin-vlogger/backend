@@ -1054,29 +1054,122 @@ const getComputedShipmentStatus = (shipment, shipmentContainers = []) => {
   return getDisplayStageName(shipment?.currentStage || 'Shipment Entry');
 };
 
-const getDashboardReportStatusColumn = (shipment, shipmentContainers = []) => {
-  if (!hasScheduledShipmentData(shipment, shipmentContainers)) {
-    return `D. ${REPORT_STATUS_ETD_UNCONFIRMED}`;
-  }
+const DASHBOARD_STATUS_COLUMNS = [
+  'Delivered WH',
+  'At the Port',
+  'On Transit',
+  'ETA yet to due',
+  REPORT_STATUS_ETD_UNCONFIRMED,
+];
 
-  const stage = String(getComputedShipmentStatus(shipment, shipmentContainers) || '').toLowerCase();
-  const currentStage = String(shipment?.currentStage || '').toLowerCase();
-  if (
-    stage.includes('reached wh') ||
-    stage.includes('completed') ||
-    currentStage.includes('grn') ||
-    currentStage.includes('completed') ||
-    currentStage.includes('storage')
-  ) {
-    return 'A. Delivered WH';
-  }
+const getDashboardStatusColumn = (shipment, container) => {
+  if (hasSavedStorageArrivalData(container)) return 'Delivered WH';
+  if (hasPortOfDischargeMilestone(container)) return 'At the Port';
+  if (hasTransitActualMilestone(container)) return 'On Transit';
 
-  if (stage.includes('port')) {
-    return 'B. At the Port';
-  }
+  const plannedEtd = toDateOrNull(container?.planned?.etd || shipment?.plannedETD);
+  if (plannedEtd) return 'ETA yet to due';
 
-  const month = new Date().toLocaleString('en-US', { month: 'long' });
-  return `C. ETA yet to due - ${month}`;
+  return REPORT_STATUS_ETD_UNCONFIRMED;
+};
+
+const getDashboardChildQuantity = (shipment, container, splitCount) => {
+  const actual = container?.actual || {};
+  const planned = container?.planned || {};
+  return Number(getContainerReportNumber(actual.qtyMT, planned.qtyMT, shipment?.plannedQtyMT, splitCount) || 0);
+};
+
+const buildDashboardStatusPivot = (shipments, containerMap) => {
+  const currentMonth = new Date().toLocaleString('en-US', { month: 'long' });
+  const columns = DASHBOARD_STATUS_COLUMNS.map((column) =>
+    column === 'ETA yet to due' ? `${column} - ${currentMonth}` : column
+  );
+  const rowMap = new Map();
+  const totals = Object.fromEntries(columns.map((column) => [column, 0]));
+
+  const addValue = (supplier, column, qty) => {
+    if (!qty) return;
+    const row = rowMap.get(supplier) || {
+      supplier,
+      values: Object.fromEntries(columns.map((statusColumn) => [statusColumn, 0])),
+      grandTotal: 0,
+    };
+
+    row.values[column] += qty;
+    row.grandTotal += qty;
+    totals[column] += qty;
+    rowMap.set(supplier, row);
+  };
+
+  shipments.forEach((shipment) => {
+    const supplier = shipment?.supplierId?.name || shipment?.supplierName || 'Unknown Supplier';
+    const shipmentContainers = containerMap.get(String(shipment._id)) || [];
+    const splitCount = getShipmentSplitCount(shipment, shipmentContainers);
+
+    if (!shipmentContainers.length) {
+      addValue(supplier, REPORT_STATUS_ETD_UNCONFIRMED, Number(shipment?.plannedQtyMT || shipment?.totalOrderedQtyMT || 0));
+      return;
+    }
+
+    shipmentContainers.forEach((container) => {
+      const baseColumn = getDashboardStatusColumn(shipment, container);
+      const column = baseColumn === 'ETA yet to due' ? `${baseColumn} - ${currentMonth}` : baseColumn;
+      addValue(supplier, column, getDashboardChildQuantity(shipment, container, splitCount));
+    });
+  });
+
+  const rows = Array.from(rowMap.values())
+    .map((row) => ({
+      ...row,
+      grandTotal: Number(row.grandTotal.toFixed(2)),
+      values: Object.fromEntries(Object.entries(row.values).map(([column, value]) => [column, Number(value.toFixed(2))])),
+    }))
+    .filter((row) => row.grandTotal > 0)
+    .sort((a, b) => a.supplier.localeCompare(b.supplier));
+
+  const roundedTotals = Object.fromEntries(
+    Object.entries(totals).map(([column, value]) => [column, Number(value.toFixed(2))])
+  );
+
+  return {
+    asOfDate: new Date(),
+    valueLabel: 'Sum of Buying Qty (MT)',
+    rowLabel: 'Supplier',
+    columns,
+    rows,
+    totals: roundedTotals,
+    grandTotal: Number(Object.values(roundedTotals).reduce((sum, value) => sum + Number(value || 0), 0).toFixed(2)),
+  };
+};
+
+const buildDashboardRStatusMetrics = (shipments, containerMap) => {
+  const metrics = {
+    'Open POs': shipments.length,
+    'ETD Yet To Be Confirmed': 0,
+    'ETA Yet To Due': 0,
+    'At The Port': 0,
+    'On Transit': 0,
+    'Delivered WH': 0,
+  };
+
+  shipments.forEach((shipment) => {
+    const shipmentContainers = containerMap.get(String(shipment._id)) || [];
+    if (!shipmentContainers.length) {
+      metrics['ETD Yet To Be Confirmed'] += 1;
+      return;
+    }
+
+    shipmentContainers.forEach((container) => {
+      const status = getDashboardStatusColumn(shipment, container);
+      if (status === 'Delivered WH') metrics['Delivered WH'] += 1;
+      else if (status === 'At the Port') metrics['At The Port'] += 1;
+      else if (status === 'On Transit') metrics['On Transit'] += 1;
+      else if (status === 'ETA yet to due') metrics['ETA Yet To Due'] += 1;
+      else metrics['ETD Yet To Be Confirmed'] += 1;
+    });
+  });
+
+  return Object.entries(metrics).map(([label, value]) => ({ label, value }));
 };
 
 const getMeaningfulNumber = (value) => {
@@ -4362,21 +4455,16 @@ exports.getShipmentSummary = async (req, res) => {
       };
     });
 
-    const volumeToday = [
-      { label: 'Orders to Ship', value: inProgress },
-      { label: rolePending.label, value: rolePending.count },
-      { label: 'Overdue Shipments', value: overdueShipments },
-      { label: 'Open POs', value: total },
-      { label: 'Late Vendor Shipments', value: Math.max(totalContainers - arrivedContainers, 0) }
-    ];
+    const volumeToday = buildDashboardRStatusMetrics(shipments, containerMap);
 
     // Chart Data Generation
     const mapStageToStatus = (status) => {
       if (status === 'ETD yet to due') return 'ETA yet to due';
-      if (status === 'On Transit') return 'Goods on transit';
+      if (status === 'On Transit') return 'On Transit';
       if (status === 'At Port of Discharge') return 'At the Port';
       if (status === 'Reached WH') return 'Delivered WH';
-      return String(status || 'Shipment Entry');
+      if (status === 'Shipment Entry') return REPORT_STATUS_ETD_UNCONFIRMED;
+      return String(status || REPORT_STATUS_ETD_UNCONFIRMED);
     };
 
     const mapStageToYearlyStatus = (status) => {
@@ -4392,47 +4480,45 @@ exports.getShipmentSummary = async (req, res) => {
     const yearlyQtyMappingMap = new Map();
     const supplierAvgFcMap = new Map();
     const supplierYearlyQtyMap = new Map();
-    const statusPivotMap = new Map();
-    const statusPivotColumns = [
-      'A. Delivered WH',
-      'B. At the Port',
-      `C. ETA yet to due - ${today.toLocaleString('en-US', { month: 'long' })}`,
-      `D. ${REPORT_STATUS_ETD_UNCONFIRMED}`,
-    ];
 
     shipments.forEach(s => {
       const itemDesc = s.itemId?.description || s.itemDescription || 'Unknown Item';
       const supplierName = s.supplierId?.name || s.supplierName || 'Unknown Supplier';
       const shipmentContainers = containerMap.get(String(s._id)) || [];
-      const shipmentStatus = getComputedShipmentStatus(s, shipmentContainers);
-      const status = mapStageToStatus(shipmentStatus);
-      const yearlyStatus = mapStageToYearlyStatus(shipmentStatus);
-      const qty = Number(s.plannedQtyMT || 0);
       const fc = Number(s.totalFC || 0);
       const fcPerUnit = Number(s.fcPerUnit || 0);
-      const pivotStatus = getDashboardReportStatusColumn(s, shipmentContainers);
-      if (!statusPivotColumns.includes(pivotStatus)) {
-        const cIndex = statusPivotColumns.findIndex((column) => column.startsWith('C. ETA yet to due'));
-        statusPivotColumns[cIndex >= 0 ? cIndex : statusPivotColumns.length] = pivotStatus;
-      }
-      if (!statusPivotMap.has(supplierName)) {
-        statusPivotMap.set(supplierName, { supplier: supplierName, values: {}, grandTotal: 0 });
-      }
-      const pivotRow = statusPivotMap.get(supplierName);
-      pivotRow.values[pivotStatus] = (pivotRow.values[pivotStatus] || 0) + qty;
-      pivotRow.grandTotal += qty;
-      
-      // 1. Qty Mapping
-      if (!qtyMappingMap.has(itemDesc)) qtyMappingMap.set(itemDesc, { rowLabel: itemDesc });
-      qtyMappingMap.get(itemDesc)[status] = (qtyMappingMap.get(itemDesc)[status] || 0) + qty;
-      
-      // 2. Value Mapping
-      if (!valueMappingMap.has(itemDesc)) valueMappingMap.set(itemDesc, { rowLabel: itemDesc });
-      valueMappingMap.get(itemDesc)[status] = (valueMappingMap.get(itemDesc)[status] || 0) + fc;
+      const splitCount = getShipmentSplitCount(s, shipmentContainers);
+      const dashboardChildren = shipmentContainers.length
+        ? shipmentContainers.map((container) => ({
+          status: getDashboardStatusColumn(s, container),
+          qty: getDashboardChildQuantity(s, container, splitCount),
+        }))
+        : [{
+          status: REPORT_STATUS_ETD_UNCONFIRMED,
+          qty: Number(s.plannedQtyMT || s.totalOrderedQtyMT || 0),
+        }];
 
-      // 3. Yearly Qty Mapping
-      if (!yearlyQtyMappingMap.has(itemDesc)) yearlyQtyMappingMap.set(itemDesc, { rowLabel: itemDesc });
-      yearlyQtyMappingMap.get(itemDesc)[yearlyStatus] = (yearlyQtyMappingMap.get(itemDesc)[yearlyStatus] || 0) + qty;
+      dashboardChildren.forEach(({ status: childStatus, qty }) => {
+        const status = mapStageToStatus(childStatus);
+        const yearlyStatus = mapStageToYearlyStatus(childStatus);
+        const valueShare = Number(s.plannedQtyMT || 0) > 0 ? fc * (qty / Number(s.plannedQtyMT || 0)) : 0;
+
+        // 1. Qty Mapping
+        if (!qtyMappingMap.has(itemDesc)) qtyMappingMap.set(itemDesc, { rowLabel: itemDesc });
+        qtyMappingMap.get(itemDesc)[status] = (qtyMappingMap.get(itemDesc)[status] || 0) + qty;
+
+        // 2. Value Mapping
+        if (!valueMappingMap.has(itemDesc)) valueMappingMap.set(itemDesc, { rowLabel: itemDesc });
+        valueMappingMap.get(itemDesc)[status] = (valueMappingMap.get(itemDesc)[status] || 0) + valueShare;
+
+        // 3. Yearly Qty Mapping
+        if (!yearlyQtyMappingMap.has(itemDesc)) yearlyQtyMappingMap.set(itemDesc, { rowLabel: itemDesc });
+        yearlyQtyMappingMap.get(itemDesc)[yearlyStatus] = (yearlyQtyMappingMap.get(itemDesc)[yearlyStatus] || 0) + qty;
+
+        // 5. Supplier Yearly Qty
+        if (!supplierYearlyQtyMap.has(supplierName)) supplierYearlyQtyMap.set(supplierName, { rowLabel: supplierName });
+        supplierYearlyQtyMap.get(supplierName)[yearlyStatus] = (supplierYearlyQtyMap.get(supplierName)[yearlyStatus] || 0) + qty;
+      });
 
       // 4. Supplier Avg FC
       if (!supplierAvgFcMap.has(itemDesc)) supplierAvgFcMap.set(itemDesc, { rowLabel: itemDesc });
@@ -4443,10 +4529,6 @@ exports.getShipmentSummary = async (req, res) => {
       }
       supAvg[`${supplierName}_sum`] += fcPerUnit;
       supAvg[`${supplierName}_count`] += 1;
-
-      // 5. Supplier Yearly Qty
-      if (!supplierYearlyQtyMap.has(supplierName)) supplierYearlyQtyMap.set(supplierName, { rowLabel: supplierName });
-      supplierYearlyQtyMap.get(supplierName)[yearlyStatus] = (supplierYearlyQtyMap.get(supplierName)[yearlyStatus] || 0) + qty;
     });
 
     const formatSupplierAvgFc = Array.from(supplierAvgFcMap.values()).map(row => {
@@ -4459,21 +4541,7 @@ exports.getShipmentSummary = async (req, res) => {
       });
       return newRow;
     });
-    const statusPivotTotals = statusPivotColumns.reduce((totals, column) => {
-      totals[column] = 0;
-      return totals;
-    }, {});
-    const statusPivotRows = Array.from(statusPivotMap.values())
-      .map((row) => {
-        statusPivotColumns.forEach((column) => {
-          row.values[column] = Number(row.values[column] || 0);
-          statusPivotTotals[column] += row.values[column];
-        });
-        row.grandTotal = Number(row.grandTotal || 0);
-        return row;
-      })
-      .sort((a, b) => a.supplier.localeCompare(b.supplier));
-    const statusPivotGrandTotal = statusPivotRows.reduce((sum, row) => sum + row.grandTotal, 0);
+    const statusPivot = buildDashboardStatusPivot(shipments, containerMap);
 
     res.status(200).json({
       kpis: {
@@ -4511,15 +4579,7 @@ exports.getShipmentSummary = async (req, res) => {
         supplierAvgFc: formatSupplierAvgFc,
         supplierYearlyQty: Array.from(supplierYearlyQtyMap.values())
       },
-      statusPivot: {
-        asOfDate: today.toISOString(),
-        valueLabel: 'Sum of Buying Qty (MT)',
-        rowLabel: 'Supplier',
-        columns: statusPivotColumns,
-        rows: statusPivotRows,
-        totals: statusPivotTotals,
-        grandTotal: statusPivotGrandTotal
-      }
+      statusPivot
     });
 
   } catch (err) {
