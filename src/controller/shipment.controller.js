@@ -332,6 +332,44 @@ const hasPortOfDischargeMilestone = (container) => {
   return hasValue(actual?.portOfDischarge);
 };
 
+const startOfLocalDay = (date) =>
+  new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+const getContainerActual = (container) =>
+  Array.isArray(container?.actual) ? container.actual[0] || {} : container?.actual || {};
+
+const getContainerEtdDate = (shipment, container) => {
+  const actual = getContainerActual(container);
+  return toDateOrNull(actual?.updatedETD || container?.planned?.etd || shipment?.plannedETD);
+};
+
+const getContainerEtaDate = (shipment, container) => {
+  const actual = getContainerActual(container);
+  return toDateOrNull(actual?.updatedETA || container?.planned?.eta || shipment?.plannedETA);
+};
+
+const isOnOrBeforeToday = (date) => {
+  if (!date) return false;
+  return startOfLocalDay(date).getTime() <= getStartOfToday().getTime();
+};
+
+const isAfterToday = (date) => {
+  if (!date) return false;
+  return startOfLocalDay(date).getTime() > getStartOfToday().getTime();
+};
+
+const hasArrivedAtPortOfDischarge = (shipment, container) =>
+  (hasPortOfDischargeMilestone(container) || hasValue(shipment?.portOfDischarge)) &&
+  isOnOrBeforeToday(getContainerEtaDate(shipment, container));
+
+const hasOnTransitStatus = (shipment, container) => {
+  const eta = getContainerEtaDate(shipment, container);
+  const etd = getContainerEtdDate(shipment, container);
+  if (isOnOrBeforeToday(etd) && isAfterToday(eta)) return true;
+  if (!hasTransitActualMilestone(container)) return false;
+  return isOnOrBeforeToday(etd) && !hasArrivedAtPortOfDischarge(shipment, container);
+};
+
 const getApprovalActorName = (user) => user?.name || user?.email || 'A user';
 
 const getContainerSerialNo = (container) =>
@@ -1018,8 +1056,8 @@ const selectReportColumns = (availableColumns, selectedKeys) => {
 
 const getComputedContainerShipmentStatus = (shipment, container) => {
   if (!container) return getDisplayStageName(shipment?.currentStage || 'Shipment Entry');
-  if (hasPortOfDischargeMilestone(container)) return 'At Port of Discharge';
-  if (hasTransitActualMilestone(container)) return 'On Transit';
+  if (hasArrivedAtPortOfDischarge(shipment, container)) return 'At Port of Discharge';
+  if (hasOnTransitStatus(shipment, container)) return 'On Transit';
 
   const scheduledEtd = toDateOrNull(container?.planned?.etd || shipment?.plannedETD);
   if (scheduledEtd) {
@@ -1030,16 +1068,16 @@ const getComputedContainerShipmentStatus = (shipment, container) => {
 };
 
 const getComputedShipmentStatus = (shipment, shipmentContainers = []) => {
-  if (shipmentContainers.some((container) => hasPortOfDischargeMilestone(container))) {
+  if (shipmentContainers.some((container) => hasArrivedAtPortOfDischarge(shipment, container))) {
     return 'At Port of Discharge';
   }
 
-  if (shipmentContainers.some((container) => hasTransitActualMilestone(container))) {
+  if (shipmentContainers.some((container) => hasOnTransitStatus(shipment, container))) {
     return 'On Transit';
   }
 
   const pendingScheduledDates = shipmentContainers
-    .filter((container) => !hasTransitActualMilestone(container) && !hasPortOfDischargeMilestone(container))
+    .filter((container) => !hasOnTransitStatus(shipment, container) && !hasArrivedAtPortOfDischarge(shipment, container))
     .map((container) => toDateOrNull(container?.planned?.etd || shipment?.plannedETD))
     .filter(Boolean)
     .sort((a, b) => a.getTime() - b.getTime());
@@ -1066,8 +1104,8 @@ const DASHBOARD_STATUS_COLUMNS = [
 
 const getDashboardStatusColumn = (shipment, container) => {
   if (hasSavedStorageArrivalData(container)) return 'Delivered WH';
-  if (hasPortOfDischargeMilestone(container)) return 'At the Port';
-  if (hasTransitActualMilestone(container)) return 'On Transit';
+  if (hasArrivedAtPortOfDischarge(shipment, container)) return 'At the Port';
+  if (hasOnTransitStatus(shipment, container)) return 'On Transit';
 
   const plannedEtd = toDateOrNull(container?.planned?.etd || shipment?.plannedETD);
   if (plannedEtd) return 'ETA yet to due';
@@ -1146,6 +1184,7 @@ const buildDashboardStatusPivot = (shipments, containerMap) => {
 
 const buildDashboardRStatusMetrics = (shipments, containerMap) => {
   const metrics = {
+    'Total Shipments': shipments.length,
     'Open POs': shipments.length,
     'ETD Yet To Be Confirmed': 0,
     'ETA Yet To Due': 0,
@@ -3719,7 +3758,7 @@ exports.getBlRowDefinitions = async (_req, res) => {
   }
 };
 
-const buildShipmentListQuery = ({ search = '', status = '', shipmentIds = null }) => {
+const buildShipmentListQuery = ({ search = '', status = '', shipmentIds = null, commercialInvoiceShipmentIds = null }) => {
   const query = {};
   const normalizedSearch = String(search || '').trim();
   const normalizedStatus = String(status || '').trim();
@@ -3738,6 +3777,10 @@ const buildShipmentListQuery = ({ search = '', status = '', shipmentIds = null }
       { itemDescription: { $regex: normalizedSearch, $options: 'i' } },
       { brandName: { $regex: normalizedSearch, $options: 'i' } },
     ];
+
+    if (Array.isArray(commercialInvoiceShipmentIds) && commercialInvoiceShipmentIds.length) {
+      query.$or.push({ _id: { $in: commercialInvoiceShipmentIds } });
+    }
   }
 
   if (normalizedStatus) {
@@ -3745,6 +3788,25 @@ const buildShipmentListQuery = ({ search = '', status = '', shipmentIds = null }
   }
 
   return query;
+};
+
+const getCommercialInvoiceShipmentIds = async (search = '') => {
+  const normalizedSearch = String(search || '').trim();
+  if (!normalizedSearch) return [];
+
+  const containers = await Container.find({
+    'actual.commercialInvoiceNo': { $regex: normalizedSearch, $options: 'i' },
+  })
+    .select('shipmentId')
+    .lean();
+
+  return [
+    ...new Set(
+      containers
+        .map((container) => String(container.shipmentId || ''))
+        .filter(Boolean)
+    ),
+  ];
 };
 
 const getActualWorkflowShipmentIds = async () => {
@@ -3769,7 +3831,13 @@ const fetchShipmentList = async ({ page = 1, limit = 20, search = '', status = '
   const actualWorkflowShipmentIds = shouldRestrictShipmentListForPendingBlRoles(user)
     ? await getActualWorkflowShipmentIds()
     : null;
-  const query = buildShipmentListQuery({ search, status, shipmentIds: actualWorkflowShipmentIds });
+  const commercialInvoiceShipmentIds = await getCommercialInvoiceShipmentIds(search);
+  const query = buildShipmentListQuery({
+    search,
+    status,
+    shipmentIds: actualWorkflowShipmentIds,
+    commercialInvoiceShipmentIds,
+  });
   const total = await Shipment.countDocuments(query);
 
   const shipments = await Shipment.find(query)

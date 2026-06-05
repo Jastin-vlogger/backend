@@ -22,6 +22,15 @@ const MENU_PERMISSION_TEMPLATES = [
   { key: 'menu.settings.view', resource: 'menu', screen: 'settings', type: 'screen', label: 'View Settings Menu', sortOrder: 60 },
 ];
 
+const DASHBOARD_PERMISSION_TEMPLATES = [
+  { key: 'dashboard.section.status_snapshot.view', resource: 'dashboard', screen: 'dashboard', tab: 'status_snapshot', type: 'action', action: 'status_snapshot_view', label: 'View R-Status Snapshot', sortOrder: 11 },
+  { key: 'dashboard.section.shipment_status_chart.view', resource: 'dashboard', screen: 'dashboard', tab: 'shipment_status_chart', type: 'action', action: 'shipment_status_chart_view', label: 'View Shipment Status Chart', sortOrder: 12 },
+  { key: 'dashboard.section.dynamic_metrics.view', resource: 'dashboard', screen: 'dashboard', tab: 'dynamic_metrics', type: 'action', action: 'dynamic_metrics_view', label: 'View Dynamic Metrics Explorer', sortOrder: 13 },
+  { key: 'dashboard.section.average_fc.view', resource: 'dashboard', screen: 'dashboard', tab: 'average_fc', type: 'action', action: 'average_fc_view', label: 'View Average FC per Unit Chart', sortOrder: 14 },
+];
+
+const DASHBOARD_PERMISSION_KEYS = DASHBOARD_PERMISSION_TEMPLATES.map((permission) => permission.key);
+
 const SETTINGS_PERMISSION_TEMPLATES = [
   { key: 'settings.tab.warehouses.view', resource: 'settings', screen: 'settings', tab: 'warehouses', type: 'action', action: 'warehouses_view', label: 'View Warehouses Settings', sortOrder: 61 },
   { key: 'settings.tab.warehouses.edit', resource: 'settings', screen: 'settings', tab: 'warehouses', type: 'action', action: 'warehouses_edit', label: 'Edit Warehouses Settings', sortOrder: 62 },
@@ -58,6 +67,8 @@ const SHIPMENT_PERMISSION_TEMPLATES = [
   { key: 'shipment.tab.shipment_tracker_split.scheduled.edit', resource: 'shipment', screen: 'shipment_tracker', tab: 'shipment_tracker_split', type: 'action', action: 'scheduled_edit', label: 'Edit Scheduled Split Tab', sortOrder: 112.2 },
   { key: 'shipment.tab.shipment_tracker_split.actual.view', resource: 'shipment', screen: 'shipment_tracker', tab: 'shipment_tracker_split', type: 'action', action: 'actual_view', label: 'View Actual Split Tab', sortOrder: 112.3 },
   { key: 'shipment.tab.shipment_tracker_split.actual.edit', resource: 'shipment', screen: 'shipment_tracker', tab: 'shipment_tracker_split', type: 'action', action: 'actual_edit', label: 'Edit Actual Split Tab', sortOrder: 112.4 },
+  { key: 'shipment.tab.shipment_tracker_split.actual.upload_packing', resource: 'shipment', screen: 'shipment_tracker', tab: 'shipment_tracker_split', type: 'action', action: 'actual_upload_packing', label: 'Upload Actual Packing Document', sortOrder: 112.41 },
+  { key: 'shipment.tab.shipment_tracker_split.actual.upload_bl', resource: 'shipment', screen: 'shipment_tracker', tab: 'shipment_tracker_split', type: 'action', action: 'actual_upload_bl', label: 'Upload Actual B/L Document', sortOrder: 112.42 },
   { key: 'shipment.tab.shipment_tracker_split.history.view', resource: 'shipment', screen: 'shipment_tracker', tab: 'shipment_tracker_split', type: 'action', action: 'history_view', label: 'View History Split Tab', sortOrder: 112.5 },
   { key: 'shipment.tab.shipment_tracker_split.history.edit', resource: 'shipment', screen: 'shipment_tracker', tab: 'shipment_tracker_split', type: 'action', action: 'history_edit', label: 'Edit History Split Tab', sortOrder: 112.6 },
   { key: 'shipment.tab.shipment_tracker_split.report.view', resource: 'shipment', screen: 'shipment_tracker', tab: 'shipment_tracker_split', type: 'action', action: 'report_view', label: 'View Report Split Tab', sortOrder: 112.7 },
@@ -166,6 +177,7 @@ const LEGACY_PERMISSION_TEMPLATES = [
 
 const ALL_PERMISSION_TEMPLATES = [
   ...MENU_PERMISSION_TEMPLATES,
+  ...DASHBOARD_PERMISSION_TEMPLATES,
   ...SETTINGS_PERMISSION_TEMPLATES,
   ...SHIPMENT_PERMISSION_TEMPLATES,
   ...LEGACY_PERMISSION_TEMPLATES,
@@ -176,6 +188,7 @@ const DEFAULT_ROLE_PERMISSION_MAP = {
   Manager: 'ALL',
   Purchase: [
     'menu.dashboard.view',
+    ...DASHBOARD_PERMISSION_KEYS,
     'menu.shipments.view',
     'menu.suppliers.view',
     'menu.reports.view',
@@ -195,6 +208,8 @@ const DEFAULT_ROLE_PERMISSION_MAP = {
     'shipment.tab.shipment_tracker_split.scheduled.edit',
     'shipment.tab.shipment_tracker_split.actual.view',
     'shipment.tab.shipment_tracker_split.actual.edit',
+    'shipment.tab.shipment_tracker_split.actual.upload_packing',
+    'shipment.tab.shipment_tracker_split.actual.upload_bl',
     'shipment.tab.shipment_tracker_split.history.view',
     'shipment.tab.shipment_tracker_split.history.edit',
     'shipment.tab.shipment_tracker_split.report.view',
@@ -226,6 +241,7 @@ const DEFAULT_ROLE_PERMISSION_MAP = {
   ],
   Logistic: [
     'menu.dashboard.view',
+    ...DASHBOARD_PERMISSION_KEYS,
     'menu.shipments.view',
     'menu.reports.view',
     'menu.settings.view',
@@ -256,6 +272,7 @@ const DEFAULT_ROLE_PERMISSION_MAP = {
   ],
   FAS: [
     'menu.dashboard.view',
+    ...DASHBOARD_PERMISSION_KEYS,
     'menu.shipments.view',
     'menu.reports.view',
     'menu.settings.view',
@@ -297,6 +314,7 @@ const DEFAULT_ROLE_PERMISSION_MAP = {
   ],
   FasManager: [
     'menu.dashboard.view',
+    ...DASHBOARD_PERMISSION_KEYS,
     'menu.shipments.view',
     'menu.reports.view',
     'menu.settings.view',
@@ -314,6 +332,7 @@ const DEFAULT_ROLE_PERMISSION_MAP = {
   ],
   warehouse: [
     'menu.dashboard.view',
+    ...DASHBOARD_PERMISSION_KEYS,
     'menu.shipments.view',
     'menu.reports.view',
     'menu.settings.view',
@@ -391,6 +410,7 @@ async function seedShipmentPermissionsAndDefaults() {
 module.exports = {
   DEFAULT_ROLES,
   MENU_PERMISSION_TEMPLATES,
+  DASHBOARD_PERMISSION_TEMPLATES,
   SETTINGS_PERMISSION_TEMPLATES,
   SHIPMENT_PERMISSION_TEMPLATES,
   LEGACY_PERMISSION_TEMPLATES,

@@ -534,6 +534,11 @@ exports.updateRolePermissions = async (req, res) => {
         permissionKeys.push('menu.shipments.view');
       }
     }
+
+    const hasAnyDashboardSection = permissionKeys.some((k) => k.startsWith('dashboard.section.'));
+    if (hasAnyDashboardSection && !permissionKeys.includes('menu.dashboard.view')) {
+      permissionKeys.push('menu.dashboard.view');
+    }
     // ─────────────────────────────────────────────────────────────────────────
 
     const validPermissions = await Permission.find({ key: { $in: permissionKeys } });
