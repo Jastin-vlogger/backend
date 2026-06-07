@@ -2,7 +2,8 @@
   "name": "shipment-tracker-backend",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon src/server.js"
+    "dev": "nodemon src/server.js",
+    "test:same-bl-sync": "node scripts/testSameBlSync.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.569.0",

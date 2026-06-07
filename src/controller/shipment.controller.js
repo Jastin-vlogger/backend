@@ -28,6 +28,15 @@ const {
   normalizeDescription,
   slugifyKey,
 } = require('../config/blRowDefinitions');
+const {
+  syncSameBlActualFields,
+  syncSameBlOrSameShipmentActualFields,
+  hydrateMissingSameBlActualFields,
+  SAME_BL_CLEARING_ADVANCE_FIELDS,
+  SAME_BL_PAYMENT_ALLOCATION_FIELDS,
+  SAME_BL_ACTUAL_BL_DOCUMENT_FIELDS,
+  SAME_BL_INHERIT_FIELDS,
+} = require('../core/utils/sameBlSync');
 const mongoose = require('mongoose');
 const ExcelJS = require('exceljs');
 const PDFDocument = require('pdfkit');
@@ -1056,8 +1065,8 @@ const selectReportColumns = (availableColumns, selectedKeys) => {
 
 const getComputedContainerShipmentStatus = (shipment, container) => {
   if (!container) return getDisplayStageName(shipment?.currentStage || 'Shipment Entry');
-  if (hasArrivedAtPortOfDischarge(shipment, container)) return 'At Port of Discharge';
   if (hasOnTransitStatus(shipment, container)) return 'On Transit';
+  if (hasArrivedAtPortOfDischarge(shipment, container)) return 'At Port of Discharge';
 
   const scheduledEtd = toDateOrNull(container?.planned?.etd || shipment?.plannedETD);
   if (scheduledEtd) {
@@ -1068,12 +1077,12 @@ const getComputedContainerShipmentStatus = (shipment, container) => {
 };
 
 const getComputedShipmentStatus = (shipment, shipmentContainers = []) => {
-  if (shipmentContainers.some((container) => hasArrivedAtPortOfDischarge(shipment, container))) {
-    return 'At Port of Discharge';
-  }
-
   if (shipmentContainers.some((container) => hasOnTransitStatus(shipment, container))) {
     return 'On Transit';
+  }
+
+  if (shipmentContainers.some((container) => hasArrivedAtPortOfDischarge(shipment, container))) {
+    return 'At Port of Discharge';
   }
 
   const pendingScheduledDates = shipmentContainers
@@ -1096,16 +1105,16 @@ const getComputedShipmentStatus = (shipment, shipmentContainers = []) => {
 
 const DASHBOARD_STATUS_COLUMNS = [
   'Delivered WH',
-  'At the Port',
   'On Transit',
+  'At the Port',
   'ETA yet to due',
   REPORT_STATUS_ETD_UNCONFIRMED,
 ];
 
 const getDashboardStatusColumn = (shipment, container) => {
   if (hasSavedStorageArrivalData(container)) return 'Delivered WH';
-  if (hasArrivedAtPortOfDischarge(shipment, container)) return 'At the Port';
   if (hasOnTransitStatus(shipment, container)) return 'On Transit';
+  if (hasArrivedAtPortOfDischarge(shipment, container)) return 'At the Port';
 
   const plannedEtd = toDateOrNull(container?.planned?.etd || shipment?.plannedETD);
   if (plannedEtd) return 'ETA yet to due';
@@ -1119,7 +1128,14 @@ const getDashboardChildQuantity = (shipment, container, splitCount) => {
   return Number(getContainerReportNumber(actual.qtyMT, planned.qtyMT, shipment?.plannedQtyMT, splitCount) || 0);
 };
 
-const buildDashboardStatusPivot = (shipments, containerMap) => {
+const getDashboardPivotLabel = (shipment, groupBy) => {
+  if (groupBy === 'item') {
+    return shipment?.itemId?.description || shipment?.itemDescription || shipment?.item || 'Unknown Item';
+  }
+  return shipment?.supplierId?.name || shipment?.supplierName || 'Unknown Supplier';
+};
+
+const buildDashboardStatusPivot = (shipments, containerMap, groupBy = 'supplier') => {
   const currentMonth = new Date().toLocaleString('en-US', { month: 'long' });
   const columns = DASHBOARD_STATUS_COLUMNS.map((column) =>
     column === 'ETA yet to due' ? `${column} - ${currentMonth}` : column
@@ -1127,10 +1143,10 @@ const buildDashboardStatusPivot = (shipments, containerMap) => {
   const rowMap = new Map();
   const totals = Object.fromEntries(columns.map((column) => [column, 0]));
 
-  const addValue = (supplier, column, qty) => {
+  const addValue = (label, column, qty) => {
     if (!qty) return;
-    const row = rowMap.get(supplier) || {
-      supplier,
+    const row = rowMap.get(label) || {
+      supplier: label,
       values: Object.fromEntries(columns.map((statusColumn) => [statusColumn, 0])),
       grandTotal: 0,
     };
@@ -1138,23 +1154,23 @@ const buildDashboardStatusPivot = (shipments, containerMap) => {
     row.values[column] += qty;
     row.grandTotal += qty;
     totals[column] += qty;
-    rowMap.set(supplier, row);
+    rowMap.set(label, row);
   };
 
   shipments.forEach((shipment) => {
-    const supplier = shipment?.supplierId?.name || shipment?.supplierName || 'Unknown Supplier';
+    const label = getDashboardPivotLabel(shipment, groupBy);
     const shipmentContainers = containerMap.get(String(shipment._id)) || [];
     const splitCount = getShipmentSplitCount(shipment, shipmentContainers);
 
     if (!shipmentContainers.length) {
-      addValue(supplier, REPORT_STATUS_ETD_UNCONFIRMED, Number(shipment?.plannedQtyMT || shipment?.totalOrderedQtyMT || 0));
+      addValue(label, REPORT_STATUS_ETD_UNCONFIRMED, Number(shipment?.plannedQtyMT || shipment?.totalOrderedQtyMT || 0));
       return;
     }
 
     shipmentContainers.forEach((container) => {
       const baseColumn = getDashboardStatusColumn(shipment, container);
       const column = baseColumn === 'ETA yet to due' ? `${baseColumn} - ${currentMonth}` : baseColumn;
-      addValue(supplier, column, getDashboardChildQuantity(shipment, container, splitCount));
+      addValue(label, column, getDashboardChildQuantity(shipment, container, splitCount));
     });
   });
 
@@ -1174,7 +1190,7 @@ const buildDashboardStatusPivot = (shipments, containerMap) => {
   return {
     asOfDate: new Date(),
     valueLabel: 'Sum of Buying Qty (MT)',
-    rowLabel: 'Supplier',
+    rowLabel: groupBy === 'item' ? 'Item' : 'Supplier',
     columns,
     rows,
     totals: roundedTotals,
@@ -1184,33 +1200,52 @@ const buildDashboardStatusPivot = (shipments, containerMap) => {
 
 const buildDashboardRStatusMetrics = (shipments, containerMap) => {
   const metrics = {
-    'Total Shipments': shipments.length,
-    'Open POs': shipments.length,
+    'Total LPO': shipments.length,
+    'Total Shipments': 0,
+    'Open LPO': 0,
+    'Completed LPO': 0,
     'ETD Yet To Be Confirmed': 0,
     'ETA Yet To Due': 0,
-    'At The Port': 0,
     'On Transit': 0,
+    'At The Port': 0,
     'Delivered WH': 0,
+  };
+  const permissionKeys = {
+    'Total LPO': 'dashboard.snapshot.total_lpo.view',
+    'Total Shipments': 'dashboard.snapshot.total_shipments.view',
+    'Open LPO': 'dashboard.snapshot.open_lpo.view',
+    'Completed LPO': 'dashboard.snapshot.completed_lpo.view',
+    'ETD Yet To Be Confirmed': 'dashboard.snapshot.etd_unconfirmed.view',
+    'ETA Yet To Due': 'dashboard.snapshot.eta_due.view',
+    'On Transit': 'dashboard.snapshot.on_transit.view',
+    'At The Port': 'dashboard.snapshot.at_port.view',
+    'Delivered WH': 'dashboard.snapshot.delivered_wh.view',
   };
 
   shipments.forEach((shipment) => {
     const shipmentContainers = containerMap.get(String(shipment._id)) || [];
     if (!shipmentContainers.length) {
+      metrics['Open LPO'] += 1;
       metrics['ETD Yet To Be Confirmed'] += 1;
       return;
     }
 
+    metrics['Total Shipments'] += shipmentContainers.length;
+    const isCompletedLpo = shipmentContainers.every((container) => hasSavedStorageArrivalData(container));
+    if (isCompletedLpo) metrics['Completed LPO'] += 1;
+    else metrics['Open LPO'] += 1;
+
     shipmentContainers.forEach((container) => {
       const status = getDashboardStatusColumn(shipment, container);
       if (status === 'Delivered WH') metrics['Delivered WH'] += 1;
-      else if (status === 'At the Port') metrics['At The Port'] += 1;
       else if (status === 'On Transit') metrics['On Transit'] += 1;
+      else if (status === 'At the Port') metrics['At The Port'] += 1;
       else if (status === 'ETA yet to due') metrics['ETA Yet To Due'] += 1;
       else metrics['ETD Yet To Be Confirmed'] += 1;
     });
   });
 
-  return Object.entries(metrics).map(([label, value]) => ({ label, value }));
+  return Object.entries(metrics).map(([label, value]) => ({ label, value, permissionKey: permissionKeys[label] }));
 };
 
 const getMeaningfulNumber = (value) => {
@@ -2223,6 +2258,20 @@ exports.addActualContainer = async (req, res) => {
     container.status = "Actual";
     await container.save();
 
+    await hydrateMissingSameBlActualFields({
+      ContainerModel: Container,
+      targetContainer: container,
+      fields: SAME_BL_INHERIT_FIELDS,
+    });
+
+    if (billOrLadingNo || blDocument) {
+      await syncSameBlActualFields({
+        ContainerModel: Container,
+        sourceContainer: container,
+        fields: SAME_BL_ACTUAL_BL_DOCUMENT_FIELDS,
+      });
+    }
+
     // 🔥 RECALCULATE SHIPMENT TOTALS
     const allContainers = await Container.find({ shipmentId: shipment._id });
 
@@ -2299,6 +2348,8 @@ exports.updateBLDetails = async (req, res) => {
 
     const {
       blNo,
+      commercialInvoiceNo,
+      blDetailsRemarks,
       shippedOnBoard,
       portOfLoading,
       portOfDischarge,
@@ -2343,6 +2394,8 @@ exports.updateBLDetails = async (req, res) => {
       container.actual.BLNo = blNo || '';
       container.actual.CLNo = blNo || '';
     }
+    if (commercialInvoiceNo !== undefined) container.actual.commercialInvoiceNo = commercialInvoiceNo || '';
+    if (blDetailsRemarks !== undefined) container.actual.blDetailsRemarks = blDetailsRemarks || '';
     if (shippedOnBoard !== undefined) container.actual.shipOnBoardDate = toDateOrNull(shippedOnBoard);
     if (portOfLoading !== undefined) container.actual.portOfLoading = portOfLoading || '';
     if (portOfDischarge !== undefined) container.actual.portOfDischarge = portOfDischarge || '';
@@ -2379,6 +2432,8 @@ exports.updateBLDetails = async (req, res) => {
           defaultQty: Number(row.defaultQty ?? 0),
           defaultRate: Number(row.defaultRate ?? 0),
           requestAmount: Number(row.requestAmount ?? (Number(row.defaultQty ?? 0) * Number(row.defaultRate ?? 0))),
+          paymentTo: row.paymentTo || '',
+          paymentTerm: row.paymentTerm || '',
           // POINT 5: paidAmount removed, replaced with remarks
           remarks: row.remarks ?? '',
           attachmentDocumentUrl: attachmentUpload?.url || row.attachmentDocumentUrl || existing.attachmentDocumentUrl || '',
@@ -2411,6 +2466,14 @@ exports.updateBLDetails = async (req, res) => {
     }
 
     await container.save();
+
+    if (isClearingAdvanceSave) {
+      await syncSameBlOrSameShipmentActualFields({
+        ContainerModel: Container,
+        sourceContainer: container,
+        fields: SAME_BL_CLEARING_ADVANCE_FIELDS,
+      });
+    }
 
     // Advance shipment stage to B/L Details
     const shipmentForBL = await Shipment.findById(container.shipmentId);
@@ -2516,43 +2579,123 @@ exports.updateFASContainer = async (req, res) => {
     if (!container.actual) return res.status(400).json({ message: "Container has no actual recorded yet" });
 
     const beforeUpdate = container.toObject();
+    const documentTrackerSyncFields = [];
+    const documentTrackerSyncBlNos = new Set();
+    const addDocumentTrackerSyncField = (...fields) => {
+      fields.forEach((field) => {
+        if (!documentTrackerSyncFields.includes(field)) documentTrackerSyncFields.push(field);
+      });
+    };
+    const addDocumentTrackerSyncBlNo = (value) => {
+      const normalized = String(value || '').trim();
+      if (normalized) documentTrackerSyncBlNos.add(normalized);
+    };
 
-    if (BLNo !== undefined) container.actual.BLNo = BLNo;
-    if (DHL !== undefined) container.actual.DHL = DHL;
-    if (courierTrackNo !== undefined) container.actual.courierTrackNo = courierTrackNo || '';
-    if (courierServiceProvider !== undefined) container.actual.courierServiceProvider = courierServiceProvider || '';
-    if (expectedDocDate !== undefined) container.actual.expectedDocDate = toDateOrNull(expectedDocDate);
-    if (receiver !== undefined) container.actual.receiver = receiver;
-    if (bankName !== undefined) container.actual.bankName = bankName || '';
-    if (docArrivalNotes !== undefined) container.actual.docArrivalNotes = docArrivalNotes || '';
-    if (inwardCollectionAdviceDate !== undefined) container.actual.inwardCollectionAdviceDate = toDateOrNull(inwardCollectionAdviceDate);
-    if (murabahaContractReleasedDate !== undefined) container.actual.murabahaContractReleasedDate = toDateOrNull(murabahaContractReleasedDate);
-    if (murabahaContractApprovedDate !== undefined) container.actual.murabahaContractApprovedDate = toDateOrNull(murabahaContractApprovedDate);
-    if (murabahaContractSubmittedDate !== undefined) container.actual.murabahaContractSubmittedDate = toDateOrNull(murabahaContractSubmittedDate);
-    if (documentsReleasedDate !== undefined) container.actual.documentsReleasedDate = toDateOrNull(documentsReleasedDate);
-    if (bankAdvanceAmountDocumentUrl !== undefined) container.actual.bankAdvanceAmountDocumentUrl = bankAdvanceAmountDocumentUrl || '';
-    if (bankAdvanceApprovedDocumentUrl !== undefined) container.actual.bankAdvanceApprovedDocumentUrl = bankAdvanceApprovedDocumentUrl || '';
-    if (bankAdvanceSubmittedOn !== undefined) container.actual.bankAdvanceSubmittedOn = toDateOrNull(bankAdvanceSubmittedOn);
-    if (docToBeReleasedOn !== undefined) container.actual.docToBeReleasedOn = toDateOrNull(docToBeReleasedOn);
+    if (BLNo !== undefined) {
+      addDocumentTrackerSyncBlNo(beforeUpdate?.actual?.BLNo);
+      addDocumentTrackerSyncBlNo(BLNo);
+      container.actual.BLNo = BLNo;
+      container.actual.CLNo = BLNo;
+      addDocumentTrackerSyncField('BLNo', 'CLNo');
+    }
+    if (DHL !== undefined) {
+      container.actual.DHL = DHL;
+      addDocumentTrackerSyncField('DHL');
+    }
+    if (courierTrackNo !== undefined) {
+      container.actual.courierTrackNo = courierTrackNo || '';
+      addDocumentTrackerSyncField('courierTrackNo');
+    }
+    if (courierServiceProvider !== undefined) {
+      container.actual.courierServiceProvider = courierServiceProvider || '';
+      addDocumentTrackerSyncField('courierServiceProvider');
+    }
+    if (expectedDocDate !== undefined) {
+      container.actual.expectedDocDate = toDateOrNull(expectedDocDate);
+      addDocumentTrackerSyncField('expectedDocDate');
+    }
+    if (receiver !== undefined) {
+      container.actual.receiver = receiver;
+      addDocumentTrackerSyncField('receiver');
+    }
+    if (bankName !== undefined) {
+      container.actual.bankName = bankName || '';
+      addDocumentTrackerSyncField('bankName');
+    }
+    if (docArrivalNotes !== undefined) {
+      container.actual.docArrivalNotes = docArrivalNotes || '';
+      addDocumentTrackerSyncField('docArrivalNotes');
+    }
+    if (inwardCollectionAdviceDate !== undefined) {
+      container.actual.inwardCollectionAdviceDate = toDateOrNull(inwardCollectionAdviceDate);
+      addDocumentTrackerSyncField('inwardCollectionAdviceDate');
+    }
+    if (murabahaContractReleasedDate !== undefined) {
+      container.actual.murabahaContractReleasedDate = toDateOrNull(murabahaContractReleasedDate);
+      addDocumentTrackerSyncField('murabahaContractReleasedDate');
+    }
+    if (murabahaContractApprovedDate !== undefined) {
+      container.actual.murabahaContractApprovedDate = toDateOrNull(murabahaContractApprovedDate);
+      addDocumentTrackerSyncField('murabahaContractApprovedDate');
+    }
+    if (murabahaContractSubmittedDate !== undefined) {
+      container.actual.murabahaContractSubmittedDate = toDateOrNull(murabahaContractSubmittedDate);
+      addDocumentTrackerSyncField('murabahaContractSubmittedDate');
+    }
+    if (documentsReleasedDate !== undefined) {
+      container.actual.documentsReleasedDate = toDateOrNull(documentsReleasedDate);
+      addDocumentTrackerSyncField('documentsReleasedDate');
+    }
+    if (bankAdvanceAmountDocumentUrl !== undefined) {
+      container.actual.bankAdvanceAmountDocumentUrl = bankAdvanceAmountDocumentUrl || '';
+      addDocumentTrackerSyncField('bankAdvanceAmountDocumentUrl');
+    }
+    if (bankAdvanceApprovedDocumentUrl !== undefined) {
+      container.actual.bankAdvanceApprovedDocumentUrl = bankAdvanceApprovedDocumentUrl || '';
+      addDocumentTrackerSyncField('bankAdvanceApprovedDocumentUrl');
+    }
+    if (bankAdvanceSubmittedOn !== undefined) {
+      container.actual.bankAdvanceSubmittedOn = toDateOrNull(bankAdvanceSubmittedOn);
+      addDocumentTrackerSyncField('bankAdvanceSubmittedOn');
+    }
+    if (docToBeReleasedOn !== undefined) {
+      container.actual.docToBeReleasedOn = toDateOrNull(docToBeReleasedOn);
+      addDocumentTrackerSyncField('docToBeReleasedOn');
+    }
 
     if (inwardCollectionAdviceDocument) {
       const uploaded = await uploadBufferToS3(inwardCollectionAdviceDocument, 'shipments/document-tracker/inward-advice');
       container.actual.inwardCollectionAdviceDocumentUrl = uploaded.url;
       container.actual.inwardCollectionAdviceDocumentName = uploaded.fileName;
+      addDocumentTrackerSyncField('inwardCollectionAdviceDocumentUrl', 'inwardCollectionAdviceDocumentName');
     }
     if (murabahaContractSubmittedDocument) {
       const uploaded = await uploadBufferToS3(murabahaContractSubmittedDocument, 'shipments/document-tracker/murabaha-submitted');
       container.actual.murabahaContractSubmittedDocumentUrl = uploaded.url;
       container.actual.murabahaContractSubmittedDocumentName = uploaded.fileName;
+      addDocumentTrackerSyncField('murabahaContractSubmittedDocumentUrl', 'murabahaContractSubmittedDocumentName');
     }
     if (documentsReleasedDocument) {
       const uploaded = await uploadBufferToS3(documentsReleasedDocument, 'shipments/document-tracker/documents-released');
       container.actual.documentsReleasedDocumentUrl = uploaded.url;
       container.actual.documentsReleasedDocumentName = uploaded.fileName;
+      addDocumentTrackerSyncField('documentsReleasedDocumentUrl', 'documentsReleasedDocumentName');
     }
 
     container.status = "Documented";
     await container.save();
+
+    if (documentTrackerSyncFields.length) {
+      const matchBlNos = documentTrackerSyncBlNos.size ? Array.from(documentTrackerSyncBlNos) : [undefined];
+      for (const matchBlNo of matchBlNos) {
+        await syncSameBlActualFields({
+          ContainerModel: Container,
+          sourceContainer: container,
+          fields: documentTrackerSyncFields,
+          matchBlNo,
+        });
+      }
+    }
 
     // Advance shipment stage to Documentation
     const shipmentForDoc = await Shipment.findById(container.shipmentId);
@@ -3360,6 +3503,8 @@ exports.updatePaymentCostingDetails = async (req, res) => {
           visibleTo: normalizeVisibleTo(row.visibleTo),
           requestAmount: Number(row.requestAmount) || 0,
           paidAmount: Number(row.paidAmount) || 0,
+          paymentTo: row.paymentTo || '',
+          paymentTerm: row.paymentTerm || '',
           reference: row.reference || '',
           attachmentDocumentUrl: attachmentUpload?.url || row.attachmentDocumentUrl || existing.attachmentDocumentUrl || '',
           attachmentDocumentName: attachmentUpload?.fileName || row.attachmentDocumentName || existing.attachmentDocumentName || '',
@@ -3417,6 +3562,14 @@ exports.updatePaymentCostingDetails = async (req, res) => {
     }
 
     await container.save();
+
+    if (isPaymentAllocationSave) {
+      await syncSameBlOrSameShipmentActualFields({
+        ContainerModel: Container,
+        sourceContainer: container,
+        fields: SAME_BL_PAYMENT_ALLOCATION_FIELDS,
+      });
+    }
 
     // Advance shipment stage to Payment Costing
     const shipmentForPayment = await Shipment.findById(container.shipmentId);
@@ -3503,6 +3656,12 @@ exports.approveClearingAdvance = async (req, res) => {
         fasManagerApprovedBy: currentState.fasManagerApprovedBy || null,
       };
       await container.save();
+
+      await syncSameBlOrSameShipmentActualFields({
+        ContainerModel: Container,
+        sourceContainer: container,
+        fields: ['clearingAdvanceApproval'],
+      });
 
       if (shipment) {
         notifyClearingAdvanceRolesByEmail({
@@ -4611,7 +4770,8 @@ exports.getShipmentSummary = async (req, res) => {
       });
       return newRow;
     });
-    const statusPivot = buildDashboardStatusPivot(shipments, containerMap);
+    const statusPivot = buildDashboardStatusPivot(shipments, containerMap, 'supplier');
+    const statusPivotByItem = buildDashboardStatusPivot(shipments, containerMap, 'item');
 
     res.status(200).json({
       kpis: {
@@ -4649,7 +4809,8 @@ exports.getShipmentSummary = async (req, res) => {
         supplierAvgFc: formatSupplierAvgFc,
         supplierYearlyQty: Array.from(supplierYearlyQtyMap.values())
       },
-      statusPivot
+      statusPivot,
+      statusPivotByItem
     });
 
   } catch (err) {
@@ -4714,6 +4875,7 @@ exports.getShipmentById = async (req, res) => {
             shipmentStatus: getComputedContainerShipmentStatus(shipment, c),
             actualSerialNo: a.actualSerialNo,
             commercialInvoiceNo: a.commercialInvoiceNo,
+            blDetailsRemarks: a.blDetailsRemarks,
             shipOnBoardDate: a.shipOnBoardDate,
             size: a.size,
             FCL: a.FCL,

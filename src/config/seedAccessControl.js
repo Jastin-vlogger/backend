@@ -23,7 +23,16 @@ const MENU_PERMISSION_TEMPLATES = [
 ];
 
 const DASHBOARD_PERMISSION_TEMPLATES = [
-  { key: 'dashboard.section.status_snapshot.view', resource: 'dashboard', screen: 'dashboard', tab: 'status_snapshot', type: 'action', action: 'status_snapshot_view', label: 'View R-Status Snapshot', sortOrder: 11 },
+  { key: 'dashboard.section.status_snapshot.view', resource: 'dashboard', screen: 'dashboard', tab: 'status_snapshot', type: 'action', action: 'status_snapshot_view', label: 'View Status Snapshot', sortOrder: 11 },
+  { key: 'dashboard.snapshot.total_lpo.view', resource: 'dashboard', screen: 'dashboard', tab: 'status_snapshot', type: 'action', action: 'snapshot_total_lpo_view', label: 'View Total LPO Snapshot Card', sortOrder: 11.01 },
+  { key: 'dashboard.snapshot.total_shipments.view', resource: 'dashboard', screen: 'dashboard', tab: 'status_snapshot', type: 'action', action: 'snapshot_total_shipments_view', label: 'View Total Shipments Snapshot Card', sortOrder: 11.02 },
+  { key: 'dashboard.snapshot.open_lpo.view', resource: 'dashboard', screen: 'dashboard', tab: 'status_snapshot', type: 'action', action: 'snapshot_open_lpo_view', label: 'View Open LPO Snapshot Card', sortOrder: 11.03 },
+  { key: 'dashboard.snapshot.completed_lpo.view', resource: 'dashboard', screen: 'dashboard', tab: 'status_snapshot', type: 'action', action: 'snapshot_completed_lpo_view', label: 'View Completed LPO Snapshot Card', sortOrder: 11.04 },
+  { key: 'dashboard.snapshot.etd_unconfirmed.view', resource: 'dashboard', screen: 'dashboard', tab: 'status_snapshot', type: 'action', action: 'snapshot_etd_unconfirmed_view', label: 'View ETD Yet To Be Confirmed Snapshot Card', sortOrder: 11.05 },
+  { key: 'dashboard.snapshot.eta_due.view', resource: 'dashboard', screen: 'dashboard', tab: 'status_snapshot', type: 'action', action: 'snapshot_eta_due_view', label: 'View ETA Yet To Due Snapshot Card', sortOrder: 11.06 },
+  { key: 'dashboard.snapshot.on_transit.view', resource: 'dashboard', screen: 'dashboard', tab: 'status_snapshot', type: 'action', action: 'snapshot_on_transit_view', label: 'View On Transit Snapshot Card', sortOrder: 11.07 },
+  { key: 'dashboard.snapshot.at_port.view', resource: 'dashboard', screen: 'dashboard', tab: 'status_snapshot', type: 'action', action: 'snapshot_at_port_view', label: 'View At The Port Snapshot Card', sortOrder: 11.08 },
+  { key: 'dashboard.snapshot.delivered_wh.view', resource: 'dashboard', screen: 'dashboard', tab: 'status_snapshot', type: 'action', action: 'snapshot_delivered_wh_view', label: 'View Delivered WH Snapshot Card', sortOrder: 11.09 },
   { key: 'dashboard.section.shipment_status_chart.view', resource: 'dashboard', screen: 'dashboard', tab: 'shipment_status_chart', type: 'action', action: 'shipment_status_chart_view', label: 'View Shipment Status Chart', sortOrder: 12 },
   { key: 'dashboard.section.dynamic_metrics.view', resource: 'dashboard', screen: 'dashboard', tab: 'dynamic_metrics', type: 'action', action: 'dynamic_metrics_view', label: 'View Dynamic Metrics Explorer', sortOrder: 13 },
   { key: 'dashboard.section.average_fc.view', resource: 'dashboard', screen: 'dashboard', tab: 'average_fc', type: 'action', action: 'average_fc_view', label: 'View Average FC per Unit Chart', sortOrder: 14 },

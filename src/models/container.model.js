@@ -54,6 +54,7 @@ const storageArrivalApprovalStateSchema = new mongoose.Schema({
 const actualContainerSchema = new mongoose.Schema({
   actualSerialNo: { type: String },
   commercialInvoiceNo: { type: String },
+  blDetailsRemarks: { type: String },
   shipOnBoardDate: { type: Date },
   size: { type: String },
   FCL: { type: Number },
@@ -239,6 +240,8 @@ const actualContainerSchema = new mongoose.Schema({
     defaultQty: { type: Number, default: 0 },
     defaultRate: { type: Number, default: 0 },
     requestAmount: { type: Number },
+    paymentTo: { type: String, default: '' },
+    paymentTerm: { type: String, default: '' },
     // POINT 5: paidAmount removed, replaced with remarks
     remarks: { type: String, default: '' },
     attachmentDocumentUrl: { type: String },
@@ -350,6 +353,8 @@ const actualContainerSchema = new mongoose.Schema({
     visibleTo: [{ type: String }],
     requestAmount: { type: Number },
     paidAmount: { type: Number },
+    paymentTo: { type: String, default: '' },
+    paymentTerm: { type: String, default: '' },
     reference: { type: String },
     attachmentDocumentUrl: { type: String },
     attachmentDocumentName: { type: String }
