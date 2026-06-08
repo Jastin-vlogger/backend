@@ -341,6 +341,11 @@ const hasPortOfDischargeMilestone = (container) => {
   return hasValue(actual?.portOfDischarge);
 };
 
+const hasExplicitShipmentArrival = (container) => {
+  const actual = Array.isArray(container?.actual) ? container.actual[0] || {} : container?.actual || {};
+  return String(actual?.shipmentArrived || '').trim().toLowerCase() === 'yes' || !!toDateOrNull(actual?.shipmentArrivedOn);
+};
+
 const startOfLocalDay = (date) =>
   new Date(date.getFullYear(), date.getMonth(), date.getDate());
 
@@ -368,15 +373,19 @@ const isAfterToday = (date) => {
 };
 
 const hasArrivedAtPortOfDischarge = (shipment, container) =>
-  (hasPortOfDischargeMilestone(container) || hasValue(shipment?.portOfDischarge)) &&
-  isOnOrBeforeToday(getContainerEtaDate(shipment, container));
+  hasExplicitShipmentArrival(container) ||
+  (
+    (hasPortOfDischargeMilestone(container) || hasValue(shipment?.portOfDischarge)) &&
+    isOnOrBeforeToday(getContainerEtaDate(shipment, container))
+  );
 
 const hasOnTransitStatus = (shipment, container) => {
+  if (hasArrivedAtPortOfDischarge(shipment, container)) return false;
   const eta = getContainerEtaDate(shipment, container);
   const etd = getContainerEtdDate(shipment, container);
   if (isOnOrBeforeToday(etd) && isAfterToday(eta)) return true;
   if (!hasTransitActualMilestone(container)) return false;
-  return isOnOrBeforeToday(etd) && !hasArrivedAtPortOfDischarge(shipment, container);
+  return isOnOrBeforeToday(etd);
 };
 
 const getApprovalActorName = (user) => user?.name || user?.email || 'A user';
@@ -1224,18 +1233,25 @@ const buildDashboardRStatusMetrics = (shipments, containerMap) => {
 
   shipments.forEach((shipment) => {
     const shipmentContainers = containerMap.get(String(shipment._id)) || [];
-    if (!shipmentContainers.length) {
+    const splitCount = getShipmentSplitCount(shipment, shipmentContainers);
+    const dashboardContainers = splitCount > 0
+      ? shipmentContainers.slice(0, splitCount)
+      : shipmentContainers;
+    const missingSplitCount = Math.max(splitCount - dashboardContainers.length, 0);
+
+    if (!shipmentContainers.length && !missingSplitCount) {
       metrics['Open LPO'] += 1;
-      metrics['ETD Yet To Be Confirmed'] += 1;
       return;
     }
 
-    metrics['Total Shipments'] += shipmentContainers.length;
-    const isCompletedLpo = shipmentContainers.every((container) => hasSavedStorageArrivalData(container));
+    metrics['Total Shipments'] += dashboardContainers.length + missingSplitCount;
+    metrics['ETD Yet To Be Confirmed'] += missingSplitCount;
+
+    const isCompletedLpo = missingSplitCount === 0 && dashboardContainers.length > 0 && dashboardContainers.every((container) => hasSavedStorageArrivalData(container));
     if (isCompletedLpo) metrics['Completed LPO'] += 1;
     else metrics['Open LPO'] += 1;
 
-    shipmentContainers.forEach((container) => {
+    dashboardContainers.forEach((container) => {
       const status = getDashboardStatusColumn(shipment, container);
       if (status === 'Delivered WH') metrics['Delivered WH'] += 1;
       else if (status === 'On Transit') metrics['On Transit'] += 1;
@@ -2151,6 +2167,7 @@ exports.addActualContainer = async (req, res) => {
     const container = await Container.findById(req.params.id);
     const files = req.files || {};
     const blDocument = files?.blDocument?.[0];
+    const commercialInvoiceDocument = files?.commercialInvoiceDocument?.[0];
 
 
     const {
@@ -2166,6 +2183,7 @@ exports.addActualContainer = async (req, res) => {
       BLNo,
       portOfLoading,
       portOfDischarge,
+      shipmentArrived,
       noOfContainers,
       noOfBags,
       quantityByMt,
@@ -2209,6 +2227,7 @@ exports.addActualContainer = async (req, res) => {
       BLNo: billOrLadingNo,
       portOfLoading: portOfLoading || container.actual?.portOfLoading || '',
       portOfDischarge: portOfDischarge || container.actual?.portOfDischarge || '',
+      shipmentArrived: shipmentArrived === 'Yes' ? 'Yes' : container.actual?.shipmentArrived || 'No',
       noOfContainers: Number(noOfContainers) || container.actual?.noOfContainers || 0,
       noOfBags: Number(noOfBags) || Number(bags) || container.actual?.noOfBags || 0,
       quantityByMt: Number(quantityByMt) || Number(qtyMT) || container.actual?.quantityByMt || 0,
@@ -2248,7 +2267,12 @@ exports.addActualContainer = async (req, res) => {
       container.actual.blDocumentUrl = uploaded.url;
       container.actual.blDocumentName = uploaded.fileName;
     }
-    
+    if (commercialInvoiceDocument) {
+      const uploaded = await uploadBufferToS3(commercialInvoiceDocument, 'shipments/actual/commercial-invoice-document');
+      container.actual.commercialInvoiceDocumentUrl = uploaded.url;
+      container.actual.commercialInvoiceDocumentName = uploaded.fileName;
+    }
+
     if (packagingListDocument) {
       const uploaded = await uploadBufferToS3(packagingListDocument, 'shipments/actual/packaging-list-document');
       container.actual.packagingListDocumentUrl = uploaded.url;
@@ -2353,6 +2377,7 @@ exports.updateBLDetails = async (req, res) => {
       shippedOnBoard,
       portOfLoading,
       portOfDischarge,
+      shipmentArrived,
       noOfContainers,
       noOfBags,
       quantityByMt,
@@ -2399,6 +2424,7 @@ exports.updateBLDetails = async (req, res) => {
     if (shippedOnBoard !== undefined) container.actual.shipOnBoardDate = toDateOrNull(shippedOnBoard);
     if (portOfLoading !== undefined) container.actual.portOfLoading = portOfLoading || '';
     if (portOfDischarge !== undefined) container.actual.portOfDischarge = portOfDischarge || '';
+    if (shipmentArrived !== undefined) container.actual.shipmentArrived = shipmentArrived === 'Yes' ? 'Yes' : 'No';
     if (noOfContainers !== undefined) container.actual.noOfContainers = Number(noOfContainers) || 0;
     if (noOfBags !== undefined) container.actual.noOfBags = Number(noOfBags) || 0;
     if (quantityByMt !== undefined) container.actual.quantityByMt = Number(quantityByMt) || 0;
@@ -2415,6 +2441,7 @@ exports.updateBLDetails = async (req, res) => {
     if (netWeight !== undefined) container.actual.netWeight = netWeight || '';
     const uploadedByField = {};
     for (const [field, list] of Object.entries(files)) {
+      if (field === 'commercialInvoiceDocument') continue;
       const file = Array.isArray(list) ? list[0] : null;
       if (!file) continue;
       const uploaded = await uploadBufferToS3(file, `shipments/bl-details/${field}`);
@@ -4890,6 +4917,7 @@ exports.getShipmentById = async (req, res) => {
             BLNo: a.BLNo,
             portOfLoading: a.portOfLoading,
             portOfDischarge: a.portOfDischarge,
+            shipmentArrived: a.shipmentArrived || 'No',
             noOfContainers: a.noOfContainers,
             noOfBags: a.noOfBags,
             quantityByMt: a.quantityByMt,
@@ -4900,6 +4928,8 @@ exports.getShipmentById = async (req, res) => {
             billExtractionData: a.billExtractionData || null,
             blDocumentUrl: a.blDocumentUrl,
             blDocumentName: a.blDocumentName,
+            commercialInvoiceDocumentUrl: a.commercialInvoiceDocumentUrl,
+            commercialInvoiceDocumentName: a.commercialInvoiceDocumentName,
             packagingList: a.packagingList || null,
             packagingListDocumentUrl: a.packagingListDocumentUrl,
             packagingListDocumentName: a.packagingListDocumentName,
@@ -5052,6 +5082,7 @@ exports.getShipmentById = async (req, res) => {
       const [
         signedStep3Doc,
         signedBlDocument,
+        signedCommercialInvoiceDocument,
         signedPkgDocument,
         signedInwardAdvice,
         signedMurabaha,
@@ -5073,6 +5104,7 @@ exports.getShipmentById = async (req, res) => {
       ] = await Promise.all([
         toSignedDocument(row.costSheetBookingDocumentUrl, row.costSheetBookingDocumentName),
         toSignedDocument(row.blDocumentUrl, row.blDocumentName),
+        toSignedDocument(row.commercialInvoiceDocumentUrl, row.commercialInvoiceDocumentName),
         toSignedDocument(row.packagingListDocumentUrl, row.packagingListDocumentName),
         toSignedDocument(row.inwardCollectionAdviceDocumentUrl, row.inwardCollectionAdviceDocumentName),
         toSignedDocument(row.murabahaContractSubmittedDocumentUrl, row.murabahaContractSubmittedDocumentName),
@@ -5097,6 +5129,8 @@ exports.getShipmentById = async (req, res) => {
       row.costSheetBookingDocumentName = signedStep3Doc.name;
       row.blDocumentUrl = signedBlDocument.url;
       row.blDocumentName = signedBlDocument.name;
+      row.commercialInvoiceDocumentUrl = signedCommercialInvoiceDocument.url;
+      row.commercialInvoiceDocumentName = signedCommercialInvoiceDocument.name;
       row.packagingListDocumentUrl = signedPkgDocument.url;
       row.packagingListDocumentName = signedPkgDocument.name;
       row.inwardCollectionAdviceDocumentUrl = signedInwardAdvice.url;

@@ -106,6 +106,7 @@ router.patch(
   (req, res, next) => {
     upload.fields([
       { name: 'blDocument', maxCount: 1 },
+      { name: 'commercialInvoiceDocument', maxCount: 1 },
       { name: 'packaging_list_document', maxCount: 1 },
     ])(req, res, (err) => {
       if (err) return res.status(400).json({ message: err.message || 'Invalid file upload' });

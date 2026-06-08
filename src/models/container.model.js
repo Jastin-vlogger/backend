@@ -197,6 +197,7 @@ const actualContainerSchema = new mongoose.Schema({
   quantityByMt: { type: Number },
   portOfLoading: { type: String },
   portOfDischarge: { type: String },
+  shipmentArrived: { type: String, enum: ['Yes', 'No'], default: 'No' },
   shippingLine: { type: String },
   freeDetentionDays: { type: Number },
   maximumDetentionDays: { type: Number },
@@ -204,6 +205,8 @@ const actualContainerSchema = new mongoose.Schema({
   billExtractionData: { type: mongoose.Schema.Types.Mixed },
   blDocumentUrl: { type: String },
   blDocumentName: { type: String },
+  commercialInvoiceDocumentUrl: { type: String },
+  commercialInvoiceDocumentName: { type: String },
   extractedContainers: [{
     containerNo: { type: String },
     pkgCt: { type: Number }
