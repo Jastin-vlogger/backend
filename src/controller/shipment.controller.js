@@ -6,7 +6,8 @@ const Supplier = require('../models/supplier.model');
 const SupplierAccount = require('../models/supplierAccount.model');
 const Item = require('../models/item.model');
 const User = require('../models/auth.model');
-const logAudit = require('../models/auditLog.model');
+const AuditLog = require('../models/auditLog.model');
+const writeAuditLog = require('../core/utils/auditLogger');
 const { uploadBufferToS3, createSignedGetUrl } = require('../core/utils/s3Upload');
 const { calculateSupplierOnboardingState } = require('../core/utils/supplierOnboarding');
 const {
@@ -336,11 +337,6 @@ const hasTransitActualMilestone = (container) => {
   );
 };
 
-const hasPortOfDischargeMilestone = (container) => {
-  const actual = Array.isArray(container?.actual) ? container.actual[0] || {} : container?.actual || {};
-  return hasValue(actual?.portOfDischarge);
-};
-
 const hasExplicitShipmentArrival = (container) => {
   const actual = Array.isArray(container?.actual) ? container.actual[0] || {} : container?.actual || {};
   return String(actual?.shipmentArrived || '').trim().toLowerCase() === 'yes' || !!toDateOrNull(actual?.shipmentArrivedOn);
@@ -367,23 +363,12 @@ const isOnOrBeforeToday = (date) => {
   return startOfLocalDay(date).getTime() <= getStartOfToday().getTime();
 };
 
-const isAfterToday = (date) => {
-  if (!date) return false;
-  return startOfLocalDay(date).getTime() > getStartOfToday().getTime();
-};
-
 const hasArrivedAtPortOfDischarge = (shipment, container) =>
-  hasExplicitShipmentArrival(container) ||
-  (
-    (hasPortOfDischargeMilestone(container) || hasValue(shipment?.portOfDischarge)) &&
-    isOnOrBeforeToday(getContainerEtaDate(shipment, container))
-  );
+  hasExplicitShipmentArrival(container);
 
 const hasOnTransitStatus = (shipment, container) => {
   if (hasArrivedAtPortOfDischarge(shipment, container)) return false;
-  const eta = getContainerEtaDate(shipment, container);
   const etd = getContainerEtdDate(shipment, container);
-  if (isOnOrBeforeToday(etd) && isAfterToday(eta)) return true;
   if (!hasTransitActualMilestone(container)) return false;
   return isOnOrBeforeToday(etd);
 };
@@ -1074,24 +1059,30 @@ const selectReportColumns = (availableColumns, selectedKeys) => {
 
 const getComputedContainerShipmentStatus = (shipment, container) => {
   if (!container) return getDisplayStageName(shipment?.currentStage || 'Shipment Entry');
-  if (hasOnTransitStatus(shipment, container)) return 'On Transit';
+  if (hasSavedStorageArrivalData(container)) return 'Delivered WH';
   if (hasArrivedAtPortOfDischarge(shipment, container)) return 'At Port of Discharge';
+  if (hasOnTransitStatus(shipment, container)) return 'On Transit';
 
   const scheduledEtd = toDateOrNull(container?.planned?.etd || shipment?.plannedETD);
   if (scheduledEtd) {
-    return 'ETD yet to due';
+    return 'ETA yet to due';
   }
 
-  return getDisplayStageName(shipment?.currentStage || 'Shipment Entry');
+  const fallback = getDisplayStageName(shipment?.currentStage || 'Shipment Entry');
+  return fallback === 'Shipment Entry' ? REPORT_STATUS_ETD_UNCONFIRMED : fallback;
 };
 
 const getComputedShipmentStatus = (shipment, shipmentContainers = []) => {
-  if (shipmentContainers.some((container) => hasOnTransitStatus(shipment, container))) {
-    return 'On Transit';
+  if (shipmentContainers.length && shipmentContainers.every((container) => hasSavedStorageArrivalData(container))) {
+    return 'Delivered WH';
   }
 
   if (shipmentContainers.some((container) => hasArrivedAtPortOfDischarge(shipment, container))) {
     return 'At Port of Discharge';
+  }
+
+  if (shipmentContainers.some((container) => hasOnTransitStatus(shipment, container))) {
+    return 'On Transit';
   }
 
   const pendingScheduledDates = shipmentContainers
@@ -1101,15 +1092,16 @@ const getComputedShipmentStatus = (shipment, shipmentContainers = []) => {
     .sort((a, b) => a.getTime() - b.getTime());
 
   if (pendingScheduledDates.length) {
-    return 'ETD yet to due';
+    return 'ETA yet to due';
   }
 
   const shipmentLevelEtd = toDateOrNull(shipment?.plannedETD);
   if (shipmentLevelEtd) {
-    return 'ETD yet to due';
+    return 'ETA yet to due';
   }
 
-  return getDisplayStageName(shipment?.currentStage || 'Shipment Entry');
+  const fallback = getDisplayStageName(shipment?.currentStage || 'Shipment Entry');
+  return fallback === 'Shipment Entry' ? REPORT_STATUS_ETD_UNCONFIRMED : fallback;
 };
 
 const DASHBOARD_STATUS_COLUMNS = [
@@ -1122,8 +1114,8 @@ const DASHBOARD_STATUS_COLUMNS = [
 
 const getDashboardStatusColumn = (shipment, container) => {
   if (hasSavedStorageArrivalData(container)) return 'Delivered WH';
-  if (hasOnTransitStatus(shipment, container)) return 'On Transit';
   if (hasArrivedAtPortOfDischarge(shipment, container)) return 'At the Port';
+  if (hasOnTransitStatus(shipment, container)) return 'On Transit';
 
   const plannedEtd = toDateOrNull(container?.planned?.etd || shipment?.plannedETD);
   if (plannedEtd) return 'ETA yet to due';
@@ -1945,7 +1937,7 @@ exports.createShipment = async (req, res) => {
     });
 
     // 6️⃣ Audit log
-    await logAudit({
+    await writeAuditLog({
       userId: req.user._id,
       module: "Purchase",
       entity: "Shipment",
@@ -2079,7 +2071,7 @@ exports.createPlannedContainersBulk = async (req, res) => {
     ];
 
     if (req.user?._id) {
-      await logAudit.create({
+      await AuditLog.create({
         userId: req.user._id,
         module: "Purchase",
         entity: "Shipment",
@@ -2539,7 +2531,7 @@ exports.updateBLDetails = async (req, res) => {
     }
 
     if (isClearingAdvanceSave) {
-      await logAudit({
+      await writeAuditLog({
         userId: req.user._id,
         module: 'Logistics',
         entity: 'Container',
@@ -2550,7 +2542,7 @@ exports.updateBLDetails = async (req, res) => {
         remarks: 'Clearing advance submitted for FAS approval'
       });
     } else if (isStorageAllocationSave) {
-      await logAudit({
+      await writeAuditLog({
         userId: req.user._id,
         module: 'Logistics',
         entity: 'Container',
@@ -2738,7 +2730,7 @@ exports.updateFASContainer = async (req, res) => {
       });
     }
 
-    await logAudit({
+    await writeAuditLog({
       userId: req.user._id,
       module: "FAS",
       entity: "Container",
@@ -3584,7 +3576,7 @@ exports.updatePaymentCostingDetails = async (req, res) => {
       container.actual.paymentCostingDocumentName = uploaded.fileName;
     }
 
-    if (isPaymentCostingSave) {
+    if (isPaymentAllocationSave || isPaymentCostingSave) {
       container.actual.paymentCostingApproval = buildPaymentCostingPendingApproval(req.user);
     }
 
@@ -3605,7 +3597,7 @@ exports.updatePaymentCostingDetails = async (req, res) => {
       await shipmentForPayment.save();
       if (isPaymentAllocationSave) {
         notifyPaymentAllocationRolesByEmail({
-          roles: ['FAS'],
+          roles: ['FasManager'],
           shipment: shipmentForPayment,
           container,
           actor: req.user,
@@ -3627,7 +3619,7 @@ exports.updatePaymentCostingDetails = async (req, res) => {
     }
 
     if (isPaymentCostingSave) {
-      await logAudit({
+      await writeAuditLog({
         userId: req.user._id,
         module: 'FAS',
         entity: 'Container',
@@ -3636,6 +3628,19 @@ exports.updatePaymentCostingDetails = async (req, res) => {
         before: beforeUpdate,
         after: cloneForAudit(container.toObject()),
         remarks: 'Payment costing submitted for FAS manager approval'
+      });
+    }
+
+    if (isPaymentAllocationSave) {
+      await writeAuditLog({
+        userId: req.user._id,
+        module: 'FAS',
+        entity: 'Container',
+        entityId: container._id,
+        action: 'SubmitPaymentAllocation',
+        before: beforeUpdate,
+        after: cloneForAudit(container.toObject()),
+        remarks: 'Payment allocation submitted for FAS manager approval'
       });
     }
 
@@ -3702,7 +3707,7 @@ exports.approveClearingAdvance = async (req, res) => {
         });
       }
 
-      await logAudit({
+      await writeAuditLog({
         userId: req.user._id,
         module: 'FAS',
         entity: 'Container',
@@ -3779,7 +3784,7 @@ exports.approvePaymentCosting = async (req, res) => {
       });
     }
 
-    await logAudit({
+    await writeAuditLog({
       userId: req.user._id,
       module: 'FAS',
       entity: 'Container',
@@ -3849,7 +3854,7 @@ exports.approveStorageAllocations = async (req, res) => {
       });
     }
 
-    await logAudit({
+    await writeAuditLog({
       userId: req.user._id,
       module: 'Warehouse',
       entity: 'Container',
@@ -3906,7 +3911,7 @@ exports.approveStorageArrival = async (req, res) => {
     };
     await container.save();
 
-    await logAudit({
+    await writeAuditLog({
       userId: req.user._id,
       module: 'Warehouse',
       entity: 'Container',
@@ -4715,20 +4720,20 @@ exports.getShipmentSummary = async (req, res) => {
 
     // Chart Data Generation
     const mapStageToStatus = (status) => {
-      if (status === 'ETD yet to due') return 'ETA yet to due';
+      if (status === 'ETD yet to due' || status === 'ETA yet to due') return 'ETA yet to due';
       if (status === 'On Transit') return 'On Transit';
       if (status === 'At Port of Discharge') return 'At the Port';
-      if (status === 'Reached WH') return 'Delivered WH';
-      if (status === 'Shipment Entry') return REPORT_STATUS_ETD_UNCONFIRMED;
+      if (status === 'Reached WH' || status === 'Delivered WH') return 'Delivered WH';
+      if (status === 'Shipment Entry' || status === REPORT_STATUS_ETD_UNCONFIRMED) return REPORT_STATUS_ETD_UNCONFIRMED;
       return String(status || REPORT_STATUS_ETD_UNCONFIRMED);
     };
 
     const mapStageToYearlyStatus = (status) => {
-      if (status === 'Reached WH') return 'Delivered WH';
+      if (status === 'Reached WH' || status === 'Delivered WH') return 'Delivered WH';
       if (status === 'At Port of Discharge') return 'At the Port';
       if (status === 'On Transit') return 'On Transit';
-      if (status === 'ETD yet to due') return 'ETD yet to due';
-      return String(status || 'ETD yet to due');
+      if (status === 'ETD yet to due' || status === 'ETA yet to due') return 'ETA yet to due';
+      return String(status || REPORT_STATUS_ETD_UNCONFIRMED);
     };
 
     const qtyMappingMap = new Map();
@@ -4863,8 +4868,10 @@ exports.getShipmentById = async (req, res) => {
     // Fetch all containers for this shipment
     const containers = await Container.find({ shipmentId })
       .sort({ createdAt: 1 })
+      .populate('actual.clearingAdvanceApproval.submittedBy', 'name email role')
       .populate('actual.clearingAdvanceApproval.fasApprovedBy', 'name email role');
-    const scheduledHistoryLogs = await logAudit
+    const containerIds = containers.map((container) => container._id);
+    const scheduledHistoryLogs = await AuditLog
       .find({
         module: "Purchase",
         entity: "Shipment",
@@ -4873,6 +4880,30 @@ exports.getShipmentById = async (req, res) => {
       })
       .sort({ createdAt: -1 })
       .populate("userId", "name email");
+    const clearingAdvanceSubmissionLogs = await AuditLog
+      .find({
+        module: 'Logistics',
+        entity: 'Container',
+        entityId: { $in: containerIds },
+        action: 'SubmitClearingAdvance',
+      })
+      .sort({ createdAt: -1 })
+      .populate('userId', 'name email role')
+      .lean();
+    const clearingAdvanceSubmitterByContainer = new Map();
+    clearingAdvanceSubmissionLogs.forEach((entry) => {
+      const key = String(entry.entityId || '');
+      if (!key || clearingAdvanceSubmitterByContainer.has(key)) return;
+      const user = entry.userId || null;
+      const name = user?.name || user?.email || '';
+      const role = user?.role || '';
+      clearingAdvanceSubmitterByContainer.set(key, {
+        name,
+        role,
+        label: name ? `${name}${role ? ` (${role})` : ''}` : '',
+        submittedAt: entry.createdAt || null,
+      });
+    });
 
     // Planned array
     const planned = containers.map(c => ({
@@ -4896,9 +4927,21 @@ exports.getShipmentById = async (req, res) => {
         // ensure actual is always an array
         const actualArr = Array.isArray(c.actual) ? c.actual : [c.actual];
         actualArr.forEach(a => {
+          const clearingAdvanceSubmittedBy = a.clearingAdvanceApproval?.submittedBy || null;
+          const clearingAdvanceSubmittedByLabel = clearingAdvanceSubmittedBy?.name || clearingAdvanceSubmittedBy?.email || '';
+          const clearingAdvanceSubmitter = clearingAdvanceSubmittedByLabel
+            ? {
+                name: clearingAdvanceSubmittedByLabel,
+                role: clearingAdvanceSubmittedBy?.role || '',
+                label: `${clearingAdvanceSubmittedByLabel}${clearingAdvanceSubmittedBy?.role ? ` (${clearingAdvanceSubmittedBy.role})` : ''}`,
+                submittedAt: a.clearingAdvanceApproval?.submittedAt || null,
+              }
+            : clearingAdvanceSubmitterByContainer.get(String(c._id)) || null;
 
           const actualData = {
             containerId: c._id,
+            logisticPreparedBy: clearingAdvanceSubmitter?.label || '',
+            logisticPreparedByUser: clearingAdvanceSubmitter,
             shipmentStatus: getComputedContainerShipmentStatus(shipment, c),
             actualSerialNo: a.actualSerialNo,
             commercialInvoiceNo: a.commercialInvoiceNo,
@@ -5943,7 +5986,7 @@ exports.updateSupplierEmail = async (req, res) => {
     shipment.supplierEmail = normalized;
     await shipment.save();
 
-    await logAudit({
+    await writeAuditLog({
       userId: req.user._id,
       module: 'Shipment',
       entity: 'Shipment',
@@ -5974,7 +6017,7 @@ exports.updateBankName = async (req, res) => {
     shipment.bankName = bankName;
     await shipment.save();
 
-    await logAudit({
+    await writeAuditLog({
       userId: req.user._id,
       module: 'Shipment',
       entity: 'Shipment',
