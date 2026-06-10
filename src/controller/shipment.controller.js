@@ -1058,7 +1058,10 @@ const selectReportColumns = (availableColumns, selectedKeys) => {
 };
 
 const getComputedContainerShipmentStatus = (shipment, container) => {
-  if (!container) return getDisplayStageName(shipment?.currentStage || 'Shipment Entry');
+  if (!container) {
+    const fallback = getDisplayStageName(shipment?.currentStage || 'Shipment Entry');
+    return fallback === 'Shipment Entry' ? REPORT_STATUS_ETD_UNCONFIRMED : fallback;
+  }
   if (hasSavedStorageArrivalData(container)) return 'Delivered WH';
   if (hasArrivedAtPortOfDischarge(shipment, container)) return 'At Port of Discharge';
   if (hasOnTransitStatus(shipment, container)) return 'On Transit';
@@ -1472,7 +1475,6 @@ const buildShipmentReportRows = async (filters = {}) => {
     const actual = firstContainer?.actual || {};
     const planned = firstContainer?.planned || {};
     const splitCount = getShipmentSplitCount(shipment, shipmentContainers);
-    const shipmentStatus = getDisplayStageName(shipment.currentStage || '');
     const reportStatus = getShipmentReportStatus(shipment, shipmentContainers);
     const children = shipmentContainers.map((container, childIndex) => {
       const childActual = container?.actual || {};
@@ -1536,7 +1538,7 @@ const buildShipmentReportRows = async (filters = {}) => {
       fpoNo: shipment.fpoNo || '',
       bankName: shipment.bankName || '',
       paymentTerms: shipment.paymentTerms || '',
-      shipmentStatus,
+      shipmentStatus: reportStatus,
       reportStatus,
       currentStage: getDisplayStageName(shipment.currentStage || ''),
       noOfShipments: shipment.noOfShipments ?? shipment.assumedContainerCount ?? 0,
@@ -4061,7 +4063,7 @@ const fetchShipmentList = async ({ page = 1, limit = 20, search = '', status = '
     fcPerUnit: s.fcPerUnit || 0,
     totalFC: s.totalFC || 0,
     noOfShipments: s.noOfShipments || s.assumedContainerCount || 0,
-    status: getDisplayStageName(s.currentStage || '')
+    status: getShipmentReportStatus(s, containerMap.get(String(s._id)) || [])
   }));
 
   return {
