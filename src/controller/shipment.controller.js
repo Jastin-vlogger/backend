@@ -31,7 +31,6 @@ const {
 } = require('../config/blRowDefinitions');
 const {
   syncSameBlActualFields,
-  syncSameBlOrSameShipmentActualFields,
   hydrateMissingSameBlActualFields,
   SAME_BL_CLEARING_ADVANCE_FIELDS,
   SAME_BL_PAYMENT_ALLOCATION_FIELDS,
@@ -2489,7 +2488,7 @@ exports.updateBLDetails = async (req, res) => {
     await container.save();
 
     if (isClearingAdvanceSave) {
-      await syncSameBlOrSameShipmentActualFields({
+      await syncSameBlActualFields({
         ContainerModel: Container,
         sourceContainer: container,
         fields: SAME_BL_CLEARING_ADVANCE_FIELDS,
@@ -3585,7 +3584,7 @@ exports.updatePaymentCostingDetails = async (req, res) => {
     await container.save();
 
     if (isPaymentAllocationSave) {
-      await syncSameBlOrSameShipmentActualFields({
+      await syncSameBlActualFields({
         ContainerModel: Container,
         sourceContainer: container,
         fields: SAME_BL_PAYMENT_ALLOCATION_FIELDS,
@@ -3691,7 +3690,7 @@ exports.approveClearingAdvance = async (req, res) => {
       };
       await container.save();
 
-      await syncSameBlOrSameShipmentActualFields({
+      await syncSameBlActualFields({
         ContainerModel: Container,
         sourceContainer: container,
         fields: ['clearingAdvanceApproval'],

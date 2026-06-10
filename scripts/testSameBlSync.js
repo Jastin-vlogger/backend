@@ -2,7 +2,6 @@ const assert = require('node:assert/strict');
 
 const {
   syncSameBlActualFieldsInMemory,
-  syncSameBlOrSameShipmentActualFieldsInMemory,
   hydrateMissingSameBlActualFieldsInMemory,
   SAME_BL_CLEARING_ADVANCE_FIELDS,
   SAME_BL_PAYMENT_ALLOCATION_FIELDS,
@@ -64,23 +63,24 @@ const runClearingAdvanceSyncTest = () => {
   assert.equal(containers[1].actual.costSheetBookings[0].remarks, 'shared BL cost');
 };
 
-const runClearingAdvanceSameShipmentDifferentBlSyncTest = () => {
-  const sourceRows = [{ sn: 1, description: 'Same LPO clearance', requestAmount: 500 }];
+const runClearingAdvanceDoesNotSyncSameShipmentDifferentBlTest = () => {
+  const sourceRows = [{ sn: 1, description: 'Same BL clearance', requestAmount: 500 }];
+  const oldDifferentBlRows = [{ description: 'keep same shipment different BL' }];
   const containers = [
     makeContainer('source', 'BL-A', { costSheetBookings: sourceRows }, { shipmentId: 'lpo-1' }),
-    makeContainer('same-lpo-different-bl', 'BL-B', { costSheetBookings: [] }, { shipmentId: 'lpo-1' }),
-    makeContainer('same-lpo-planned', 'BL-C', { costSheetBookings: [] }, { shipmentId: 'lpo-1', status: 'Planned' }),
+    makeContainer('same-lpo-same-bl', ' bl-a ', { costSheetBookings: [] }, { shipmentId: 'lpo-1' }),
+    makeContainer('same-lpo-different-bl', 'BL-B', { costSheetBookings: oldDifferentBlRows }, { shipmentId: 'lpo-1' }),
     makeContainer('different-lpo', 'BL-D', { costSheetBookings: [{ description: 'keep me' }] }, { shipmentId: 'lpo-2' }),
   ];
 
-  syncSameBlOrSameShipmentActualFieldsInMemory({
+  syncSameBlActualFieldsInMemory({
     containers,
     sourceId: 'source',
     fields: SAME_BL_CLEARING_ADVANCE_FIELDS,
   });
 
   assert.deepEqual(containers[1].actual.costSheetBookings, sourceRows);
-  assert.deepEqual(containers[2].actual.costSheetBookings, []);
+  assert.deepEqual(containers[2].actual.costSheetBookings, oldDifferentBlRows);
   assert.deepEqual(containers[3].actual.costSheetBookings, [{ description: 'keep me' }]);
 };
 
@@ -110,44 +110,50 @@ const runPaymentAllocationSyncTest = () => {
   assert.deepEqual(containers[1].actual.paymentAllocations, paymentAllocations);
 };
 
-const runPaymentAllocationSameShipmentDifferentBlSyncTest = () => {
-  const paymentAllocations = [{ sn: 1, description: 'Same LPO payment', requestAmount: 900 }];
+const runPaymentAllocationDoesNotSyncSameShipmentDifferentBlTest = () => {
+  const paymentAllocations = [{ sn: 1, description: 'Same BL payment', requestAmount: 900 }];
+  const oldDifferentBlAllocations = [{ description: 'keep same shipment different BL' }];
   const containers = [
     makeContainer('source', 'BL-A', { paymentAllocations }, { shipmentId: 'lpo-1' }),
-    makeContainer('same-lpo-different-bl', 'BL-B', { paymentAllocations: [] }, { shipmentId: 'lpo-1' }),
+    makeContainer('same-lpo-same-bl', 'bl-a', { paymentAllocations: [] }, { shipmentId: 'lpo-1' }),
+    makeContainer('same-lpo-different-bl', 'BL-B', { paymentAllocations: oldDifferentBlAllocations }, { shipmentId: 'lpo-1' }),
     makeContainer('different-lpo', 'BL-C', { paymentAllocations: [{ description: 'keep me' }] }, { shipmentId: 'lpo-2' }),
   ];
 
-  syncSameBlOrSameShipmentActualFieldsInMemory({
+  syncSameBlActualFieldsInMemory({
     containers,
     sourceId: 'source',
     fields: SAME_BL_PAYMENT_ALLOCATION_FIELDS,
   });
 
   assert.deepEqual(containers[1].actual.paymentAllocations, paymentAllocations);
-  assert.deepEqual(containers[2].actual.paymentAllocations, [{ description: 'keep me' }]);
+  assert.deepEqual(containers[2].actual.paymentAllocations, oldDifferentBlAllocations);
+  assert.deepEqual(containers[3].actual.paymentAllocations, [{ description: 'keep me' }]);
 };
 
-const runClearingAdvanceApprovalSameShipmentSyncTest = () => {
+const runClearingAdvanceApprovalDoesNotSyncSameShipmentDifferentBlTest = () => {
   const approval = {
     status: 'approved',
     submittedBy: 'logistics-1',
     fasApprovedBy: 'fas-1',
   };
+  const oldDifferentBlApproval = { status: 'pending_fas' };
   const containers = [
     makeContainer('source', 'BL-A', { clearingAdvanceApproval: approval }, { shipmentId: 'lpo-1' }),
-    makeContainer('same-lpo-different-bl', 'BL-B', { clearingAdvanceApproval: { status: 'pending_fas' } }, { shipmentId: 'lpo-1' }),
+    makeContainer('same-lpo-same-bl', 'BL-A', { clearingAdvanceApproval: { status: 'pending_fas' } }, { shipmentId: 'lpo-1' }),
+    makeContainer('same-lpo-different-bl', 'BL-B', { clearingAdvanceApproval: oldDifferentBlApproval }, { shipmentId: 'lpo-1' }),
     makeContainer('different-lpo', 'BL-C', { clearingAdvanceApproval: { status: 'pending_fas' } }, { shipmentId: 'lpo-2' }),
   ];
 
-  syncSameBlOrSameShipmentActualFieldsInMemory({
+  syncSameBlActualFieldsInMemory({
     containers,
     sourceId: 'source',
     fields: ['clearingAdvanceApproval'],
   });
 
   assert.deepEqual(containers[1].actual.clearingAdvanceApproval, approval);
-  assert.deepEqual(containers[2].actual.clearingAdvanceApproval, { status: 'pending_fas' });
+  assert.deepEqual(containers[2].actual.clearingAdvanceApproval, oldDifferentBlApproval);
+  assert.deepEqual(containers[3].actual.clearingAdvanceApproval, { status: 'pending_fas' });
 };
 
 const runDocumentTrackerSelectedFieldSyncTest = () => {
@@ -332,10 +338,10 @@ const runBlankBlDoesNotSyncTest = () => {
 
 const tests = [
   runClearingAdvanceSyncTest,
-  runClearingAdvanceSameShipmentDifferentBlSyncTest,
+  runClearingAdvanceDoesNotSyncSameShipmentDifferentBlTest,
   runPaymentAllocationSyncTest,
-  runPaymentAllocationSameShipmentDifferentBlSyncTest,
-  runClearingAdvanceApprovalSameShipmentSyncTest,
+  runPaymentAllocationDoesNotSyncSameShipmentDifferentBlTest,
+  runClearingAdvanceApprovalDoesNotSyncSameShipmentDifferentBlTest,
   runDocumentTrackerSelectedFieldSyncTest,
   runDocumentTrackerBankSyncTest,
   runDocumentTrackerDocumentFieldSyncTest,
