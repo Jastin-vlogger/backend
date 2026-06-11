@@ -1232,9 +1232,13 @@ const buildDashboardRStatusMetrics = (shipments, containerMap) => {
       ? shipmentContainers.slice(0, splitCount)
       : shipmentContainers;
     const missingSplitCount = Math.max(splitCount - dashboardContainers.length, 0);
+    const isPendingEntryStage = isShipmentEntryPendingSchedule(shipment);
+    const pendingEntryCount = isPendingEntryStage ? 1 : 0;
 
     if (!shipmentContainers.length && !missingSplitCount) {
       metrics['Open LPO'] += 1;
+      metrics['Total Shipments'] += pendingEntryCount;
+      metrics['ETD Yet To Be Confirmed'] += pendingEntryCount;
       return;
     }
 
@@ -1246,7 +1250,7 @@ const buildDashboardRStatusMetrics = (shipments, containerMap) => {
     else metrics['Open LPO'] += 1;
 
     dashboardContainers.forEach((container) => {
-      const status = getDashboardStatusColumn(shipment, container);
+      const status = isPendingEntryStage ? REPORT_STATUS_ETD_UNCONFIRMED : getDashboardStatusColumn(shipment, container);
       if (status === 'Delivered WH') metrics['Delivered WH'] += 1;
       else if (status === 'On Transit') metrics['On Transit'] += 1;
       else if (status === 'At the Port') metrics['At The Port'] += 1;
@@ -1266,6 +1270,11 @@ const getMeaningfulNumber = (value) => {
 
 const getShipmentSplitCount = (shipment, shipmentContainers = []) => {
   return Number(shipment?.noOfShipments || shipment?.assumedContainerCount || shipmentContainers.length || 0) || 0;
+};
+
+const isShipmentEntryPendingSchedule = (shipment) => {
+  const stage = getDisplayStageName(shipment?.currentStage || 'Shipment Entry');
+  return stage === 'Shipment Entry';
 };
 
 const getContainerDividendValue = (totalValue, splitCount) => {
@@ -6181,3 +6190,9 @@ exports.bulkSaveTransportationArranged = async (req, res) => {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 };
+
+if (process.env.NODE_ENV === 'test') {
+  exports.__test = {
+    buildDashboardRStatusMetrics,
+  };
+}
