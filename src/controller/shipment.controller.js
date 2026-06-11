@@ -198,6 +198,13 @@ const STORAGE_ARRIVAL_APPROVAL_STATUSES = {
 
 const cloneForAudit = (value) => JSON.parse(JSON.stringify(value || {}));
 
+const applyCommercialInvoiceDocumentUpload = (actual, uploaded) => {
+  if (!actual || !uploaded) return actual;
+  actual.commercialInvoiceDocumentUrl = uploaded.url;
+  actual.commercialInvoiceDocumentName = uploaded.fileName;
+  return actual;
+};
+
 const buildClearingAdvancePendingApproval = (user) => ({
   status: CLEARING_ADVANCE_APPROVAL_STATUSES.pendingFas,
   submittedAt: new Date(),
@@ -2371,6 +2378,7 @@ exports.updateBLDetails = async (req, res) => {
 
     const files = normalizeUploadedFiles(req.files || {});
     const costSheetBookingDocument = files?.costSheetBookingDocument?.[0];
+    const commercialInvoiceDocument = files?.commercialInvoiceDocument?.[0];
 
     const {
       blNo,
@@ -2484,6 +2492,11 @@ exports.updateBLDetails = async (req, res) => {
       const uploaded = await uploadBufferToS3(costSheetBookingDocument, 'shipments/bl/cost-sheet');
       container.actual.costSheetBookingDocumentUrl = uploaded.url;
       container.actual.costSheetBookingDocumentName = uploaded.fileName;
+    }
+
+    if (commercialInvoiceDocument) {
+      const uploaded = await uploadBufferToS3(commercialInvoiceDocument, 'shipments/bl-details/commercial-invoice');
+      applyCommercialInvoiceDocumentUpload(container.actual, uploaded);
     }
 
     if (isClearingAdvanceSave) {
@@ -6194,5 +6207,6 @@ exports.bulkSaveTransportationArranged = async (req, res) => {
 if (process.env.NODE_ENV === 'test') {
   exports.__test = {
     buildDashboardRStatusMetrics,
+    applyCommercialInvoiceDocumentUpload,
   };
 }
