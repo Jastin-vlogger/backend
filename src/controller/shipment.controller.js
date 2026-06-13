@@ -34,6 +34,7 @@ const {
   hydrateMissingSameBlActualFields,
   SAME_BL_CLEARING_ADVANCE_FIELDS,
   SAME_BL_PAYMENT_ALLOCATION_FIELDS,
+  SAME_BL_DOCUMENT_TRACKER_FIELDS,
   SAME_BL_ACTUAL_BL_DOCUMENT_FIELDS,
   SAME_BL_INHERIT_FIELDS,
 } = require('../core/utils/sameBlSync');
@@ -2625,7 +2626,12 @@ exports.updateFASContainer = async (req, res) => {
     const documentTrackerSyncBlNos = new Set();
     const addDocumentTrackerSyncField = (...fields) => {
       fields.forEach((field) => {
-        if (!documentTrackerSyncFields.includes(field)) documentTrackerSyncFields.push(field);
+        if (
+          SAME_BL_DOCUMENT_TRACKER_FIELDS.includes(field) &&
+          !documentTrackerSyncFields.includes(field)
+        ) {
+          documentTrackerSyncFields.push(field);
+        }
       });
     };
     const addDocumentTrackerSyncBlNo = (value) => {

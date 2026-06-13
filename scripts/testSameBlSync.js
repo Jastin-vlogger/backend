@@ -5,6 +5,7 @@ const {
   hydrateMissingSameBlActualFieldsInMemory,
   SAME_BL_CLEARING_ADVANCE_FIELDS,
   SAME_BL_PAYMENT_ALLOCATION_FIELDS,
+  SAME_BL_DOCUMENT_TRACKER_FIELDS,
   SAME_BL_INHERIT_FIELDS,
 } = require('../src/core/utils/sameBlSync');
 
@@ -265,6 +266,76 @@ const runDocumentTrackerDocumentFieldSyncTest = () => {
   assert.equal(containers[2].actual.bankName, 'Other bank keep');
 };
 
+const runDocumentTrackerFullSameBlSyncTest = () => {
+  const sourceActual = {
+    BLNo: 'MUNKLF26139815',
+    CLNo: 'MUNKLF26139815',
+    DHL: 'DHL-999',
+    courierTrackNo: 'DHL-999',
+    courierServiceProvider: 'DHL',
+    expectedDocDate: '2026-06-25',
+    receiver: 'Bank',
+    bankName: 'ADIB',
+    docArrivalNotes: 'Documents received',
+    inwardCollectionAdviceDate: '2026-06-26',
+    inwardCollectionAdviceDocumentUrl: 's3://inward.pdf',
+    inwardCollectionAdviceDocumentName: 'inward.pdf',
+    murabahaContractReleasedDate: '2026-06-27',
+    murabahaContractApprovedDate: '2026-06-27',
+    murabahaContractSubmittedDate: '2026-06-28',
+    murabahaContractSubmittedDocumentUrl: 's3://murabaha.pdf',
+    murabahaContractSubmittedDocumentName: 'murabaha.pdf',
+    documentsReleasedDate: '2026-06-29',
+    documentsReleasedDocumentUrl: 's3://release.pdf',
+    documentsReleasedDocumentName: 'release.pdf',
+    bankAdvanceAmountDocumentUrl: 's3://advance-amount.pdf',
+    bankAdvanceApprovedDocumentUrl: 's3://advance-approved.pdf',
+    bankAdvanceSubmittedOn: '2026-06-30',
+    docToBeReleasedOn: '2026-07-01',
+  };
+  const differentBlActual = {
+    courierTrackNo: 'KEEP-DIFFERENT-BL',
+    bankName: 'Keep Different Bank',
+  };
+  const containers = [
+    makeContainer('source', sourceActual.BLNo, sourceActual),
+    makeContainer('same-bl', ' munklf26139815 ', {
+      courierTrackNo: '',
+      bankName: '',
+      inwardCollectionAdviceDocumentUrl: '',
+    }),
+    makeContainer('different-bl', 'OTHER-BL', differentBlActual),
+  ];
+
+  syncSameBlActualFieldsInMemory({
+    containers,
+    sourceId: 'source',
+    fields: SAME_BL_DOCUMENT_TRACKER_FIELDS,
+  });
+
+  SAME_BL_DOCUMENT_TRACKER_FIELDS.forEach((field) => {
+    assert.deepEqual(containers[1].actual[field], sourceActual[field], `${field} should sync to same BL`);
+  });
+  assert.deepEqual(containers[2].actual.courierTrackNo, differentBlActual.courierTrackNo);
+  assert.deepEqual(containers[2].actual.bankName, differentBlActual.bankName);
+};
+
+const runDocumentTrackerBlankBlDoesNotSyncTest = () => {
+  const containers = [
+    makeContainer('source', '   ', { courierTrackNo: 'DHL-BLANK' }),
+    makeContainer('target', '   ', { courierTrackNo: 'KEEP-BLANK-PEER' }),
+  ];
+
+  const updated = syncSameBlActualFieldsInMemory({
+    containers,
+    sourceId: 'source',
+    fields: SAME_BL_DOCUMENT_TRACKER_FIELDS,
+  });
+
+  assert.deepEqual(updated, []);
+  assert.equal(containers[1].actual.courierTrackNo, 'KEEP-BLANK-PEER');
+};
+
 const runHydrateNewSameBlTest = () => {
   const costSheetBookings = [{ sn: 1, description: 'Inherited cost', requestAmount: 10 }];
   const paymentAllocations = [{ sn: 1, description: 'Inherited payment', requestAmount: 20 }];
@@ -345,6 +416,8 @@ const tests = [
   runDocumentTrackerSelectedFieldSyncTest,
   runDocumentTrackerBankSyncTest,
   runDocumentTrackerDocumentFieldSyncTest,
+  runDocumentTrackerFullSameBlSyncTest,
+  runDocumentTrackerBlankBlDoesNotSyncTest,
   runHydrateNewSameBlTest,
   runDocumentTrackerBlNumberChangeSyncTest,
   runBlankBlDoesNotSyncTest,
