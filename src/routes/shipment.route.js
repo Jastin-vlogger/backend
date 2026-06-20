@@ -95,6 +95,20 @@ router.post(
   controller.extractArrivalNotice
 );
 
+// Extract DPW cargo receipt — permission-driven access
+router.post(
+  '/extract-dpw-cargo',
+  authMiddleware,
+  authorize({ tag: 'any-active' }),
+  (req, res, next) => {
+    upload.single('file')(req, res, (err) => {
+      if (err) return res.status(400).json({ message: err.message || 'Invalid file upload' });
+      next();
+    });
+  },
+  controller.extractDpwCargo
+);
+
 // Planned containers — Purchase team only
 router.post('/container/planned', authMiddleware, authorize({ tag: 'any-active' }), controller.createPlannedContainersBulk);
 
@@ -182,6 +196,8 @@ router.patch(
       { name: 'boePassingDocument', maxCount: 1 },
       { name: 'customsClearanceDocument', maxCount: 1 },
       { name: 'municipalityDocument', maxCount: 1 },
+      { name: 'dpInvoiceDocument', maxCount: 1 },
+      { name: 'municipalityClearanceCertificate', maxCount: 1 },
       { name: 'customsDocBoe', maxCount: 1 },
       { name: 'customsDocDo', maxCount: 1 },
       { name: 'customsDocBl', maxCount: 1 },

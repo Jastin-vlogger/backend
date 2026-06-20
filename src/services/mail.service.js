@@ -38,6 +38,60 @@ function getTransporter() {
   return cachedTransporter;
 }
 
+const escapeHtml = (value) =>
+  String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+const normalizeDetailItems = (detailLines = []) => {
+  if (!Array.isArray(detailLines)) return [];
+  return detailLines
+    .map((line) => {
+      if (line && typeof line === 'object') {
+        return {
+          label: String(line.label || '').trim(),
+          value: String(line.value ?? '').trim(),
+          url: String(line.url || '').trim(),
+        };
+      }
+
+      const raw = String(line || '').trim();
+      if (!raw) return null;
+      const separatorIndex = raw.indexOf(':');
+      if (separatorIndex > 0) {
+        return {
+          label: raw.slice(0, separatorIndex).trim(),
+          value: raw.slice(separatorIndex + 1).trim(),
+          url: '',
+        };
+      }
+      return { label: '', value: raw, url: '' };
+    })
+    .filter((item) => item && (item.label || item.value || item.url));
+};
+
+const detailItemText = (item) => {
+  const text = item.label ? `${item.label}: ${item.value || 'N/A'}` : item.value;
+  return item.url ? `${text} (${item.url})` : text;
+};
+
+const detailItemHtml = (item) => {
+  const safeValue = escapeHtml(item.value || 'N/A');
+  const valueHtml = item.url
+    ? `<a href="${escapeHtml(item.url)}" style="color:#2563eb;text-decoration:none;font-weight:700;">${safeValue}</a>`
+    : safeValue;
+
+  return `
+    <tr>
+      <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;color:#64748b;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;width:42%;">${escapeHtml(item.label || 'Detail')}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;color:#0f172a;font-size:13px;font-weight:700;">${valueHtml}</td>
+    </tr>
+  `;
+};
+
 async function sendSupplierInviteEmail({ to, supplierName, temporaryPassword }) {
   const transporter = getTransporter();
   const { from } = getMailerConfig();
@@ -328,9 +382,9 @@ async function sendClearingAdvanceStatusEmail({
   const safeApprovalStage = approvalStage || 'Clearing Advance Updated';
   const safeUpdatedBy = updatedBy || 'A user';
   const safeShipmentUrl = shipmentUrl || '';
-  const normalizedDetails = Array.isArray(detailLines)
-    ? detailLines.filter((line) => String(line || '').trim().length > 0)
-    : [];
+  const normalizedDetails = normalizeDetailItems(detailLines);
+  const isApproved = String(safeApprovalStage).trim().toLowerCase() === 'approved';
+  const detailsTitle = isApproved ? 'Document Information' : 'Clearing Advance Details';
 
   await transporter.sendMail({
     from,
@@ -343,32 +397,46 @@ async function sendClearingAdvanceStatusEmail({
       `Shipment ID: ${safeShipmentId}`,
       `Container Serial No: ${safeContainerSerialNo}`,
       `Approval Stage: ${safeApprovalStage}`,
-      ...(normalizedDetails.length ? ['', ...normalizedDetails] : []),
+      ...(normalizedDetails.length ? ['', detailsTitle, ...normalizedDetails.map(detailItemText)] : []),
       ...(safeShipmentUrl ? ['', `Open in Portal: ${safeShipmentUrl}`] : []),
       '',
       'Regards,',
       'Royal Horizon',
     ].join('\n'),
     html: `
-      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #0f172a;">
-        <p>Dear ${safeUserName},</p>
-        <p><strong>${safeUpdatedBy}</strong> updated the <strong>Clearing Advance</strong> workflow.</p>
-        <p>
-          <strong>Shipment ID:</strong> ${safeShipmentId}<br/>
-          <strong>Container Serial No:</strong> ${safeContainerSerialNo}<br/>
-          <strong>Approval Stage:</strong> ${safeApprovalStage}
-        </p>
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #0f172a;background:#f8fafc;padding:24px;">
+        <div style="max-width:720px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;box-shadow:0 10px 30px rgba(15,23,42,.08);">
+          <div style="background:#0f172a;color:#ffffff;padding:18px 22px;">
+            <p style="margin:0 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:#cbd5e1;font-weight:800;">Clearing Advance</p>
+            <h2 style="margin:0;font-size:20px;line-height:1.3;">${escapeHtml(safeApprovalStage)}</h2>
+          </div>
+          <div style="padding:22px;">
+            <p style="margin:0 0 12px;">Dear ${escapeHtml(safeUserName)},</p>
+            <p style="margin:0 0 18px;"><strong>${escapeHtml(safeUpdatedBy)}</strong> updated the <strong>Clearing Advance</strong> workflow.</p>
+            <div style="display:block;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;margin-bottom:18px;">
+              <div style="font-size:12px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">Workflow Summary</div>
+              <div style="font-size:14px;color:#0f172a;">
+                <strong>Shipment ID:</strong> ${escapeHtml(safeShipmentId)}<br/>
+                <strong>Container Serial No:</strong> ${escapeHtml(safeContainerSerialNo)}<br/>
+                <strong>Approval Stage:</strong> ${escapeHtml(safeApprovalStage)}
+              </div>
+            </div>
         ${
           normalizedDetails.length
             ? `
-              <ul style="margin: 0 0 16px 18px; padding: 0;">
-                ${normalizedDetails.map((line) => `<li>${line}</li>`).join('')}
-              </ul>
+              <div style="border:1px solid #dbe4ef;border-radius:12px;overflow:hidden;margin-bottom:18px;">
+                <div style="background:#eef2ff;padding:12px 14px;color:#1e293b;font-size:13px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;">${detailsTitle}</div>
+                <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;background:#ffffff;">
+                  ${normalizedDetails.map(detailItemHtml).join('')}
+                </table>
+              </div>
             `
             : ''
         }
-        ${safeShipmentUrl ? `<p><strong>Open in Portal:</strong> <a href="${safeShipmentUrl}">${safeShipmentUrl}</a></p>` : ''}
-        <p>Regards,<br/>Royal Horizon</p>
+            ${safeShipmentUrl ? `<p style="margin:0 0 18px;"><strong>Open in Portal:</strong> <a href="${escapeHtml(safeShipmentUrl)}" style="color:#2563eb;font-weight:700;">${escapeHtml(safeShipmentUrl)}</a></p>` : ''}
+            <p style="margin:0;">Regards,<br/>Royal Horizon</p>
+          </div>
+        </div>
       </div>
     `,
   });

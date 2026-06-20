@@ -126,6 +126,13 @@ const actualContainerSchema = new mongoose.Schema({
   municipalityStatusComment: { type: String },
   lockedLogisticsSections: [{ type: String }],
 
+  dpInvoiceDocumentUrl: { type: String },
+  dpInvoiceDocumentName: { type: String },
+  dpwCargoExtraction: { type: mongoose.Schema.Types.Mixed },
+  customClearanceRequired: { type: Boolean, default: false },
+  municipalityClearanceCertificateUrl: { type: String },
+  municipalityClearanceCertificateName: { type: String },
+
   // Customs Original Document Submission
   customsOriginalDocuments: {
     boeSubmissionDate: { type: Date },
@@ -288,7 +295,10 @@ const actualContainerSchema = new mongoose.Schema({
     bookingTime: { type: String },
     transportDate: { type: Date },
     transportTime: { type: String },
-    delayHours: { type: Number }
+    delayHours: { type: Number },
+    storageStartDate: { type: Date },
+    storageEndDate: { type: Date },
+    tokenReceivedDate: { type: Date }
   }],
   storageSplits: [{
     containerSerialNo: { type: String },

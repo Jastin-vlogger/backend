@@ -392,10 +392,34 @@ const getContainerSerialNo = (container) =>
 const getClearingAdvanceSummaryLines = (container) => {
   const rows = Array.isArray(container?.actual?.costSheetBookings) ? container.actual.costSheetBookings : [];
   const totalRequestAmount = rows.reduce((sum, row) => sum + (Number(row?.requestAmount) || 0), 0);
+  const actual = container?.actual || {};
+  const expectedContainers = [
+    ...(Array.isArray(actual?.extractedContainers)
+      ? actual.extractedContainers.map((item) => item?.containerNo || item?.container_no)
+      : []),
+    ...(Array.isArray(actual?.transportationBooked)
+      ? actual.transportationBooked.map((item) => item?.containerSerialNo)
+      : []),
+    ...(Array.isArray(actual?.storageAllocations)
+      ? actual.storageAllocations.map((item) => item?.containerSerialNo)
+      : []),
+    actual?.actualSerialNo,
+  ]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean)
+    .filter((value, index, list) => list.indexOf(value) === index);
+
   return [
-    `Line Items: ${rows.length}`,
-    `Total Request Amount: ${totalRequestAmount.toFixed(2)}`,
-    `Attachment: ${container?.actual?.costSheetBookingDocumentName || 'N/A'}`,
+    { label: 'Commercial Invoice', value: actual?.commercialInvoiceDocumentName || 'N/A', url: actual?.commercialInvoiceDocumentUrl || '' },
+    { label: 'BL No', value: actual?.BLNo || actual?.CLNo || 'N/A', url: actual?.blDocumentUrl || '' },
+    { label: 'Expected Containers', value: expectedContainers.length ? expectedContainers.join(', ') : 'N/A' },
+    {
+      label: 'DO Proforma Invoice',
+      value: actual?.costSheetBookingDocumentName || 'N/A',
+      url: actual?.costSheetBookingDocumentUrl || '',
+    },
+    { label: 'Line Items', value: String(rows.length) },
+    { label: 'Total Request Amount', value: totalRequestAmount.toFixed(2) },
   ];
 };
 
@@ -909,6 +933,7 @@ const formatReportCellValue = (value, key) => {
 const getDisplayStageName = (stage) => {
   const normalizedStage = String(stage || '').trim();
   if (normalizedStage === 'Planned Split') return 'Shipment Split';
+  if (normalizedStage === 'Port & Customs') return 'Port and Clearance';
   return normalizedStage;
 };
 
@@ -1139,6 +1164,12 @@ const getDashboardChildQuantity = (shipment, container, splitCount) => {
   return Number(getContainerReportNumber(actual.qtyMT, planned.qtyMT, shipment?.plannedQtyMT, splitCount) || 0);
 };
 
+const getDashboardChildFcl = (shipment, container, splitCount) => {
+  const actual = container?.actual || {};
+  const planned = container?.planned || {};
+  return Number(getContainerReportNumber(actual.FCL, planned.FCL, shipment?.fcl, splitCount) || 0);
+};
+
 const getDashboardPivotLabel = (shipment, groupBy) => {
   if (groupBy === 'item') {
     return shipment?.itemId?.description || shipment?.itemDescription || shipment?.item || 'Unknown Item';
@@ -1153,18 +1184,24 @@ const buildDashboardStatusPivot = (shipments, containerMap, groupBy = 'supplier'
   );
   const rowMap = new Map();
   const totals = Object.fromEntries(columns.map((column) => [column, 0]));
+  const totalsFCL = Object.fromEntries(columns.map((column) => [column, 0]));
 
-  const addValue = (label, column, qty) => {
-    if (!qty) return;
+  const addValue = (label, column, qty, fcl = 0) => {
+    if (!qty && !fcl) return;
     const row = rowMap.get(label) || {
       supplier: label,
       values: Object.fromEntries(columns.map((statusColumn) => [statusColumn, 0])),
+      valuesFCL: Object.fromEntries(columns.map((statusColumn) => [statusColumn, 0])),
       grandTotal: 0,
+      grandTotalFCL: 0,
     };
 
     row.values[column] += qty;
+    row.valuesFCL[column] += fcl;
     row.grandTotal += qty;
+    row.grandTotalFCL += fcl;
     totals[column] += qty;
+    totalsFCL[column] += fcl;
     rowMap.set(label, row);
   };
 
@@ -1174,14 +1211,24 @@ const buildDashboardStatusPivot = (shipments, containerMap, groupBy = 'supplier'
     const splitCount = getShipmentSplitCount(shipment, shipmentContainers);
 
     if (!shipmentContainers.length) {
-      addValue(label, REPORT_STATUS_ETD_UNCONFIRMED, Number(shipment?.plannedQtyMT || shipment?.totalOrderedQtyMT || 0));
+      addValue(
+        label,
+        REPORT_STATUS_ETD_UNCONFIRMED,
+        Number(shipment?.plannedQtyMT || shipment?.totalOrderedQtyMT || 0),
+        Number(shipment?.fcl || 0)
+      );
       return;
     }
 
     shipmentContainers.forEach((container) => {
       const baseColumn = getDashboardStatusColumn(shipment, container);
       const column = baseColumn === 'ETA yet to due' ? `${baseColumn} - ${currentMonth}` : baseColumn;
-      addValue(label, column, getDashboardChildQuantity(shipment, container, splitCount));
+      addValue(
+        label,
+        column,
+        getDashboardChildQuantity(shipment, container, splitCount),
+        getDashboardChildFcl(shipment, container, splitCount)
+      );
     });
   });
 
@@ -1189,23 +1236,31 @@ const buildDashboardStatusPivot = (shipments, containerMap, groupBy = 'supplier'
     .map((row) => ({
       ...row,
       grandTotal: Number(row.grandTotal.toFixed(2)),
+      grandTotalFCL: Number(row.grandTotalFCL.toFixed(2)),
       values: Object.fromEntries(Object.entries(row.values).map(([column, value]) => [column, Number(value.toFixed(2))])),
+      valuesFCL: Object.fromEntries(Object.entries(row.valuesFCL).map(([column, value]) => [column, Number(value.toFixed(2))])),
     }))
-    .filter((row) => row.grandTotal > 0)
+    .filter((row) => row.grandTotal > 0 || row.grandTotalFCL > 0)
     .sort((a, b) => a.supplier.localeCompare(b.supplier));
 
   const roundedTotals = Object.fromEntries(
     Object.entries(totals).map(([column, value]) => [column, Number(value.toFixed(2))])
   );
+  const roundedTotalsFCL = Object.fromEntries(
+    Object.entries(totalsFCL).map(([column, value]) => [column, Number(value.toFixed(2))])
+  );
 
   return {
     asOfDate: new Date(),
     valueLabel: 'Sum of Buying Qty (MT)',
+    fclLabel: 'Total FCL',
     rowLabel: groupBy === 'item' ? 'Item' : 'Supplier',
     columns,
     rows,
     totals: roundedTotals,
+    totalsFCL: roundedTotalsFCL,
     grandTotal: Number(Object.values(roundedTotals).reduce((sum, value) => sum + Number(value || 0), 0).toFixed(2)),
+    grandTotalFCL: Number(Object.values(roundedTotalsFCL).reduce((sum, value) => sum + Number(value || 0), 0).toFixed(2)),
   };
 };
 
@@ -2808,6 +2863,7 @@ exports.updateLogisticsDetails = async (req, res) => {
       sectionKey,
       bulkSectionKeys,
       transportationBooked,
+      transportationPartialSave,
       deliveryOrderDocumentUrl,
       deliveryOrderDate,
       tokenDocumentUrl,
@@ -2818,7 +2874,13 @@ exports.updateLogisticsDetails = async (req, res) => {
       municipalityClearanceDocumentUrl,
       municipalityClearanceDate,
       deliverySchedules,
-      warehouseSchedules
+      warehouseSchedules,
+      customClearanceRequired,
+      dpInvoiceDocumentUrl,
+      dpInvoiceDocumentName,
+      dpwCargoExtraction,
+      municipalityClearanceCertificateUrl,
+      municipalityClearanceCertificateName
     } = req.body;
 
     if (!container)
@@ -2832,6 +2894,7 @@ exports.updateLogisticsDetails = async (req, res) => {
     const parsedWarehouseSchedules = parseJsonField(warehouseSchedules);
     const parsedBulkSectionKeys = parseJsonField(bulkSectionKeys);
     const isBulkSave = Array.isArray(parsedBulkSectionKeys) && parsedBulkSectionKeys.length > 0;
+    const isTransportationPartialSave = String(transportationPartialSave) === 'true';
     const shouldProcessTransportation =
       sectionKey === 'transportation' || (isBulkSave && parsedBulkSectionKeys.includes('transportation'));
 
@@ -2849,8 +2912,8 @@ exports.updateLogisticsDetails = async (req, res) => {
     if (shipmentFreeRetentionDate !== undefined || computedFreeRetentionDate) {
       container.actual.shipmentFreeRetentionDate = computedFreeRetentionDate || toDateOrNull(shipmentFreeRetentionDate);
     }
-    if (portRetentionWithPenaltyDate !== undefined || computedMaximumRetentionDate) {
-      container.actual.portRetentionWithPenaltyDate = computedMaximumRetentionDate || toDateOrNull(portRetentionWithPenaltyDate);
+    if (portRetentionWithPenaltyDate !== undefined) {
+      container.actual.portRetentionWithPenaltyDate = toDateOrNull(portRetentionWithPenaltyDate);
     }
     if (maximumRetentionDate !== undefined || computedMaximumRetentionDate) {
       container.actual.maximumRetentionDate = computedMaximumRetentionDate || toDateOrNull(maximumRetentionDate);
@@ -2875,11 +2938,23 @@ exports.updateLogisticsDetails = async (req, res) => {
     if (municipalityStatusComment !== undefined) {
       container.actual.municipalityStatusComment = municipalityStatusComment || '';
     }
-    if (
-      String(container.actual.municipalityStatus || 'open').toLowerCase() === 'closed' &&
-      !String(container.actual.municipalityStatusComment || '').trim()
-    ) {
-      return res.status(400).json({ message: 'Municipality closed comment is required when status is closed' });
+    if (customClearanceRequired !== undefined) {
+      container.actual.customClearanceRequired = String(customClearanceRequired) === 'true';
+    }
+    if (dpwCargoExtraction !== undefined) {
+      container.actual.dpwCargoExtraction = parseJsonField(dpwCargoExtraction);
+    }
+    if (dpInvoiceDocumentUrl !== undefined) {
+      container.actual.dpInvoiceDocumentUrl = dpInvoiceDocumentUrl || '';
+    }
+    if (dpInvoiceDocumentName !== undefined) {
+      container.actual.dpInvoiceDocumentName = dpInvoiceDocumentName || '';
+    }
+    if (municipalityClearanceCertificateUrl !== undefined) {
+      container.actual.municipalityClearanceCertificateUrl = municipalityClearanceCertificateUrl || '';
+    }
+    if (municipalityClearanceCertificateName !== undefined) {
+      container.actual.municipalityClearanceCertificateName = municipalityClearanceCertificateName || '';
     }
 
     if (deliveryOrderDocumentUrl !== undefined) container.actual.deliveryOrderDocumentUrl = deliveryOrderDocumentUrl || '';
@@ -2899,6 +2974,8 @@ exports.updateLogisticsDetails = async (req, res) => {
     const boePassingDocument = files?.boePassingDocument?.[0];
     const customsClearanceDocument = files?.customsClearanceDocument?.[0];
     const municipalityDocument = files?.municipalityDocument?.[0];
+    const dpInvoiceDocument = files?.dpInvoiceDocument?.[0];
+    const municipalityClearanceCertificate = files?.municipalityClearanceCertificate?.[0];
     const customsDocBoe = files?.customsDocBoe?.[0];
     const customsDocDo = files?.customsDocDo?.[0];
     const customsDocBl = files?.customsDocBl?.[0];
@@ -2935,6 +3012,16 @@ exports.updateLogisticsDetails = async (req, res) => {
       container.actual.municipalityDocumentUrl = uploaded.url;
       container.actual.municipalityDocumentName = uploaded.fileName;
     }
+    if (dpInvoiceDocument) {
+      const uploaded = await uploadBufferToS3(dpInvoiceDocument, 'shipments/logistics/dp-invoice');
+      container.actual.dpInvoiceDocumentUrl = uploaded.url;
+      container.actual.dpInvoiceDocumentName = uploaded.fileName;
+    }
+    if (municipalityClearanceCertificate) {
+      const uploaded = await uploadBufferToS3(municipalityClearanceCertificate, 'shipments/logistics/municipality-certificate');
+      container.actual.municipalityClearanceCertificateUrl = uploaded.url;
+      container.actual.municipalityClearanceCertificateName = uploaded.fileName;
+    }
     if (!container.actual.customsOriginalDocuments) {
       container.actual.customsOriginalDocuments = {};
     }
@@ -2964,33 +3051,46 @@ exports.updateLogisticsDetails = async (req, res) => {
       container.actual.customsOriginalDocuments.packingListDocumentName = uploaded.fileName;
     }
 
+    const shouldValidateBoePassing =
+      sectionKey === 'boePassingDate' || (isBulkSave && parsedBulkSectionKeys.includes('boePassingDate'));
+    if (shouldValidateBoePassing) {
+      if (!container.actual.dpInvoiceDocumentUrl) {
+        return res.status(400).json({
+          message: 'DP Invoice document is required',
+        });
+      }
+    }
+
     const shouldValidateCustomsClearance =
       sectionKey === 'customsClearance' || (isBulkSave && parsedBulkSectionKeys.includes('customsClearance'));
-    if (shouldValidateCustomsClearance) {
-      const customsDocs = container.actual.customsOriginalDocuments || {};
-      const missingCustomsDocs = [
-        !customsDocs.boeDocumentUrl && 'BOE Copy',
-        !customsDocs.doDocumentUrl && 'DO Copy',
-        !customsDocs.blOriginalDocumentUrl && 'BL',
-        !customsDocs.invoiceDocumentUrl && 'Origin Invoice',
-        !customsDocs.packingListDocumentUrl && 'Packing List',
-      ].filter(Boolean);
-
-      if (missingCustomsDocs.length) {
+    if (shouldValidateCustomsClearance && container.actual.customClearanceRequired) {
+      if (!container.actual.customsClearanceDate) {
         return res.status(400).json({
-          message: `Please upload: ${missingCustomsDocs.join(', ')}`,
+          message: 'Customs Clearance Date is required',
         });
       }
     }
 
     if (shouldProcessTransportation && Array.isArray(parsedTransportationBooked)) {
-      const missingTransportCompany = parsedTransportationBooked.some(
+      const transportationRowsToValidate = isTransportationPartialSave
+        ? parsedTransportationBooked.filter((row) => row?.bulkSelected === true)
+        : parsedTransportationBooked;
+
+      if (isTransportationPartialSave && transportationRowsToValidate.length === 0) {
+        return res.status(400).json({
+          message: 'Select at least one transportation row to save',
+        });
+      }
+
+      const missingTransportCompany = transportationRowsToValidate.some(
         (row) => !row.transportCompanyName || String(row.transportCompanyName).trim() === ''
       );
 
       if (missingTransportCompany) {
         return res.status(400).json({
-          message: 'Transport company name is required for all transportation bookings',
+          message: isTransportationPartialSave
+            ? 'Transport company name is required for selected transportation bookings'
+            : 'Transport company name is required for all transportation bookings',
         });
       }
 
@@ -3002,7 +3102,10 @@ exports.updateLogisticsDetails = async (req, res) => {
         bookingTime: toTimeString(row.bookingTime),
         transportDate: toDateOrNull(row.transportDate),
         transportTime: toTimeString(row.transportTime),
-        delayHours: Number(row.delayHours ?? 0) || 0
+        delayHours: Number(row.delayHours ?? 0) || 0,
+        storageStartDate: toDateOrNull(row.storageStartDate),
+        storageEndDate: toDateOrNull(row.storageEndDate),
+        tokenReceivedDate: toDateOrNull(row.tokenReceivedDate)
       }));
     }
 
@@ -3011,8 +3114,12 @@ exports.updateLogisticsDetails = async (req, res) => {
         const matchingStorage = (container.actual.storageSplits || []).find(
           (split) => split.containerSerialNo === row.containerSerialNo
         );
+        const plain = toPlainObject(row);
         return {
-          ...toPlainObject(row),
+          ...plain,
+          storageStartDate: toDateOrNull(plain.storageStartDate),
+          storageEndDate: toDateOrNull(plain.storageEndDate),
+          tokenReceivedDate: toDateOrNull(plain.tokenReceivedDate),
           delayHours: calculateDelayHours(
             row.transportDate,
             row.transportTime,
@@ -3055,7 +3162,7 @@ exports.updateLogisticsDetails = async (req, res) => {
           container.actual.lockedLogisticsSections.push(key);
         }
       });
-    } else if (sectionKey) {
+    } else if (sectionKey && !(sectionKey === 'transportation' && isTransportationPartialSave)) {
       if (!Array.isArray(container.actual.lockedLogisticsSections)) {
         container.actual.lockedLogisticsSections = [];
       }
@@ -3066,10 +3173,10 @@ exports.updateLogisticsDetails = async (req, res) => {
 
     await container.save();
 
-    // Advance shipment stage to Port & Customs
+    // Advance shipment stage to Port and Clearance while keeping the stored enum value backward-compatible.
     const shipmentForLogistics = await Shipment.findById(container.shipmentId);
     if (shipmentForLogistics) {
-      console.log('📈 [Logistics] Advancing shipment stage to "Port & Customs"');
+      console.log('📈 [Logistics] Advancing shipment stage to "Port and Clearance"');
       advanceShipmentStage(shipmentForLogistics, 'Port & Customs');
       await shipmentForLogistics.save();
       fireAndForgetWorkflowEmail({
@@ -3078,10 +3185,10 @@ exports.updateLogisticsDetails = async (req, res) => {
         container,
         sectionLabel:
           isBulkSave
-            ? 'Port & Customs - Bulk Save'
+            ? 'Port and Clearance - Bulk Save'
             : sectionKey
-              ? `Port & Customs - ${sectionKey}`
-              : 'Port & Customs',
+              ? `Port and Clearance - ${sectionKey}`
+              : 'Port and Clearance',
         actor: req.user,
       });
     }
@@ -3726,7 +3833,7 @@ exports.approveClearingAdvance = async (req, res) => {
 
       if (shipment) {
         notifyClearingAdvanceRolesByEmail({
-          roles: ['Logistic', 'FAS'],
+          roles: ['Logistic', 'FAS', 'warehouse'],
           shipment,
           container,
           actor: req.user,
@@ -5993,6 +6100,77 @@ exports.extractArrivalNotice = async (req, res) => {
   }
 };
 
+const normalizeDpwCargoExtraction = (raw = {}, fallbackError = null) => {
+  const rawContainers = Array.isArray(raw?.containers) ? raw.containers : [];
+  const containers = rawContainers.map((item) => ({
+    container: item?.container || item?.containerNo || item?.container_no || null,
+    from: item?.from ?? item?.from_date ?? item?.fromDate ?? null,
+    to: item?.to ?? item?.to_date ?? item?.toDate ?? null,
+  }));
+  const totalContainers = Number(raw?.totalContainers ?? raw?.total_containers);
+
+  return {
+    date: raw?.date || null,
+    receiptNo: raw?.receiptNo || raw?.receipt_no || null,
+    pagesProcessed: raw?.pagesProcessed ?? raw?.pages_processed ?? null,
+    totalContainers: Number.isFinite(totalContainers) ? totalContainers : containers.length,
+    containers,
+    metadata: raw?.metadata || null,
+    error: typeof raw?.error === 'string' ? raw.error : (fallbackError || null),
+  };
+};
+
+exports.extractDpwCargo = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        message: 'File is required',
+        ...normalizeDpwCargoExtraction({}, 'File is required'),
+      });
+    }
+
+    const baseUrl = (process.env.PYTHON_EXTRACTION_API_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
+    const endpoint = `${baseUrl}/dpw-cargo-extractor`;
+    const FormData = globalThis.FormData;
+    const form = new FormData();
+    const blob = new Blob([req.file.buffer], { type: req.file.mimetype || 'application/octet-stream' });
+    form.append('file', blob, req.file.originalname || 'dpw-cargo-receipt');
+    if (process.env.DPW_CARGO_MAX_PAGES) {
+      form.append('max_pages', String(process.env.DPW_CARGO_MAX_PAGES));
+    }
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      body: form
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      let errJson;
+      try { errJson = JSON.parse(errText); } catch { errJson = { detail: errText }; }
+      const message = errJson.detail || errJson.message || errJson.error || `Cargo extraction service returned ${response.status}`;
+      return res.status(response.status).json({
+        message,
+        ...normalizeDpwCargoExtraction(errJson, message),
+        serviceError: errJson,
+      });
+    }
+
+    const pythonRes = await response.json();
+    return res.status(200).json(normalizeDpwCargoExtraction(pythonRes));
+  } catch (err) {
+    console.error('Extract DPW cargo error:', err);
+    const isNetwork = err.cause?.code === 'ECONNREFUSED' || err.code === 'ECONNREFUSED';
+    const message = isNetwork
+      ? 'Cargo extraction service unavailable. Check PYTHON_EXTRACTION_API_URL and that the Python service is running.'
+      : (err.message || 'Server error');
+    return res.status(500).json({
+      message,
+      ...normalizeDpwCargoExtraction({}, message),
+    });
+  }
+};
+
 // Update supplier email on a shipment
 exports.updateSupplierEmail = async (req, res) => {
   try {
@@ -6183,7 +6361,10 @@ exports.bulkSaveTransportationArranged = async (req, res) => {
           bookingTime: toTimeString(booking.bookingTime),
           transportDate: toDateOrNull(booking.transportDate),
           transportTime: toTimeString(booking.transportTime),
-          delayHours: Number(booking.delayHours) || 0
+          delayHours: Number(booking.delayHours) || 0,
+          storageStartDate: toDateOrNull(booking.storageStartDate),
+          storageEndDate: toDateOrNull(booking.storageEndDate),
+          tokenReceivedDate: toDateOrNull(booking.tokenReceivedDate)
         }));
       }
 
@@ -6213,6 +6394,8 @@ exports.bulkSaveTransportationArranged = async (req, res) => {
 if (process.env.NODE_ENV === 'test') {
   exports.__test = {
     buildDashboardRStatusMetrics,
+    buildDashboardStatusPivot,
+    normalizeDpwCargoExtraction,
     applyCommercialInvoiceDocumentUpload,
   };
 }
