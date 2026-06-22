@@ -51,6 +51,43 @@ const storageArrivalApprovalStateSchema = new mongoose.Schema({
   warehouseManagerApprovedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
 }, { _id: false });
 
+const clearingAdvancePaymentDetailsSchema = new mongoose.Schema({
+  chequeNo: { type: String, default: '' },
+  chequeDate: { type: Date, default: null },
+  paymentVoucherNo: { type: String, default: '' },
+  transactionId: { type: String, default: '' },
+}, { _id: false });
+
+const additionalClearingAdvanceRequestSchema = new mongoose.Schema({
+  title: { type: String, default: '' },
+  comment: { type: String, default: '' },
+  requestAmount: { type: Number, default: 0 },
+  attachmentDocumentUrl: { type: String, default: '' },
+  attachmentDocumentName: { type: String, default: '' },
+  status: {
+    type: String,
+    enum: ['pending_fas', 'approved'],
+    default: 'pending_fas',
+  },
+  submittedAt: { type: Date, default: null },
+  submittedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  fasApprovedAt: { type: Date, default: null },
+  fasApprovedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+}, { timestamps: true });
+
+const storageAllocationDecisionSchema = new mongoose.Schema({
+  similarItems: { type: Boolean, default: true },
+  splitRequired: { type: Boolean, default: false },
+  splitQuantity: { type: Number, default: 0 },
+}, { _id: false });
+
+const storageAllocationSplitSchema = new mongoose.Schema({
+  sn: { type: Number },
+  itemName: { type: String, default: '' },
+  quantity: { type: Number, default: 0 },
+  warehouse: { type: String, default: '' },
+}, { _id: false });
+
 const actualContainerSchema = new mongoose.Schema({
   actualSerialNo: { type: String },
   commercialInvoiceNo: { type: String },
@@ -67,6 +104,7 @@ const actualContainerSchema = new mongoose.Schema({
   updatedETD: { type: Date },
   updatedETA: { type: Date },
   CLNo: { type: String },
+  blFirstSavedAt: { type: Date, default: null },
   // FAS fields
   DHL: { type: String },
   courierTrackNo: { type: String },
@@ -81,6 +119,8 @@ const actualContainerSchema = new mongoose.Schema({
   bankAdvanceSubmittedOn: { type: Date },
   docToBeReleasedOn: { type: Date },
   inwardCollectionAdviceDate: { type: Date },
+  inwardCollectionAdviceReceivedAt: { type: Date },
+  inwardCollectionAdviceSubmittedAt: { type: Date },
   inwardCollectionAdviceDocumentUrl: { type: String },
   inwardCollectionAdviceDocumentName: { type: String },
   murabahaContractReleasedDate: { type: Date },
@@ -257,6 +297,15 @@ const actualContainerSchema = new mongoose.Schema({
     attachmentDocumentUrl: { type: String },
     attachmentDocumentName: { type: String }
   }],
+  clearingAdvancePaymentDetails: {
+    type: clearingAdvancePaymentDetailsSchema,
+    default: () => ({
+      chequeNo: '',
+      chequeDate: null,
+      paymentVoucherNo: '',
+      transactionId: '',
+    }),
+  },
   clearingAdvanceApproval: {
     type: approvalStateSchema,
     default: () => ({
@@ -269,6 +318,7 @@ const actualContainerSchema = new mongoose.Schema({
       fasManagerApprovedBy: null,
     }),
   },
+  additionalClearingAdvanceRequests: [additionalClearingAdvanceRequestSchema],
   storageAllocations: [{
     sn: { type: Number },
     containerSerialNo: { type: String },
@@ -276,6 +326,15 @@ const actualContainerSchema = new mongoose.Schema({
     warehouse: { type: String },
     storageAvailability: { type: Number }
   }],
+  storageAllocationDecision: {
+    type: storageAllocationDecisionSchema,
+    default: () => ({
+      similarItems: true,
+      splitRequired: false,
+      splitQuantity: 0,
+    }),
+  },
+  storageAllocationSplits: [storageAllocationSplitSchema],
   storageAllocationApproval: {
     type: storageAllocationApprovalStateSchema,
     default: () => ({
@@ -372,6 +431,16 @@ const actualContainerSchema = new mongoose.Schema({
     attachmentDocumentUrl: { type: String },
     attachmentDocumentName: { type: String }
   }],
+  paymentAllocationApproval: {
+    type: paymentCostingApprovalStateSchema,
+    default: () => ({
+      status: 'draft',
+      submittedAt: null,
+      submittedBy: null,
+      fasManagerApprovedAt: null,
+      fasManagerApprovedBy: null,
+    }),
+  },
   paymentCostings: [{
     sn: { type: Number },
     description: { type: String },

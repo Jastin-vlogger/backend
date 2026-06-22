@@ -7,6 +7,7 @@ const { __test } = require('../src/controller/shipment.controller');
 const { buildDashboardRStatusMetrics, buildDashboardStatusPivot, normalizeDpwCargoExtraction } = __test;
 
 const metricValue = (metrics, label) => metrics.find((metric) => metric.label === label)?.value;
+const metricLabels = (metrics) => metrics.map((metric) => metric.label);
 
 const buildMap = (entries = []) => new Map(entries.map(([shipmentId, containers]) => [shipmentId, containers]));
 
@@ -22,11 +23,20 @@ const runEntryStageCountsAsEtdUnconfirmedTest = () => {
 
   const metrics = buildDashboardRStatusMetrics(shipments, buildMap());
 
+  assert.deepEqual(metricLabels(metrics), [
+    'At The Port',
+    'On Transit',
+    'ETD Yet To Due',
+    'ETD Yet To Be Confirmed',
+    'Total LPO',
+    'Total Shipments',
+    'Open LPO',
+    'Completed LPO',
+    'Delivered WH',
+  ]);
   assert.equal(metricValue(metrics, 'Total LPO'), 1);
-  assert.equal(metricValue(metrics, 'Open LPO'), 1);
-  assert.equal(metricValue(metrics, 'Total Shipments'), 1);
   assert.equal(metricValue(metrics, 'ETD Yet To Be Confirmed'), 1);
-  assert.equal(metricValue(metrics, 'ETA Yet To Due'), 0);
+  assert.equal(metricValue(metrics, 'ETD Yet To Due'), 0);
 };
 
 const runPlannedStageWithoutSplitDoesNotCountAsEntryTest = () => {
@@ -42,8 +52,6 @@ const runPlannedStageWithoutSplitDoesNotCountAsEntryTest = () => {
   const metrics = buildDashboardRStatusMetrics(shipments, buildMap());
 
   assert.equal(metricValue(metrics, 'Total LPO'), 1);
-  assert.equal(metricValue(metrics, 'Open LPO'), 1);
-  assert.equal(metricValue(metrics, 'Total Shipments'), 0);
   assert.equal(metricValue(metrics, 'ETD Yet To Be Confirmed'), 0);
 };
 
@@ -68,9 +76,8 @@ const runEntryStageWithExpectedDateStillCountsAsEtdUnconfirmedTest = () => {
     ]],
   ]));
 
-  assert.equal(metricValue(metrics, 'Total Shipments'), 1);
   assert.equal(metricValue(metrics, 'ETD Yet To Be Confirmed'), 1);
-  assert.equal(metricValue(metrics, 'ETA Yet To Due'), 0);
+  assert.equal(metricValue(metrics, 'ETD Yet To Due'), 0);
 };
 
 const runPlannedStageWithScheduledDateCountsAsEtaDueTest = () => {
@@ -94,9 +101,8 @@ const runPlannedStageWithScheduledDateCountsAsEtaDueTest = () => {
     ]],
   ]));
 
-  assert.equal(metricValue(metrics, 'Total Shipments'), 1);
   assert.equal(metricValue(metrics, 'ETD Yet To Be Confirmed'), 0);
-  assert.equal(metricValue(metrics, 'ETA Yet To Due'), 1);
+  assert.equal(metricValue(metrics, 'ETD Yet To Due'), 1);
 };
 
 const runMissingSplitCountStillCountsAsEtdUnconfirmedTest = () => {
@@ -110,7 +116,6 @@ const runMissingSplitCountStillCountsAsEtdUnconfirmedTest = () => {
 
   const metrics = buildDashboardRStatusMetrics(shipments, buildMap());
 
-  assert.equal(metricValue(metrics, 'Total Shipments'), 3);
   assert.equal(metricValue(metrics, 'ETD Yet To Be Confirmed'), 3);
 };
 
@@ -144,7 +149,7 @@ const runStatusPivotIncludesFclTotalsTest = () => {
 
   assert.equal(pivot.grandTotal, 40);
   assert.equal(pivot.grandTotalFCL, 4);
-  const unconfirmedColumn = pivot.columns.find((column) => column.toLowerCase().includes('etd yet'));
+  const unconfirmedColumn = pivot.columns.find((column) => column.toLowerCase().includes('confirmed'));
   assert.equal(pivot.totalsFCL[unconfirmedColumn], 4);
   assert.equal(pivot.rows[0].grandTotalFCL, 4);
 };

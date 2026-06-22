@@ -151,6 +151,26 @@ router.patch(
   controller.approveClearingAdvance
 );
 
+router.post(
+  '/container/bl-details/:id/clearing-advance/additional-requests',
+  authMiddleware,
+  authorize({ tag: 'any-active' }),
+  (req, res, next) => {
+    upload.any()(req, res, (err) => {
+      if (err) return res.status(400).json({ message: err.message || 'Invalid file upload' });
+      next();
+    });
+  },
+  controller.submitAdditionalClearingAdvanceRequest
+);
+
+router.patch(
+  '/container/bl-details/:id/clearing-advance/additional-requests/:requestId/approve',
+  authMiddleware,
+  authorize({ tag: 'any-active' }),
+  controller.approveAdditionalClearingAdvanceRequest
+);
+
 router.patch(
   '/container/bl-details/:id/storage-allocations/approve',
   authMiddleware,
@@ -277,6 +297,13 @@ router.patch(
   authMiddleware,
   authorize({ tag: 'any-active' }),
   controller.approvePaymentCosting
+);
+
+router.patch(
+  '/container/payment-allocation/:id/approve',
+  authMiddleware,
+  authorize({ tag: 'any-active' }),
+  controller.approvePaymentAllocation
 );
 
 // GRN — Purchase team only

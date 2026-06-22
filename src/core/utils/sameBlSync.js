@@ -196,11 +196,14 @@ const SAME_BL_CLEARING_ADVANCE_FIELDS = [
   'costSheetBookings',
   'costSheetBookingDocumentUrl',
   'costSheetBookingDocumentName',
+  'clearingAdvancePaymentDetails',
   'clearingAdvanceApproval',
+  'additionalClearingAdvanceRequests',
 ];
 
 const SAME_BL_PAYMENT_ALLOCATION_FIELDS = [
   'paymentAllocations',
+  'paymentAllocationApproval',
 ];
 
 const SAME_BL_DOCUMENT_TRACKER_FIELDS = [
@@ -214,6 +217,8 @@ const SAME_BL_DOCUMENT_TRACKER_FIELDS = [
   'bankName',
   'docArrivalNotes',
   'inwardCollectionAdviceDate',
+  'inwardCollectionAdviceReceivedAt',
+  'inwardCollectionAdviceSubmittedAt',
   'inwardCollectionAdviceDocumentUrl',
   'inwardCollectionAdviceDocumentName',
   'murabahaContractReleasedDate',

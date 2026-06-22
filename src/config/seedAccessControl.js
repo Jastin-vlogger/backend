@@ -29,7 +29,7 @@ const DASHBOARD_PERMISSION_TEMPLATES = [
   { key: 'dashboard.snapshot.open_lpo.view', resource: 'dashboard', screen: 'dashboard', tab: 'status_snapshot', type: 'action', action: 'snapshot_open_lpo_view', label: 'View Open LPO Snapshot Card', sortOrder: 11.03 },
   { key: 'dashboard.snapshot.completed_lpo.view', resource: 'dashboard', screen: 'dashboard', tab: 'status_snapshot', type: 'action', action: 'snapshot_completed_lpo_view', label: 'View Completed LPO Snapshot Card', sortOrder: 11.04 },
   { key: 'dashboard.snapshot.etd_unconfirmed.view', resource: 'dashboard', screen: 'dashboard', tab: 'status_snapshot', type: 'action', action: 'snapshot_etd_unconfirmed_view', label: 'View ETD Yet To Be Confirmed Snapshot Card', sortOrder: 11.05 },
-  { key: 'dashboard.snapshot.eta_due.view', resource: 'dashboard', screen: 'dashboard', tab: 'status_snapshot', type: 'action', action: 'snapshot_eta_due_view', label: 'View ETA Yet To Due Snapshot Card', sortOrder: 11.06 },
+  { key: 'dashboard.snapshot.eta_due.view', resource: 'dashboard', screen: 'dashboard', tab: 'status_snapshot', type: 'action', action: 'snapshot_eta_due_view', label: 'View ETD Yet To Due Snapshot Card', sortOrder: 11.06 },
   { key: 'dashboard.snapshot.on_transit.view', resource: 'dashboard', screen: 'dashboard', tab: 'status_snapshot', type: 'action', action: 'snapshot_on_transit_view', label: 'View On Transit Snapshot Card', sortOrder: 11.07 },
   { key: 'dashboard.snapshot.at_port.view', resource: 'dashboard', screen: 'dashboard', tab: 'status_snapshot', type: 'action', action: 'snapshot_at_port_view', label: 'View At The Port Snapshot Card', sortOrder: 11.08 },
   { key: 'dashboard.snapshot.delivered_wh.view', resource: 'dashboard', screen: 'dashboard', tab: 'status_snapshot', type: 'action', action: 'snapshot_delivered_wh_view', label: 'View Delivered WH Snapshot Card', sortOrder: 11.09 },
@@ -170,7 +170,7 @@ const SHIPMENT_PERMISSION_TEMPLATES = [
   // Actions
   { key: 'shipment.tab.payment_costing.generate_report', resource: 'shipment', screen: 'shipment_tracker', tab: 'payment_costing', type: 'action', action: 'generate_report', label: 'Generate Payment Report', sortOrder: 187 },
   // Fields
-  { key: 'shipment.field.payment_costing.paidAmount.edit', resource: 'shipment', screen: 'shipment_tracker', tab: 'payment_costing', field: 'paymentAllocations.paidAmount', type: 'field', action: 'edit', label: 'Edit Paid Amount', sortOrder: 188 },
+  { key: 'shipment.field.payment_costing.paidAmount.edit', resource: 'shipment', screen: 'shipment_tracker', tab: 'payment_costing', field: 'paymentAllocations.paidAmount', type: 'field', action: 'edit', label: 'Edit Received Amount', sortOrder: 188 },
 
   // ─── Reports Screen ───────────────────────────────────────────────────────
   { key: 'shipment.action.reports.view', resource: 'shipment', screen: 'shipment_reports', type: 'screen', action: 'view', label: 'View Shipment Reports', sortOrder: 280 },
