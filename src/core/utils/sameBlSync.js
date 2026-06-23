@@ -196,11 +196,14 @@ const SAME_BL_CLEARING_ADVANCE_FIELDS = [
   'costSheetBookings',
   'costSheetBookingDocumentUrl',
   'costSheetBookingDocumentName',
+  'clearingAdvancePaymentDetails',
   'clearingAdvanceApproval',
+  'additionalClearingAdvanceRequests',
 ];
 
 const SAME_BL_PAYMENT_ALLOCATION_FIELDS = [
   'paymentAllocations',
+  'paymentAllocationApproval',
 ];
 
 const SAME_BL_DOCUMENT_TRACKER_FIELDS = [
@@ -214,6 +217,8 @@ const SAME_BL_DOCUMENT_TRACKER_FIELDS = [
   'bankName',
   'docArrivalNotes',
   'inwardCollectionAdviceDate',
+  'inwardCollectionAdviceReceivedAt',
+  'inwardCollectionAdviceSubmittedAt',
   'inwardCollectionAdviceDocumentUrl',
   'inwardCollectionAdviceDocumentName',
   'murabahaContractReleasedDate',
@@ -228,6 +233,64 @@ const SAME_BL_DOCUMENT_TRACKER_FIELDS = [
   'bankAdvanceApprovedDocumentUrl',
   'bankAdvanceSubmittedOn',
   'docToBeReleasedOn',
+  'bankSubmittedToBank',
+  'daSignedDocumentUrl',
+  'daSignedDocumentName',
+  'dnSignedDocumentUrl',
+  'dnSignedDocumentName',
+  'skipMurabaha',
+  'murabahaContractDocumentUrl',
+  'murabahaContractDocumentName',
+  'daSubmittedToBank',
+  'murabahaSubmittedToBank',
+  'submissionPackageDocumentUrl',
+  'submissionPackageDocumentName',
+];
+
+const SAME_BL_PORT_CUSTOMS_FIELDS = [
+  'commercialDocumentReceivedDate',
+  'commercialDocumentDocumentUrl',
+  'commercialDocumentDocumentName',
+  'arrivalOn',
+  'arrivalNoticeDate',
+  'arrivalNoticeDocumentUrl',
+  'arrivalNoticeDocumentName',
+  'freeDetentionDays',
+  'freeStorageDays',
+  'clearanceRemarks',
+  'doReleasedDate',
+  'doReleasedDocumentUrl',
+  'doReleasedDocumentName',
+  'doReleasedRemarks',
+  'doRemarks',
+  'boePassingDate',
+  'boePassingDocumentUrl',
+  'boePassingDocumentName',
+  'boePassingRemarks',
+  'boeNumber',
+  'customerInspectionRequired',
+  'municipalityDate',
+  'municipalityDocumentUrl',
+  'municipalityDocumentName',
+  'municipalityRemarks',
+  'municipalityRefNo',
+  'municipalityInspectionDate',
+  'municipalityStatus',
+  'municipalityReleasedDate',
+  'municipalityResponseRemarks',
+  'municipalityComments',
+  'customerInspectionDate',
+  'customerInspectionDocumentUrl',
+  'customerInspectionDocumentName',
+  'customerInspectionStatus',
+  'customerInspectionComments',
+  'additionalDocuments',
+  'transportationTransactions',
+];
+
+const SAME_BL_STORAGE_ALLOCATION_FIELDS = [
+  'storageAllocationDecision',
+  'storageAllocations',
 ];
 
 const SAME_BL_ACTUAL_BL_DOCUMENT_FIELDS = [
@@ -240,6 +303,7 @@ const SAME_BL_ACTUAL_BL_DOCUMENT_FIELDS = [
 const SAME_BL_INHERIT_FIELDS = [
   ...SAME_BL_CLEARING_ADVANCE_FIELDS,
   ...SAME_BL_PAYMENT_ALLOCATION_FIELDS,
+  ...SAME_BL_STORAGE_ALLOCATION_FIELDS,
 ];
 
 module.exports = {
@@ -256,6 +320,8 @@ module.exports = {
   SAME_BL_CLEARING_ADVANCE_FIELDS,
   SAME_BL_PAYMENT_ALLOCATION_FIELDS,
   SAME_BL_DOCUMENT_TRACKER_FIELDS,
+  SAME_BL_PORT_CUSTOMS_FIELDS,
+  SAME_BL_STORAGE_ALLOCATION_FIELDS,
   SAME_BL_ACTUAL_BL_DOCUMENT_FIELDS,
   SAME_BL_INHERIT_FIELDS,
 };

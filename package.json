@@ -5,7 +5,8 @@
     "dev": "nodemon src/server.js",
     "test:same-bl-sync": "node scripts/testSameBlSync.js",
     "test:dashboard-metrics": "node scripts/testDashboardMetrics.js",
-    "test:bl-commercial-invoice": "node scripts/testBlDetailsCommercialInvoice.js"
+    "test:bl-commercial-invoice": "node scripts/testBlDetailsCommercialInvoice.js",
+    "test:storage-split-e2e": "node scripts/testStorageSplitE2e.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.569.0",

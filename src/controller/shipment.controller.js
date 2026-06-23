@@ -224,6 +224,8 @@ const buildPaymentCostingPendingApproval = (user) => ({
   fasManagerApprovedBy: null,
 });
 
+const buildPaymentAllocationPendingApproval = (user) => buildPaymentCostingPendingApproval(user);
+
 const buildStorageAllocationPendingApproval = (user) => ({
   status: STORAGE_ALLOCATION_APPROVAL_STATUSES.pendingWarehouseManager,
   submittedAt: new Date(),
@@ -255,6 +257,16 @@ const hasSavedPaymentCostingData = (container) => {
     String(row?.refBillNo || '').trim().length > 0 ||
     String(row?.refBillVendor || '').trim().length > 0 ||
     !!row?.refBillDate
+  );
+};
+
+const hasSavedPaymentAllocationData = (container) => {
+  const rows = container?.actual?.paymentAllocations || [];
+  return Array.isArray(rows) && rows.some((row) =>
+    Number(row?.requestAmount || 0) > 0 ||
+    Number(row?.paidAmount || 0) > 0 ||
+    String(row?.reference || '').trim().length > 0 ||
+    String(row?.attachmentDocumentUrl || '').trim().length > 0
   );
 };
 
@@ -307,12 +319,19 @@ const ensureBlRowDefinitionsSeeded = async () => {
 };
 
 const hasSavedStorageAllocationData = (container) => {
-  const rows = container?.actual?.storageAllocations || [];
-  return Array.isArray(rows) && rows.some((row) =>
+  const legacyRows = container?.actual?.storageAllocations || [];
+  const splitRows = container?.actual?.storageAllocationSplits || [];
+  const hasLegacyRows = Array.isArray(legacyRows) && legacyRows.some((row) =>
     String(row?.containerSerialNo || '').trim().length > 0 ||
     Number(row?.bags || 0) > 0 ||
     String(row?.warehouse || '').trim().length > 0
   );
+  const hasSplitRows = Array.isArray(splitRows) && splitRows.some((row) =>
+    String(row?.itemName || '').trim().length > 0 ||
+    Number(row?.quantity || 0) > 0 ||
+    String(row?.warehouse || '').trim().length > 0
+  );
+  return hasLegacyRows || hasSplitRows;
 };
 
 const hasSavedStorageArrivalData = (container) => {
@@ -393,6 +412,7 @@ const getClearingAdvanceSummaryLines = (container) => {
   const rows = Array.isArray(container?.actual?.costSheetBookings) ? container.actual.costSheetBookings : [];
   const totalRequestAmount = rows.reduce((sum, row) => sum + (Number(row?.requestAmount) || 0), 0);
   const actual = container?.actual || {};
+  const paymentDetails = actual?.clearingAdvancePaymentDetails || {};
   const expectedContainers = [
     ...(Array.isArray(actual?.extractedContainers)
       ? actual.extractedContainers.map((item) => item?.containerNo || item?.container_no)
@@ -420,6 +440,10 @@ const getClearingAdvanceSummaryLines = (container) => {
     },
     { label: 'Line Items', value: String(rows.length) },
     { label: 'Total Request Amount', value: totalRequestAmount.toFixed(2) },
+    { label: 'Cheque No', value: paymentDetails?.chequeNo || 'N/A' },
+    { label: 'Cheque Date', value: formatDateValue(paymentDetails?.chequeDate) || 'N/A' },
+    { label: 'Payment Voucher No', value: paymentDetails?.paymentVoucherNo || 'N/A' },
+    ...(paymentDetails?.transactionId ? [{ label: 'Transaction ID', value: paymentDetails.transactionId }] : []),
   ];
 };
 
@@ -430,7 +454,8 @@ const getPaymentAllocationSummaryLines = (container) => {
   return [
     `Line Items: ${rows.length}`,
     `Total Request Amount: ${totalRequestAmount.toFixed(2)}`,
-    `Total Paid Amount: ${totalPaidAmount.toFixed(2)}`,
+    `Total Received Amount: ${totalPaidAmount.toFixed(2)}`,
+    `Difference Amount: ${(totalPaidAmount - totalRequestAmount).toFixed(2)}`,
   ];
 };
 
@@ -865,6 +890,7 @@ const notifyPaymentCostingRolesByEmail = async ({
 };
 
 const REPORT_STATUS_ETD_UNCONFIRMED = 'ETD yet to be confirmed';
+const REPORT_STATUS_ETD_DUE = 'ETD yet to Due';
 
 const SHIPMENT_REPORT_COLUMNS = [
   { header: 'S/N', key: 'sn', width: 8 },
@@ -1100,7 +1126,7 @@ const getComputedContainerShipmentStatus = (shipment, container) => {
 
   const scheduledEtd = toDateOrNull(container?.planned?.etd || shipment?.plannedETD);
   if (scheduledEtd) {
-    return 'ETA yet to due';
+    return REPORT_STATUS_ETD_DUE;
   }
 
   const fallback = getDisplayStageName(shipment?.currentStage || 'Shipment Entry');
@@ -1127,12 +1153,12 @@ const getComputedShipmentStatus = (shipment, shipmentContainers = []) => {
     .sort((a, b) => a.getTime() - b.getTime());
 
   if (pendingScheduledDates.length) {
-    return 'ETA yet to due';
+    return REPORT_STATUS_ETD_DUE;
   }
 
   const shipmentLevelEtd = toDateOrNull(shipment?.plannedETD);
   if (shipmentLevelEtd) {
-    return 'ETA yet to due';
+    return REPORT_STATUS_ETD_DUE;
   }
 
   const fallback = getDisplayStageName(shipment?.currentStage || 'Shipment Entry');
@@ -1140,10 +1166,9 @@ const getComputedShipmentStatus = (shipment, shipmentContainers = []) => {
 };
 
 const DASHBOARD_STATUS_COLUMNS = [
-  'Delivered WH',
-  'On Transit',
   'At the Port',
-  'ETA yet to due',
+  'On Transit',
+  REPORT_STATUS_ETD_DUE,
   REPORT_STATUS_ETD_UNCONFIRMED,
 ];
 
@@ -1153,7 +1178,7 @@ const getDashboardStatusColumn = (shipment, container) => {
   if (hasOnTransitStatus(shipment, container)) return 'On Transit';
 
   const plannedEtd = toDateOrNull(container?.planned?.etd || shipment?.plannedETD);
-  if (plannedEtd) return 'ETA yet to due';
+  if (plannedEtd) return REPORT_STATUS_ETD_DUE;
 
   return REPORT_STATUS_ETD_UNCONFIRMED;
 };
@@ -1180,7 +1205,7 @@ const getDashboardPivotLabel = (shipment, groupBy) => {
 const buildDashboardStatusPivot = (shipments, containerMap, groupBy = 'supplier') => {
   const currentMonth = new Date().toLocaleString('en-US', { month: 'long' });
   const columns = DASHBOARD_STATUS_COLUMNS.map((column) =>
-    column === 'ETA yet to due' ? `${column} - ${currentMonth}` : column
+    column === REPORT_STATUS_ETD_DUE ? `${column} - ${currentMonth}` : column
   );
   const rowMap = new Map();
   const totals = Object.fromEntries(columns.map((column) => [column, 0]));
@@ -1222,7 +1247,7 @@ const buildDashboardStatusPivot = (shipments, containerMap, groupBy = 'supplier'
 
     shipmentContainers.forEach((container) => {
       const baseColumn = getDashboardStatusColumn(shipment, container);
-      const column = baseColumn === 'ETA yet to due' ? `${baseColumn} - ${currentMonth}` : baseColumn;
+      const column = baseColumn === REPORT_STATUS_ETD_DUE ? `${baseColumn} - ${currentMonth}` : baseColumn;
       addValue(
         label,
         column,
@@ -1266,25 +1291,25 @@ const buildDashboardStatusPivot = (shipments, containerMap, groupBy = 'supplier'
 
 const buildDashboardRStatusMetrics = (shipments, containerMap) => {
   const metrics = {
+    'At The Port': 0,
+    'On Transit': 0,
+    'ETD Yet To Due': 0,
+    'ETD Yet To Be Confirmed': 0,
     'Total LPO': shipments.length,
     'Total Shipments': 0,
     'Open LPO': 0,
     'Completed LPO': 0,
-    'ETD Yet To Be Confirmed': 0,
-    'ETA Yet To Due': 0,
-    'On Transit': 0,
-    'At The Port': 0,
     'Delivered WH': 0,
   };
   const permissionKeys = {
+    'At The Port': 'dashboard.snapshot.at_port.view',
+    'On Transit': 'dashboard.snapshot.on_transit.view',
+    'ETD Yet To Due': 'dashboard.snapshot.eta_due.view',
+    'ETD Yet To Be Confirmed': 'dashboard.snapshot.etd_unconfirmed.view',
     'Total LPO': 'dashboard.snapshot.total_lpo.view',
     'Total Shipments': 'dashboard.snapshot.total_shipments.view',
     'Open LPO': 'dashboard.snapshot.open_lpo.view',
     'Completed LPO': 'dashboard.snapshot.completed_lpo.view',
-    'ETD Yet To Be Confirmed': 'dashboard.snapshot.etd_unconfirmed.view',
-    'ETA Yet To Due': 'dashboard.snapshot.eta_due.view',
-    'On Transit': 'dashboard.snapshot.on_transit.view',
-    'At The Port': 'dashboard.snapshot.at_port.view',
     'Delivered WH': 'dashboard.snapshot.delivered_wh.view',
   };
 
@@ -1317,7 +1342,7 @@ const buildDashboardRStatusMetrics = (shipments, containerMap) => {
       if (status === 'Delivered WH') metrics['Delivered WH'] += 1;
       else if (status === 'On Transit') metrics['On Transit'] += 1;
       else if (status === 'At the Port') metrics['At The Port'] += 1;
-      else if (status === 'ETA yet to due') metrics['ETA Yet To Due'] += 1;
+      else if (status === REPORT_STATUS_ETD_DUE || status === 'ETA yet to due') metrics['ETD Yet To Due'] += 1;
       else metrics['ETD Yet To Be Confirmed'] += 1;
     });
   });
@@ -2272,7 +2297,9 @@ exports.addActualContainer = async (req, res) => {
       return res.status(404).json({ message: "Shipment not found" });
     }
 
-    // BLNo is sent by frontend; CLNo kept for backward compatibility
+    // BLNo is sent by frontend; CLNo kept for backward compatibility.
+    // First B/L save notifications are owned by the B/L Details tab save,
+    // not by Shipment Tracker actual-row saves.
     const billOrLadingNo = BLNo ?? CLNo;
 
     // 🔥 REPLACE ACTUAL (NOT ARRAY)
@@ -2326,7 +2353,6 @@ exports.addActualContainer = async (req, res) => {
       })() : container.actual?.packagingList || null,
       receivedOn: new Date()
     };
-
     if (blDocument) {
       const uploaded = await uploadBufferToS3(blDocument, 'shipments/actual/bl-document');
       container.actual.blDocumentUrl = uploaded.url;
@@ -2387,15 +2413,6 @@ exports.addActualContainer = async (req, res) => {
 
     shipment.__orderedContainersForEmail = allContainers;
 
-    notifyActualContainerSavedRolesByEmail({
-      roles: ['FAS', 'Logistic', 'warehouse'],
-      shipment,
-      container,
-      actor: req.user,
-    }).catch((error) => {
-      console.error(`Actual shipment notification warning for ${shipment.shipmentNo || shipment._id}:`, error.message);
-    });
-
     res.status(200).json({
       message: "Actual container recorded successfully",
       container,
@@ -2431,6 +2448,7 @@ exports.updateBLDetails = async (req, res) => {
       };
     }
     const beforeUpdate = cloneForAudit(container.toObject());
+    const hadExistingBlTabSave = Boolean(container.actual?.blFirstSavedAt);
 
     const files = normalizeUploadedFiles(req.files || {});
     const costSheetBookingDocument = files?.costSheetBookingDocument?.[0];
@@ -2453,6 +2471,13 @@ exports.updateBLDetails = async (req, res) => {
       freightPrepared,
       costSheetBookings,
       storageAllocations,
+      storageAllocationDecision,
+      storageAllocationSplits,
+      clearingAdvancePaymentDetails,
+      chequeNo,
+      chequeDate,
+      paymentVoucherNo,
+      transactionId,
       actualBags,
       expiryDate,
       hsCode,
@@ -2464,9 +2489,15 @@ exports.updateBLDetails = async (req, res) => {
 
     const parsedCostSheetBookings = parseJsonField(costSheetBookings);
     const parsedStorageAllocations = parseJsonField(storageAllocations);
+    const parsedStorageAllocationDecision = parseJsonField(storageAllocationDecision);
+    const parsedStorageAllocationSplits = parseJsonField(storageAllocationSplits);
+    const parsedClearingAdvancePaymentDetails = parseJsonField(clearingAdvancePaymentDetails) || {};
     const parsedPackagingList = parseJsonField(packagingList);
     const isClearingAdvanceSave = Array.isArray(parsedCostSheetBookings) || !!costSheetBookingDocument;
-    const isStorageAllocationSave = Array.isArray(parsedStorageAllocations);
+    const isStorageAllocationSave =
+      Array.isArray(parsedStorageAllocations) ||
+      Array.isArray(parsedStorageAllocationSplits) ||
+      !!parsedStorageAllocationDecision;
 
     if (parsedPackagingList) {
       container.actual.packagingList = {
@@ -2484,6 +2515,11 @@ exports.updateBLDetails = async (req, res) => {
     if (blNo !== undefined) {
       container.actual.BLNo = blNo || '';
       container.actual.CLNo = blNo || '';
+    }
+    const hasBlAfterSave = String(container.actual?.BLNo || container.actual?.CLNo || '').trim().length > 0;
+    const isFirstBlSave = blNo !== undefined && hasBlAfterSave && !hadExistingBlTabSave;
+    if (isFirstBlSave) {
+      container.actual.blFirstSavedAt = new Date();
     }
     if (commercialInvoiceNo !== undefined) container.actual.commercialInvoiceNo = commercialInvoiceNo || '';
     if (blDetailsRemarks !== undefined) container.actual.blDetailsRemarks = blDetailsRemarks || '';
@@ -2543,6 +2579,21 @@ exports.updateBLDetails = async (req, res) => {
         storageAvailability: Number(row.storageAvailability) || 0
       }));
     }
+    if (parsedStorageAllocationDecision) {
+      container.actual.storageAllocationDecision = {
+        similarItems: parsedStorageAllocationDecision.similarItems !== false,
+        splitRequired: !!parsedStorageAllocationDecision.splitRequired,
+        splitQuantity: Number(parsedStorageAllocationDecision.splitQuantity) || 0,
+      };
+    }
+    if (Array.isArray(parsedStorageAllocationSplits)) {
+      container.actual.storageAllocationSplits = parsedStorageAllocationSplits.map((row, index) => ({
+        sn: Number(row.sn) || index + 1,
+        itemName: row.itemName || '',
+        quantity: Number(row.quantity) || 0,
+        warehouse: row.warehouse || '',
+      }));
+    }
 
     if (costSheetBookingDocument) {
       const uploaded = await uploadBufferToS3(costSheetBookingDocument, 'shipments/bl/cost-sheet');
@@ -2556,6 +2607,30 @@ exports.updateBLDetails = async (req, res) => {
     }
 
     if (isClearingAdvanceSave) {
+      const normalizedPaymentDetails = {
+        chequeNo: String(chequeNo ?? parsedClearingAdvancePaymentDetails.chequeNo ?? '').trim(),
+        chequeDate: chequeDate ?? parsedClearingAdvancePaymentDetails.chequeDate ?? null,
+        paymentVoucherNo: String(paymentVoucherNo ?? parsedClearingAdvancePaymentDetails.paymentVoucherNo ?? '').trim(),
+        transactionId: String(transactionId ?? parsedClearingAdvancePaymentDetails.transactionId ?? '').trim(),
+      };
+      const missingPaymentFields = [];
+      if (!normalizedPaymentDetails.chequeNo) missingPaymentFields.push('Cheque No');
+      if (!normalizedPaymentDetails.chequeDate) missingPaymentFields.push('Cheque Date');
+      if (!normalizedPaymentDetails.paymentVoucherNo) missingPaymentFields.push('Payment Voucher No');
+      if (missingPaymentFields.length) {
+        return res.status(400).json({
+          message: `Please provide ${missingPaymentFields.join(', ')} before submitting clearing advance.`,
+        });
+      }
+      container.actual.clearingAdvancePaymentDetails = {
+        ...(container.actual.clearingAdvancePaymentDetails?.toObject
+          ? container.actual.clearingAdvancePaymentDetails.toObject()
+          : container.actual.clearingAdvancePaymentDetails || {}),
+        chequeNo: normalizedPaymentDetails.chequeNo,
+        chequeDate: toDateOrNull(normalizedPaymentDetails.chequeDate),
+        paymentVoucherNo: normalizedPaymentDetails.paymentVoucherNo,
+        transactionId: normalizedPaymentDetails.transactionId,
+      };
       container.actual.clearingAdvanceApproval = buildClearingAdvancePendingApproval(req.user);
     }
 
@@ -2578,15 +2653,14 @@ exports.updateBLDetails = async (req, res) => {
     if (shipmentForBL) {
       advanceShipmentStage(shipmentForBL, 'B/L Details');
       await shipmentForBL.save();
-      if (isClearingAdvanceSave) {
-        notifyClearingAdvanceRolesByEmail({
-          roles: ['FAS'],
+      if (isFirstBlSave) {
+        notifyActualContainerSavedRolesByEmail({
+          roles: ['Logistic', 'warehouse'],
           shipment: shipmentForBL,
           container,
           actor: req.user,
-          approvalStage: 'Pending FAS Approval',
         }).catch((error) => {
-          console.error(`Clearing advance notification warning for ${shipmentForBL.shipmentNo || shipmentForBL._id}:`, error.message);
+          console.error(`First B/L save notification warning for ${shipmentForBL.shipmentNo || shipmentForBL._id}:`, error.message);
         });
       } else if (isStorageAllocationSave) {
         notifyStorageAllocationRolesByEmail({
@@ -2598,7 +2672,7 @@ exports.updateBLDetails = async (req, res) => {
         }).catch((error) => {
           console.error(`Storage allocation notification warning for ${shipmentForBL.shipmentNo || shipmentForBL._id}:`, error.message);
         });
-      } else {
+      } else if (!isClearingAdvanceSave) {
         fireAndForgetWorkflowEmail({
           role: WORKFLOW_NOTIFICATION_ROLE_MAP.blDetails,
           shipment: shipmentForBL,
@@ -2648,7 +2722,11 @@ exports.updateFASContainer = async (req, res) => {
   try {
     const files = req.files || {};
     const inwardCollectionAdviceDocument = files?.inwardCollectionAdviceDocument?.[0];
+    const daSignedDocument = files?.daSignedDocument?.[0];
+    const dnSignedDocument = files?.dnSignedDocument?.[0];
+    const murabahaContractDocument = files?.murabahaContractDocument?.[0];
     const murabahaContractSubmittedDocument = files?.murabahaContractSubmittedDocument?.[0];
+    const submissionPackageDocument = files?.submissionPackageDocument?.[0];
     const documentsReleasedDocument = files?.documentsReleasedDocument?.[0];
 
     const {
@@ -2661,6 +2739,8 @@ exports.updateFASContainer = async (req, res) => {
       bankName,
       docArrivalNotes,
       inwardCollectionAdviceDate,
+      inwardCollectionAdviceReceivedAt,
+      inwardCollectionAdviceSubmittedAt,
       murabahaContractReleasedDate,
       murabahaContractApprovedDate,
       murabahaContractSubmittedDate,
@@ -2668,7 +2748,19 @@ exports.updateFASContainer = async (req, res) => {
       bankAdvanceAmountDocumentUrl,
       bankAdvanceApprovedDocumentUrl,
       bankAdvanceSubmittedOn,
-      docToBeReleasedOn
+      docToBeReleasedOn,
+      bankSubmittedToBank,
+      daSignedDocumentUrl,
+      daSignedDocumentName,
+      dnSignedDocumentUrl,
+      dnSignedDocumentName,
+      skipMurabaha,
+      murabahaContractDocumentUrl,
+      murabahaContractDocumentName,
+      daSubmittedToBank,
+      murabahaSubmittedToBank,
+      submissionPackageDocumentUrl,
+      submissionPackageDocumentName
     } = req.body;
 
     const container = await Container.findById(req.params.id);
@@ -2733,6 +2825,14 @@ exports.updateFASContainer = async (req, res) => {
       container.actual.inwardCollectionAdviceDate = toDateOrNull(inwardCollectionAdviceDate);
       addDocumentTrackerSyncField('inwardCollectionAdviceDate');
     }
+    if (inwardCollectionAdviceReceivedAt !== undefined) {
+      container.actual.inwardCollectionAdviceReceivedAt = toDateOrNull(inwardCollectionAdviceReceivedAt);
+      addDocumentTrackerSyncField('inwardCollectionAdviceReceivedAt');
+    }
+    if (inwardCollectionAdviceSubmittedAt !== undefined) {
+      container.actual.inwardCollectionAdviceSubmittedAt = toDateOrNull(inwardCollectionAdviceSubmittedAt);
+      addDocumentTrackerSyncField('inwardCollectionAdviceSubmittedAt');
+    }
     if (murabahaContractReleasedDate !== undefined) {
       container.actual.murabahaContractReleasedDate = toDateOrNull(murabahaContractReleasedDate);
       addDocumentTrackerSyncField('murabahaContractReleasedDate');
@@ -2765,6 +2865,54 @@ exports.updateFASContainer = async (req, res) => {
       container.actual.docToBeReleasedOn = toDateOrNull(docToBeReleasedOn);
       addDocumentTrackerSyncField('docToBeReleasedOn');
     }
+    if (bankSubmittedToBank !== undefined) {
+      container.actual.bankSubmittedToBank = bankSubmittedToBank === 'true' || bankSubmittedToBank === true;
+      addDocumentTrackerSyncField('bankSubmittedToBank');
+    }
+    if (skipMurabaha !== undefined) {
+      container.actual.skipMurabaha = skipMurabaha === 'true' || skipMurabaha === true;
+      addDocumentTrackerSyncField('skipMurabaha');
+    }
+    if (daSubmittedToBank !== undefined) {
+      container.actual.daSubmittedToBank = daSubmittedToBank === 'true' || daSubmittedToBank === true;
+      addDocumentTrackerSyncField('daSubmittedToBank');
+    }
+    if (murabahaSubmittedToBank !== undefined) {
+      container.actual.murabahaSubmittedToBank = murabahaSubmittedToBank === 'true' || murabahaSubmittedToBank === true;
+      addDocumentTrackerSyncField('murabahaSubmittedToBank');
+    }
+    if (daSignedDocumentUrl !== undefined) {
+      container.actual.daSignedDocumentUrl = daSignedDocumentUrl || '';
+      addDocumentTrackerSyncField('daSignedDocumentUrl');
+    }
+    if (daSignedDocumentName !== undefined) {
+      container.actual.daSignedDocumentName = daSignedDocumentName || '';
+      addDocumentTrackerSyncField('daSignedDocumentName');
+    }
+    if (dnSignedDocumentUrl !== undefined) {
+      container.actual.dnSignedDocumentUrl = dnSignedDocumentUrl || '';
+      addDocumentTrackerSyncField('dnSignedDocumentUrl');
+    }
+    if (dnSignedDocumentName !== undefined) {
+      container.actual.dnSignedDocumentName = dnSignedDocumentName || '';
+      addDocumentTrackerSyncField('dnSignedDocumentName');
+    }
+    if (murabahaContractDocumentUrl !== undefined) {
+      container.actual.murabahaContractDocumentUrl = murabahaContractDocumentUrl || '';
+      addDocumentTrackerSyncField('murabahaContractDocumentUrl');
+    }
+    if (murabahaContractDocumentName !== undefined) {
+      container.actual.murabahaContractDocumentName = murabahaContractDocumentName || '';
+      addDocumentTrackerSyncField('murabahaContractDocumentName');
+    }
+    if (submissionPackageDocumentUrl !== undefined) {
+      container.actual.submissionPackageDocumentUrl = submissionPackageDocumentUrl || '';
+      addDocumentTrackerSyncField('submissionPackageDocumentUrl');
+    }
+    if (submissionPackageDocumentName !== undefined) {
+      container.actual.submissionPackageDocumentName = submissionPackageDocumentName || '';
+      addDocumentTrackerSyncField('submissionPackageDocumentName');
+    }
 
     if (inwardCollectionAdviceDocument) {
       const uploaded = await uploadBufferToS3(inwardCollectionAdviceDocument, 'shipments/document-tracker/inward-advice');
@@ -2772,11 +2920,35 @@ exports.updateFASContainer = async (req, res) => {
       container.actual.inwardCollectionAdviceDocumentName = uploaded.fileName;
       addDocumentTrackerSyncField('inwardCollectionAdviceDocumentUrl', 'inwardCollectionAdviceDocumentName');
     }
+    if (daSignedDocument) {
+      const uploaded = await uploadBufferToS3(daSignedDocument, 'shipments/document-tracker/da-signed');
+      container.actual.daSignedDocumentUrl = uploaded.url;
+      container.actual.daSignedDocumentName = uploaded.fileName;
+      addDocumentTrackerSyncField('daSignedDocumentUrl', 'daSignedDocumentName');
+    }
+    if (dnSignedDocument) {
+      const uploaded = await uploadBufferToS3(dnSignedDocument, 'shipments/document-tracker/dn-signed');
+      container.actual.dnSignedDocumentUrl = uploaded.url;
+      container.actual.dnSignedDocumentName = uploaded.fileName;
+      addDocumentTrackerSyncField('dnSignedDocumentUrl', 'dnSignedDocumentName');
+    }
+    if (murabahaContractDocument) {
+      const uploaded = await uploadBufferToS3(murabahaContractDocument, 'shipments/document-tracker/murabaha-contract');
+      container.actual.murabahaContractDocumentUrl = uploaded.url;
+      container.actual.murabahaContractDocumentName = uploaded.fileName;
+      addDocumentTrackerSyncField('murabahaContractDocumentUrl', 'murabahaContractDocumentName');
+    }
     if (murabahaContractSubmittedDocument) {
       const uploaded = await uploadBufferToS3(murabahaContractSubmittedDocument, 'shipments/document-tracker/murabaha-submitted');
       container.actual.murabahaContractSubmittedDocumentUrl = uploaded.url;
       container.actual.murabahaContractSubmittedDocumentName = uploaded.fileName;
       addDocumentTrackerSyncField('murabahaContractSubmittedDocumentUrl', 'murabahaContractSubmittedDocumentName');
+    }
+    if (submissionPackageDocument) {
+      const uploaded = await uploadBufferToS3(submissionPackageDocument, 'shipments/document-tracker/submission-package');
+      container.actual.submissionPackageDocumentUrl = uploaded.url;
+      container.actual.submissionPackageDocumentName = uploaded.fileName;
+      addDocumentTrackerSyncField('submissionPackageDocumentUrl', 'submissionPackageDocumentName');
     }
     if (documentsReleasedDocument) {
       const uploaded = await uploadBufferToS3(documentsReleasedDocument, 'shipments/document-tracker/documents-released');
@@ -3098,6 +3270,7 @@ exports.updateLogisticsDetails = async (req, res) => {
         sn: Number(row.sn) || 0,
         containerSerialNo: row.containerSerialNo || '',
         transportCompanyName: row.transportCompanyName || '',
+        warehouse: row.warehouse || '',
         bookedDate: toDateOrNull(row.bookedDate),
         bookingTime: toTimeString(row.bookingTime),
         transportDate: toDateOrNull(row.transportDate),
@@ -3712,7 +3885,11 @@ exports.updatePaymentCostingDetails = async (req, res) => {
       container.actual.paymentCostingDocumentName = uploaded.fileName;
     }
 
-    if (isPaymentAllocationSave || isPaymentCostingSave) {
+    if (isPaymentAllocationSave) {
+      container.actual.paymentAllocationApproval = buildPaymentAllocationPendingApproval(req.user);
+    }
+
+    if (isPaymentCostingSave) {
       container.actual.paymentCostingApproval = buildPaymentCostingPendingApproval(req.user);
     }
 
@@ -3862,6 +4039,225 @@ exports.approveClearingAdvance = async (req, res) => {
     }
 
     return res.status(400).json({ message: 'Clearing advance must be saved before it can be approved.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+exports.submitAdditionalClearingAdvanceRequest = async (req, res) => {
+  try {
+    const container = await Container.findById(req.params.id);
+    if (!container) return res.status(404).json({ message: 'Container not found' });
+    if (!container.actual) return res.status(400).json({ message: 'Actual not created yet' });
+
+    const currentState = container.actual.clearingAdvanceApproval || { status: CLEARING_ADVANCE_APPROVAL_STATUSES.draft };
+    if (currentState.status !== CLEARING_ADVANCE_APPROVAL_STATUSES.approved) {
+      return res.status(400).json({ message: 'Additional requests can be submitted only after clearing advance is approved.' });
+    }
+
+    const title = String(req.body?.title || '').trim();
+    const comment = String(req.body?.comment || req.body?.details || '').trim();
+    const requestAmount = Number(req.body?.requestAmount) || 0;
+    if (!title) return res.status(400).json({ message: 'Title is required.' });
+    if (requestAmount <= 0) return res.status(400).json({ message: 'Request amount must be greater than zero.' });
+
+    const beforeUpdate = cloneForAudit(container.toObject());
+    const files = normalizeUploadedFiles(req.files || {});
+    const attachment =
+      files?.attachment?.[0] ||
+      files?.additionalRequestAttachment?.[0] ||
+      files?.document?.[0] ||
+      null;
+    let uploaded = null;
+    if (attachment) {
+      uploaded = await uploadBufferToS3(attachment, 'shipments/bl/additional-clearing-advance');
+    }
+
+    container.actual.additionalClearingAdvanceRequests.push({
+      title,
+      comment,
+      requestAmount,
+      attachmentDocumentUrl: uploaded?.url || '',
+      attachmentDocumentName: uploaded?.fileName || '',
+      status: CLEARING_ADVANCE_APPROVAL_STATUSES.pendingFas,
+      submittedAt: new Date(),
+      submittedBy: req.user?._id || null,
+      fasApprovedAt: null,
+      fasApprovedBy: null,
+    });
+
+    await container.save();
+    await syncSameBlActualFields({
+      ContainerModel: Container,
+      sourceContainer: container,
+      fields: ['additionalClearingAdvanceRequests'],
+    });
+
+    const shipment = await Shipment.findById(container.shipmentId);
+    if (shipment) {
+      notifyClearingAdvanceRolesByEmail({
+        roles: ['FAS'],
+        shipment,
+        container,
+        actor: req.user,
+        approvalStage: 'Additional Request Pending FAS Approval',
+      }).catch((error) => {
+        console.error(`Additional clearing advance notification warning for ${shipment.shipmentNo || shipment._id}:`, error.message);
+      });
+    }
+
+    await writeAuditLog({
+      userId: req.user._id,
+      module: 'Logistics',
+      entity: 'Container',
+      entityId: container._id,
+      action: 'SubmitAdditionalClearingAdvanceRequest',
+      before: beforeUpdate,
+      after: cloneForAudit(container.toObject()),
+      remarks: 'Additional clearing advance request submitted for FAS approval',
+    });
+
+    return res.status(201).json({ message: 'Additional request submitted successfully', container });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+exports.approveAdditionalClearingAdvanceRequest = async (req, res) => {
+  try {
+    const container = await Container.findById(req.params.id);
+    if (!container) return res.status(404).json({ message: 'Container not found' });
+    if (!container.actual) return res.status(400).json({ message: 'Actual not created yet' });
+
+    const requestRow = container.actual.additionalClearingAdvanceRequests.id(req.params.requestId);
+    if (!requestRow) return res.status(404).json({ message: 'Additional request not found.' });
+    if (requestRow.status === CLEARING_ADVANCE_APPROVAL_STATUSES.approved) {
+      return res.status(400).json({ message: 'Additional request is already approved.' });
+    }
+
+    const allowed = await hasRoleOrPermission(
+      req.user,
+      'shipment.tab.bl_details.clearing_advance.approve_fas',
+      ['FAS', 'FasManager', 'Admin', 'Manager', 'Management']
+    );
+    if (!allowed) {
+      return res.status(403).json({ message: 'You do not have permission to approve additional clearing advance requests.' });
+    }
+
+    const beforeUpdate = cloneForAudit(container.toObject());
+    requestRow.status = CLEARING_ADVANCE_APPROVAL_STATUSES.approved;
+    requestRow.fasApprovedAt = new Date();
+    requestRow.fasApprovedBy = req.user?._id || null;
+
+    await container.save();
+    await syncSameBlActualFields({
+      ContainerModel: Container,
+      sourceContainer: container,
+      fields: ['additionalClearingAdvanceRequests'],
+    });
+
+    const shipment = await Shipment.findById(container.shipmentId);
+    if (shipment) {
+      notifyClearingAdvanceRolesByEmail({
+        roles: ['Logistic'],
+        shipment,
+        container,
+        actor: req.user,
+        approvalStage: 'Additional Request Approved',
+      }).catch((error) => {
+        console.error(`Additional clearing advance approval notification warning for ${shipment.shipmentNo || shipment._id}:`, error.message);
+      });
+    }
+
+    await writeAuditLog({
+      userId: req.user._id,
+      module: 'FAS',
+      entity: 'Container',
+      entityId: container._id,
+      action: 'ApproveAdditionalClearingAdvanceRequest',
+      before: beforeUpdate,
+      after: cloneForAudit(container.toObject()),
+      remarks: 'Additional clearing advance request approved by FAS',
+    });
+
+    return res.json({ message: 'Additional request approved successfully', container });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+exports.approvePaymentAllocation = async (req, res) => {
+  try {
+    const container = await Container.findById(req.params.id);
+    if (!container) return res.status(404).json({ message: 'Container not found' });
+    if (!container.actual) return res.status(400).json({ message: 'Actual not created yet' });
+
+    const beforeUpdate = cloneForAudit(container.toObject());
+    const currentState = container.actual.paymentAllocationApproval || { status: PAYMENT_COSTING_APPROVAL_STATUSES.draft };
+    const effectiveStatus =
+      currentState.status === PAYMENT_COSTING_APPROVAL_STATUSES.draft && hasSavedPaymentAllocationData(container)
+        ? PAYMENT_COSTING_APPROVAL_STATUSES.pendingFasManager
+        : currentState.status;
+
+    if (effectiveStatus !== PAYMENT_COSTING_APPROVAL_STATUSES.pendingFasManager) {
+      if (effectiveStatus === PAYMENT_COSTING_APPROVAL_STATUSES.approved) {
+        return res.status(400).json({ message: 'Payment allocation is already approved.' });
+      }
+      return res.status(400).json({ message: 'Payment allocation must be saved before it can be approved.' });
+    }
+
+    const allowed = await hasRoleOrPermission(
+      req.user,
+      'shipment.tab.payment_costing.payment_allocation.approve_fas_manager',
+      ['FasManager', 'Admin', 'Manager', 'Management']
+    );
+    if (!allowed) {
+      return res.status(403).json({ message: 'You do not have permission to approve payment allocation.' });
+    }
+
+    container.actual.paymentAllocationApproval = {
+      ...currentState,
+      status: PAYMENT_COSTING_APPROVAL_STATUSES.approved,
+      submittedAt: currentState.submittedAt || new Date(),
+      submittedBy: currentState.submittedBy || null,
+      fasManagerApprovedAt: new Date(),
+      fasManagerApprovedBy: req.user._id,
+    };
+    await container.save();
+
+    await syncSameBlActualFields({
+      ContainerModel: Container,
+      sourceContainer: container,
+      fields: ['paymentAllocationApproval'],
+    });
+
+    const shipment = await Shipment.findById(container.shipmentId);
+    if (shipment) {
+      notifyPaymentAllocationRolesByEmail({
+        roles: ['FAS', 'Logistic'],
+        shipment,
+        container,
+        actor: req.user,
+      }).catch((error) => {
+        console.error(`Payment allocation approval notification warning for ${shipment.shipmentNo || shipment._id}:`, error.message);
+      });
+    }
+
+    await writeAuditLog({
+      userId: req.user._id,
+      module: 'FAS',
+      entity: 'Container',
+      entityId: container._id,
+      action: 'ApprovePaymentAllocationFasManager',
+      before: beforeUpdate,
+      after: cloneForAudit(container.toObject()),
+      remarks: 'Payment allocation approved by FAS manager'
+    });
+
+    return res.json({ message: 'Payment allocation approved successfully', container });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error', error: err.message });
@@ -4856,7 +5252,7 @@ exports.getShipmentSummary = async (req, res) => {
 
     // Chart Data Generation
     const mapStageToStatus = (status) => {
-      if (status === 'ETD yet to due' || status === 'ETA yet to due') return 'ETA yet to due';
+      if (status === 'ETD yet to due' || status === 'ETA yet to due' || status === REPORT_STATUS_ETD_DUE) return REPORT_STATUS_ETD_DUE;
       if (status === 'On Transit') return 'On Transit';
       if (status === 'At Port of Discharge') return 'At the Port';
       if (status === 'Reached WH' || status === 'Delivered WH') return 'Delivered WH';
@@ -4868,7 +5264,7 @@ exports.getShipmentSummary = async (req, res) => {
       if (status === 'Reached WH' || status === 'Delivered WH') return 'Delivered WH';
       if (status === 'At Port of Discharge') return 'At the Port';
       if (status === 'On Transit') return 'On Transit';
-      if (status === 'ETD yet to due' || status === 'ETA yet to due') return 'ETA yet to due';
+      if (status === 'ETD yet to due' || status === 'ETA yet to due' || status === REPORT_STATUS_ETD_DUE) return REPORT_STATUS_ETD_DUE;
       return String(status || REPORT_STATUS_ETD_UNCONFIRMED);
     };
 
@@ -5005,7 +5401,13 @@ exports.getShipmentById = async (req, res) => {
     const containers = await Container.find({ shipmentId })
       .sort({ createdAt: 1 })
       .populate('actual.clearingAdvanceApproval.submittedBy', 'name email role')
-      .populate('actual.clearingAdvanceApproval.fasApprovedBy', 'name email role');
+      .populate('actual.clearingAdvanceApproval.fasApprovedBy', 'name email role')
+      .populate('actual.additionalClearingAdvanceRequests.submittedBy', 'name email role')
+      .populate('actual.additionalClearingAdvanceRequests.fasApprovedBy', 'name email role')
+      .populate('actual.paymentAllocationApproval.submittedBy', 'name email role')
+      .populate('actual.paymentAllocationApproval.fasManagerApprovedBy', 'name email role')
+      .populate('actual.paymentCostingApproval.submittedBy', 'name email role')
+      .populate('actual.paymentCostingApproval.fasManagerApprovedBy', 'name email role');
     const containerIds = containers.map((container) => container._id);
     const scheduledHistoryLogs = await AuditLog
       .find({
@@ -5094,6 +5496,7 @@ exports.getShipmentById = async (req, res) => {
             updatedETA: a.updatedETA,
             CLNo: a.CLNo,
             BLNo: a.BLNo,
+            blFirstSavedAt: a.blFirstSavedAt,
             portOfLoading: a.portOfLoading,
             portOfDischarge: a.portOfDischarge,
             shipmentArrived: a.shipmentArrived || 'No',
@@ -5122,8 +5525,12 @@ exports.getShipmentById = async (req, res) => {
             costSheetBookingDocumentUrl: a.costSheetBookingDocumentUrl,
             costSheetBookingDocumentName: a.costSheetBookingDocumentName,
             costSheetBookings: a.costSheetBookings || [],
+            clearingAdvancePaymentDetails: a.clearingAdvancePaymentDetails || null,
             clearingAdvanceApproval: a.clearingAdvanceApproval || null,
+            additionalClearingAdvanceRequests: a.additionalClearingAdvanceRequests || [],
             storageAllocations: a.storageAllocations || [],
+            storageAllocationDecision: a.storageAllocationDecision || null,
+            storageAllocationSplits: a.storageAllocationSplits || [],
             storageAllocationApproval: a.storageAllocationApproval || null,
             storageArrivalApproval: a.storageArrivalApproval || null,
             maximumRetentionDate: a.maximumRetentionDate,
@@ -5135,6 +5542,8 @@ exports.getShipmentById = async (req, res) => {
             receiver: a.receiver,
             bankName: a.bankName,
             inwardCollectionAdviceDate: a.inwardCollectionAdviceDate,
+            inwardCollectionAdviceReceivedAt: a.inwardCollectionAdviceReceivedAt,
+            inwardCollectionAdviceSubmittedAt: a.inwardCollectionAdviceSubmittedAt,
             inwardCollectionAdviceDocumentUrl: a.inwardCollectionAdviceDocumentUrl,
             inwardCollectionAdviceDocumentName: a.inwardCollectionAdviceDocumentName,
             murabahaContractReleasedDate: a.murabahaContractReleasedDate,
@@ -5145,6 +5554,18 @@ exports.getShipmentById = async (req, res) => {
             documentsReleasedDate: a.documentsReleasedDate,
             documentsReleasedDocumentUrl: a.documentsReleasedDocumentUrl,
             documentsReleasedDocumentName: a.documentsReleasedDocumentName,
+            bankSubmittedToBank: a.bankSubmittedToBank || false,
+            daSignedDocumentUrl: a.daSignedDocumentUrl,
+            daSignedDocumentName: a.daSignedDocumentName,
+            dnSignedDocumentUrl: a.dnSignedDocumentUrl,
+            dnSignedDocumentName: a.dnSignedDocumentName,
+            skipMurabaha: a.skipMurabaha || false,
+            murabahaContractDocumentUrl: a.murabahaContractDocumentUrl,
+            murabahaContractDocumentName: a.murabahaContractDocumentName,
+            daSubmittedToBank: a.daSubmittedToBank || false,
+            murabahaSubmittedToBank: a.murabahaSubmittedToBank || false,
+            submissionPackageDocumentUrl: a.submissionPackageDocumentUrl,
+            submissionPackageDocumentName: a.submissionPackageDocumentName,
             bankAdvanceAmountDocumentUrl: a.bankAdvanceAmountDocumentUrl,
             bankAdvanceApprovedDocumentUrl: a.bankAdvanceApprovedDocumentUrl,
             bankAdvanceSubmittedOn: a.bankAdvanceSubmittedOn,
@@ -5225,6 +5646,7 @@ exports.getShipmentById = async (req, res) => {
             deliverySchedules: a.deliverySchedules || [],
             warehouseSchedules: a.warehouseSchedules || [],
             transportationBooked: a.transportationBooked || [],
+            additionalDocuments: a.additionalDocuments || [],
             lockedLogisticsSections: a.lockedLogisticsSections || [],
             storageSplits: a.storageSplits || [],
             storageDocumentUrl: a.storageDocumentUrl || null,
@@ -5234,6 +5656,7 @@ exports.getShipmentById = async (req, res) => {
             qualityRows: a.qualityRows || [],
             qualityReports: a.qualityReports || [],
             paymentAllocations: a.paymentAllocations || [],
+            paymentAllocationApproval: a.paymentAllocationApproval || null,
             paymentCostings: a.paymentCostings || [],
             paymentCostingApproval: a.paymentCostingApproval || null,
             packagingExpenses: a.packagingExpenses || [],
@@ -5280,6 +5703,10 @@ exports.getShipmentById = async (req, res) => {
         signedCustomsBl,
         signedCustomsInvoice,
         signedCustomsPackingList,
+        signedDaSigned,
+        signedDnSigned,
+        signedMurabahaContract,
+        signedSubmissionPackage,
       ] = await Promise.all([
         toSignedDocument(row.costSheetBookingDocumentUrl, row.costSheetBookingDocumentName),
         toSignedDocument(row.blDocumentUrl, row.blDocumentName),
@@ -5302,6 +5729,10 @@ exports.getShipmentById = async (req, res) => {
         toSignedDocument(row.customsOriginalDocuments?.blOriginal?.documentUrl, row.customsOriginalDocuments?.blOriginal?.documentName),
         toSignedDocument(row.customsOriginalDocuments?.invoice?.documentUrl, row.customsOriginalDocuments?.invoice?.documentName),
         toSignedDocument(row.customsOriginalDocuments?.packingList?.documentUrl, row.customsOriginalDocuments?.packingList?.documentName),
+        toSignedDocument(row.daSignedDocumentUrl, row.daSignedDocumentName),
+        toSignedDocument(row.dnSignedDocumentUrl, row.dnSignedDocumentName),
+        toSignedDocument(row.murabahaContractDocumentUrl, row.murabahaContractDocumentName),
+        toSignedDocument(row.submissionPackageDocumentUrl, row.submissionPackageDocumentName),
       ]);
 
       row.costSheetBookingDocumentUrl = signedStep3Doc.url;
@@ -5336,6 +5767,14 @@ exports.getShipmentById = async (req, res) => {
       row.paymentCostingDocumentName = signedPaymentCosting.name;
       row.storageDocumentUrl = signedStorageDocument.url;
       row.storageDocumentName = signedStorageDocument.name;
+      row.daSignedDocumentUrl = signedDaSigned.url;
+      row.daSignedDocumentName = signedDaSigned.name;
+      row.dnSignedDocumentUrl = signedDnSigned.url;
+      row.dnSignedDocumentName = signedDnSigned.name;
+      row.murabahaContractDocumentUrl = signedMurabahaContract.url;
+      row.murabahaContractDocumentName = signedMurabahaContract.name;
+      row.submissionPackageDocumentUrl = signedSubmissionPackage.url;
+      row.submissionPackageDocumentName = signedSubmissionPackage.name;
       if (row.customsOriginalDocuments) {
         row.customsOriginalDocuments.boe.documentUrl = signedCustomsBoe.url;
         row.customsOriginalDocuments.boe.documentName = signedCustomsBoe.name;
@@ -5349,12 +5788,21 @@ exports.getShipmentById = async (req, res) => {
         row.customsOriginalDocuments.packingList.documentName = signedCustomsPackingList.name;
       }
 
-      const [costSheetBookings, qualityRows, qualityReports, paymentAllocations, paymentCostings, storageSplits] = await Promise.all([
+      const [costSheetBookings, additionalClearingAdvanceRequests, qualityRows, qualityReports, paymentAllocations, paymentCostings, storageSplits, additionalDocuments] = await Promise.all([
         Promise.all((row.costSheetBookings || []).map(async (costRow) => {
           const plainCostRow = toPlainObject(costRow);
           const signed = await toSignedDocument(costRow.attachmentDocumentUrl, costRow.attachmentDocumentName);
           return {
             ...plainCostRow,
+            attachmentDocumentUrl: signed.url,
+            attachmentDocumentName: signed.name,
+          };
+        })),
+        Promise.all((row.additionalClearingAdvanceRequests || []).map(async (requestRow) => {
+          const plainRequestRow = toPlainObject(requestRow);
+          const signed = await toSignedDocument(requestRow.attachmentDocumentUrl, requestRow.attachmentDocumentName);
+          return {
+            ...plainRequestRow,
             attachmentDocumentUrl: signed.url,
             attachmentDocumentName: signed.name,
           };
@@ -5415,14 +5863,25 @@ exports.getShipmentById = async (req, res) => {
             documentName: signed.name,
           };
         })),
+        Promise.all((row.additionalDocuments || []).map(async (doc) => {
+          const plainDoc = toPlainObject(doc);
+          const signed = await toSignedDocument(doc.fileUrl, doc.fileName);
+          return {
+            ...plainDoc,
+            fileUrl: signed.url,
+            fileName: signed.name,
+          };
+        })),
       ]);
 
       row.costSheetBookings = costSheetBookings;
+      row.additionalClearingAdvanceRequests = additionalClearingAdvanceRequests;
       row.qualityRows = qualityRows;
       row.qualityReports = qualityReports;
       row.paymentAllocations = paymentAllocations;
       row.paymentCostings = paymentCostings;
       row.storageSplits = storageSplits;
+      row.additionalDocuments = additionalDocuments;
     }));
 
     const [signedLpoUrl, signedProformaUrl, signedS1QualityUrl] = await Promise.all([
@@ -6357,6 +6816,7 @@ exports.bulkSaveTransportationArranged = async (req, res) => {
           sn: Number(booking.sn) || 0,
           containerSerialNo: booking.containerSerialNo || '',
           transportCompanyName: booking.transportCompanyName,
+          warehouse: booking.warehouse || '',
           bookedDate: toDateOrNull(booking.bookedDate),
           bookingTime: toTimeString(booking.bookingTime),
           transportDate: toDateOrNull(booking.transportDate),
@@ -6388,6 +6848,149 @@ exports.bulkSaveTransportationArranged = async (req, res) => {
   } catch (err) {
     console.error('bulkSaveTransportationArranged error:', err);
     res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+exports.uploadAdditionalRepositoryDocument = async (req, res) => {
+  try {
+    const container = await Container.findById(req.params.id);
+    if (!container) return res.status(404).json({ message: "Container not found" });
+    if (!container.actual) return res.status(400).json({ message: "Container has no actual recorded yet" });
+
+    const file = req.files?.[0];
+    if (!file) return res.status(400).json({ message: "No file uploaded" });
+
+    const { documentType, description } = req.body;
+    if (!documentType) return res.status(400).json({ message: "documentType is required" });
+
+    const uploaded = await uploadBufferToS3(file, 'shipments/logistics/repository');
+
+    const newDoc = {
+      documentType,
+      description: description || '',
+      fileUrl: uploaded.url,
+      fileName: uploaded.fileName,
+      uploadedAt: new Date(),
+      uploadedBy: req.user?.name || req.user?.email || 'System User',
+    };
+
+    container.actual.additionalDocuments.push(newDoc);
+    await container.save();
+
+    // Sync with same BL
+    await syncSameBlActualFields({
+      ContainerModel: Container,
+      sourceContainer: container,
+      fields: ['additionalDocuments'],
+    });
+
+    res.status(200).json({
+      message: "Document uploaded successfully",
+      container,
+      document: container.actual.additionalDocuments[container.actual.additionalDocuments.length - 1]
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+exports.deleteAdditionalRepositoryDocument = async (req, res) => {
+  try {
+    const container = await Container.findById(req.params.id);
+    if (!container) return res.status(404).json({ message: "Container not found" });
+    if (!container.actual) return res.status(400).json({ message: "Container has no actual recorded yet" });
+
+    const { docId } = req.params;
+    container.actual.additionalDocuments = container.actual.additionalDocuments.filter(
+      (doc) => String(doc._id) !== String(docId)
+    );
+    await container.save();
+
+    // Sync with same BL
+    await syncSameBlActualFields({
+      ContainerModel: Container,
+      sourceContainer: container,
+      fields: ['additionalDocuments'],
+    });
+
+    res.status(200).json({
+      message: "Document deleted successfully",
+      container,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+exports.createTransportationTransaction = async (req, res) => {
+  try {
+    const container = await Container.findById(req.params.id);
+    if (!container) return res.status(404).json({ message: 'Container not found' });
+    if (!container.actual) return res.status(400).json({ message: 'Container has no actual record' });
+
+    const { containerSerials, transportCompany, warehouse, transportDate } = req.body;
+
+    if (!transportCompany) return res.status(400).json({ message: 'transportCompany is required' });
+    if (!warehouse) return res.status(400).json({ message: 'warehouse is required' });
+    if (!transportDate) return res.status(400).json({ message: 'transportDate is required' });
+    if (!Array.isArray(containerSerials) || containerSerials.length === 0) {
+      return res.status(400).json({ message: 'containerSerials must be a non-empty array' });
+    }
+
+    const year = new Date().getFullYear();
+    const existingCount = (container.actual.transportationTransactions || []).length;
+    const transactionNo = `TRN-${year}-${String(existingCount + 1).padStart(4, '0')}`;
+
+    if (!Array.isArray(container.actual.transportationTransactions)) {
+      container.actual.transportationTransactions = [];
+    }
+
+    const newTransaction = {
+      transactionNo,
+      containerSerials: containerSerials || [],
+      transportCompany,
+      warehouse,
+      transportDate: transportDate ? new Date(transportDate) : null,
+      createdAt: new Date(),
+    };
+
+    container.actual.transportationTransactions.push(newTransaction);
+    await container.save();
+
+    res.status(201).json({
+      message: 'Transportation transaction created successfully',
+      transaction: newTransaction,
+      container,
+    });
+  } catch (err) {
+    console.error('createTransportationTransaction error:', err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.deleteTransportationTransaction = async (req, res) => {
+  try {
+    const container = await Container.findById(req.params.id);
+    if (!container) return res.status(404).json({ message: 'Container not found' });
+    if (!container.actual) return res.status(400).json({ message: 'Container has no actual record' });
+
+    const { txnId } = req.params;
+    const before = (container.actual.transportationTransactions || []).length;
+    container.actual.transportationTransactions = (container.actual.transportationTransactions || []).filter(
+      (t) => String(t._id) !== txnId
+    );
+
+    if (container.actual.transportationTransactions.length === before) {
+      return res.status(404).json({ message: 'Transaction not found' });
+    }
+
+    await container.save();
+    res.status(200).json({ message: 'Transportation transaction deleted successfully' });
+  } catch (err) {
+    console.error('deleteTransportationTransaction error:', err);
+    res.status(500).json({ message: err.message });
   }
 };
 

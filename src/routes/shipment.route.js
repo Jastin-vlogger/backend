@@ -151,6 +151,26 @@ router.patch(
   controller.approveClearingAdvance
 );
 
+router.post(
+  '/container/bl-details/:id/clearing-advance/additional-requests',
+  authMiddleware,
+  authorize({ tag: 'any-active' }),
+  (req, res, next) => {
+    upload.any()(req, res, (err) => {
+      if (err) return res.status(400).json({ message: err.message || 'Invalid file upload' });
+      next();
+    });
+  },
+  controller.submitAdditionalClearingAdvanceRequest
+);
+
+router.patch(
+  '/container/bl-details/:id/clearing-advance/additional-requests/:requestId/approve',
+  authMiddleware,
+  authorize({ tag: 'any-active' }),
+  controller.approveAdditionalClearingAdvanceRequest
+);
+
 router.patch(
   '/container/bl-details/:id/storage-allocations/approve',
   authMiddleware,
@@ -173,7 +193,11 @@ router.patch(
   (req, res, next) => {
     upload.fields([
       { name: 'inwardCollectionAdviceDocument', maxCount: 1 },
+      { name: 'daSignedDocument', maxCount: 1 },
+      { name: 'dnSignedDocument', maxCount: 1 },
+      { name: 'murabahaContractDocument', maxCount: 1 },
       { name: 'murabahaContractSubmittedDocument', maxCount: 1 },
+      { name: 'submissionPackageDocument', maxCount: 1 },
       { name: 'documentsReleasedDocument', maxCount: 1 },
     ])(req, res, (err) => {
       if (err) return res.status(400).json({ message: err.message || 'Invalid file upload' });
@@ -190,6 +214,7 @@ router.patch(
   authorize({ tag: 'any-active' }),
   (req, res, next) => {
     upload.fields([
+      { name: 'commercialDocumentDocument', maxCount: 1 },
       { name: 'arrivalNoticeDocument', maxCount: 1 },
       { name: 'advanceRequestDocument', maxCount: 1 },
       { name: 'doReleasedDocument', maxCount: 1 },
@@ -203,6 +228,7 @@ router.patch(
       { name: 'customsDocBl', maxCount: 1 },
       { name: 'customsDocInvoice', maxCount: 1 },
       { name: 'customsDocPackingList', maxCount: 1 },
+      { name: 'customerInspectionDocument', maxCount: 1 },
     ])(req, res, (err) => {
       if (err) return res.status(400).json({ message: err.message || 'Invalid file upload' });
       next();
@@ -210,6 +236,31 @@ router.patch(
   },
   controller.updateLogisticsDetails
 );
+
+// Dedicated endpoints for repository additional documents
+router.post(
+  '/container/:id/additional-document',
+  authMiddleware,
+  authorize({ tag: 'any-active' }),
+  (req, res, next) => {
+    upload.any()(req, res, (err) => {
+      if (err) return res.status(400).json({ message: err.message || 'Invalid file upload' });
+      next();
+    });
+  },
+  controller.uploadAdditionalRepositoryDocument
+);
+
+router.delete(
+  '/container/:id/additional-document/:docId',
+  authMiddleware,
+  authorize({ tag: 'any-active' }),
+  controller.deleteAdditionalRepositoryDocument
+);
+
+// Transportation transactions
+router.post('/container/:id/transportation-transaction', authMiddleware, authorize({ tag: 'any-active' }), controller.createTransportationTransaction);
+router.delete('/container/:id/transportation-transaction/:txnId', authMiddleware, authorize({ tag: 'any-active' }), controller.deleteTransportationTransaction);
 
 // Clearance payment — permission-driven access
 router.patch('/container/clearence-payment/:id', authMiddleware, authorize({ tag: 'any-active' }), controller.addContainerPayment);
@@ -277,6 +328,13 @@ router.patch(
   authMiddleware,
   authorize({ tag: 'any-active' }),
   controller.approvePaymentCosting
+);
+
+router.patch(
+  '/container/payment-allocation/:id/approve',
+  authMiddleware,
+  authorize({ tag: 'any-active' }),
+  controller.approvePaymentAllocation
 );
 
 // GRN — Purchase team only
