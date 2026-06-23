@@ -2722,7 +2722,11 @@ exports.updateFASContainer = async (req, res) => {
   try {
     const files = req.files || {};
     const inwardCollectionAdviceDocument = files?.inwardCollectionAdviceDocument?.[0];
+    const daSignedDocument = files?.daSignedDocument?.[0];
+    const dnSignedDocument = files?.dnSignedDocument?.[0];
+    const murabahaContractDocument = files?.murabahaContractDocument?.[0];
     const murabahaContractSubmittedDocument = files?.murabahaContractSubmittedDocument?.[0];
+    const submissionPackageDocument = files?.submissionPackageDocument?.[0];
     const documentsReleasedDocument = files?.documentsReleasedDocument?.[0];
 
     const {
@@ -2744,7 +2748,19 @@ exports.updateFASContainer = async (req, res) => {
       bankAdvanceAmountDocumentUrl,
       bankAdvanceApprovedDocumentUrl,
       bankAdvanceSubmittedOn,
-      docToBeReleasedOn
+      docToBeReleasedOn,
+      bankSubmittedToBank,
+      daSignedDocumentUrl,
+      daSignedDocumentName,
+      dnSignedDocumentUrl,
+      dnSignedDocumentName,
+      skipMurabaha,
+      murabahaContractDocumentUrl,
+      murabahaContractDocumentName,
+      daSubmittedToBank,
+      murabahaSubmittedToBank,
+      submissionPackageDocumentUrl,
+      submissionPackageDocumentName
     } = req.body;
 
     const container = await Container.findById(req.params.id);
@@ -2849,6 +2865,54 @@ exports.updateFASContainer = async (req, res) => {
       container.actual.docToBeReleasedOn = toDateOrNull(docToBeReleasedOn);
       addDocumentTrackerSyncField('docToBeReleasedOn');
     }
+    if (bankSubmittedToBank !== undefined) {
+      container.actual.bankSubmittedToBank = bankSubmittedToBank === 'true' || bankSubmittedToBank === true;
+      addDocumentTrackerSyncField('bankSubmittedToBank');
+    }
+    if (skipMurabaha !== undefined) {
+      container.actual.skipMurabaha = skipMurabaha === 'true' || skipMurabaha === true;
+      addDocumentTrackerSyncField('skipMurabaha');
+    }
+    if (daSubmittedToBank !== undefined) {
+      container.actual.daSubmittedToBank = daSubmittedToBank === 'true' || daSubmittedToBank === true;
+      addDocumentTrackerSyncField('daSubmittedToBank');
+    }
+    if (murabahaSubmittedToBank !== undefined) {
+      container.actual.murabahaSubmittedToBank = murabahaSubmittedToBank === 'true' || murabahaSubmittedToBank === true;
+      addDocumentTrackerSyncField('murabahaSubmittedToBank');
+    }
+    if (daSignedDocumentUrl !== undefined) {
+      container.actual.daSignedDocumentUrl = daSignedDocumentUrl || '';
+      addDocumentTrackerSyncField('daSignedDocumentUrl');
+    }
+    if (daSignedDocumentName !== undefined) {
+      container.actual.daSignedDocumentName = daSignedDocumentName || '';
+      addDocumentTrackerSyncField('daSignedDocumentName');
+    }
+    if (dnSignedDocumentUrl !== undefined) {
+      container.actual.dnSignedDocumentUrl = dnSignedDocumentUrl || '';
+      addDocumentTrackerSyncField('dnSignedDocumentUrl');
+    }
+    if (dnSignedDocumentName !== undefined) {
+      container.actual.dnSignedDocumentName = dnSignedDocumentName || '';
+      addDocumentTrackerSyncField('dnSignedDocumentName');
+    }
+    if (murabahaContractDocumentUrl !== undefined) {
+      container.actual.murabahaContractDocumentUrl = murabahaContractDocumentUrl || '';
+      addDocumentTrackerSyncField('murabahaContractDocumentUrl');
+    }
+    if (murabahaContractDocumentName !== undefined) {
+      container.actual.murabahaContractDocumentName = murabahaContractDocumentName || '';
+      addDocumentTrackerSyncField('murabahaContractDocumentName');
+    }
+    if (submissionPackageDocumentUrl !== undefined) {
+      container.actual.submissionPackageDocumentUrl = submissionPackageDocumentUrl || '';
+      addDocumentTrackerSyncField('submissionPackageDocumentUrl');
+    }
+    if (submissionPackageDocumentName !== undefined) {
+      container.actual.submissionPackageDocumentName = submissionPackageDocumentName || '';
+      addDocumentTrackerSyncField('submissionPackageDocumentName');
+    }
 
     if (inwardCollectionAdviceDocument) {
       const uploaded = await uploadBufferToS3(inwardCollectionAdviceDocument, 'shipments/document-tracker/inward-advice');
@@ -2856,11 +2920,35 @@ exports.updateFASContainer = async (req, res) => {
       container.actual.inwardCollectionAdviceDocumentName = uploaded.fileName;
       addDocumentTrackerSyncField('inwardCollectionAdviceDocumentUrl', 'inwardCollectionAdviceDocumentName');
     }
+    if (daSignedDocument) {
+      const uploaded = await uploadBufferToS3(daSignedDocument, 'shipments/document-tracker/da-signed');
+      container.actual.daSignedDocumentUrl = uploaded.url;
+      container.actual.daSignedDocumentName = uploaded.fileName;
+      addDocumentTrackerSyncField('daSignedDocumentUrl', 'daSignedDocumentName');
+    }
+    if (dnSignedDocument) {
+      const uploaded = await uploadBufferToS3(dnSignedDocument, 'shipments/document-tracker/dn-signed');
+      container.actual.dnSignedDocumentUrl = uploaded.url;
+      container.actual.dnSignedDocumentName = uploaded.fileName;
+      addDocumentTrackerSyncField('dnSignedDocumentUrl', 'dnSignedDocumentName');
+    }
+    if (murabahaContractDocument) {
+      const uploaded = await uploadBufferToS3(murabahaContractDocument, 'shipments/document-tracker/murabaha-contract');
+      container.actual.murabahaContractDocumentUrl = uploaded.url;
+      container.actual.murabahaContractDocumentName = uploaded.fileName;
+      addDocumentTrackerSyncField('murabahaContractDocumentUrl', 'murabahaContractDocumentName');
+    }
     if (murabahaContractSubmittedDocument) {
       const uploaded = await uploadBufferToS3(murabahaContractSubmittedDocument, 'shipments/document-tracker/murabaha-submitted');
       container.actual.murabahaContractSubmittedDocumentUrl = uploaded.url;
       container.actual.murabahaContractSubmittedDocumentName = uploaded.fileName;
       addDocumentTrackerSyncField('murabahaContractSubmittedDocumentUrl', 'murabahaContractSubmittedDocumentName');
+    }
+    if (submissionPackageDocument) {
+      const uploaded = await uploadBufferToS3(submissionPackageDocument, 'shipments/document-tracker/submission-package');
+      container.actual.submissionPackageDocumentUrl = uploaded.url;
+      container.actual.submissionPackageDocumentName = uploaded.fileName;
+      addDocumentTrackerSyncField('submissionPackageDocumentUrl', 'submissionPackageDocumentName');
     }
     if (documentsReleasedDocument) {
       const uploaded = await uploadBufferToS3(documentsReleasedDocument, 'shipments/document-tracker/documents-released');
@@ -3182,6 +3270,7 @@ exports.updateLogisticsDetails = async (req, res) => {
         sn: Number(row.sn) || 0,
         containerSerialNo: row.containerSerialNo || '',
         transportCompanyName: row.transportCompanyName || '',
+        warehouse: row.warehouse || '',
         bookedDate: toDateOrNull(row.bookedDate),
         bookingTime: toTimeString(row.bookingTime),
         transportDate: toDateOrNull(row.transportDate),
@@ -5465,6 +5554,18 @@ exports.getShipmentById = async (req, res) => {
             documentsReleasedDate: a.documentsReleasedDate,
             documentsReleasedDocumentUrl: a.documentsReleasedDocumentUrl,
             documentsReleasedDocumentName: a.documentsReleasedDocumentName,
+            bankSubmittedToBank: a.bankSubmittedToBank || false,
+            daSignedDocumentUrl: a.daSignedDocumentUrl,
+            daSignedDocumentName: a.daSignedDocumentName,
+            dnSignedDocumentUrl: a.dnSignedDocumentUrl,
+            dnSignedDocumentName: a.dnSignedDocumentName,
+            skipMurabaha: a.skipMurabaha || false,
+            murabahaContractDocumentUrl: a.murabahaContractDocumentUrl,
+            murabahaContractDocumentName: a.murabahaContractDocumentName,
+            daSubmittedToBank: a.daSubmittedToBank || false,
+            murabahaSubmittedToBank: a.murabahaSubmittedToBank || false,
+            submissionPackageDocumentUrl: a.submissionPackageDocumentUrl,
+            submissionPackageDocumentName: a.submissionPackageDocumentName,
             bankAdvanceAmountDocumentUrl: a.bankAdvanceAmountDocumentUrl,
             bankAdvanceApprovedDocumentUrl: a.bankAdvanceApprovedDocumentUrl,
             bankAdvanceSubmittedOn: a.bankAdvanceSubmittedOn,
@@ -5545,6 +5646,7 @@ exports.getShipmentById = async (req, res) => {
             deliverySchedules: a.deliverySchedules || [],
             warehouseSchedules: a.warehouseSchedules || [],
             transportationBooked: a.transportationBooked || [],
+            additionalDocuments: a.additionalDocuments || [],
             lockedLogisticsSections: a.lockedLogisticsSections || [],
             storageSplits: a.storageSplits || [],
             storageDocumentUrl: a.storageDocumentUrl || null,
@@ -5601,6 +5703,10 @@ exports.getShipmentById = async (req, res) => {
         signedCustomsBl,
         signedCustomsInvoice,
         signedCustomsPackingList,
+        signedDaSigned,
+        signedDnSigned,
+        signedMurabahaContract,
+        signedSubmissionPackage,
       ] = await Promise.all([
         toSignedDocument(row.costSheetBookingDocumentUrl, row.costSheetBookingDocumentName),
         toSignedDocument(row.blDocumentUrl, row.blDocumentName),
@@ -5623,6 +5729,10 @@ exports.getShipmentById = async (req, res) => {
         toSignedDocument(row.customsOriginalDocuments?.blOriginal?.documentUrl, row.customsOriginalDocuments?.blOriginal?.documentName),
         toSignedDocument(row.customsOriginalDocuments?.invoice?.documentUrl, row.customsOriginalDocuments?.invoice?.documentName),
         toSignedDocument(row.customsOriginalDocuments?.packingList?.documentUrl, row.customsOriginalDocuments?.packingList?.documentName),
+        toSignedDocument(row.daSignedDocumentUrl, row.daSignedDocumentName),
+        toSignedDocument(row.dnSignedDocumentUrl, row.dnSignedDocumentName),
+        toSignedDocument(row.murabahaContractDocumentUrl, row.murabahaContractDocumentName),
+        toSignedDocument(row.submissionPackageDocumentUrl, row.submissionPackageDocumentName),
       ]);
 
       row.costSheetBookingDocumentUrl = signedStep3Doc.url;
@@ -5657,6 +5767,14 @@ exports.getShipmentById = async (req, res) => {
       row.paymentCostingDocumentName = signedPaymentCosting.name;
       row.storageDocumentUrl = signedStorageDocument.url;
       row.storageDocumentName = signedStorageDocument.name;
+      row.daSignedDocumentUrl = signedDaSigned.url;
+      row.daSignedDocumentName = signedDaSigned.name;
+      row.dnSignedDocumentUrl = signedDnSigned.url;
+      row.dnSignedDocumentName = signedDnSigned.name;
+      row.murabahaContractDocumentUrl = signedMurabahaContract.url;
+      row.murabahaContractDocumentName = signedMurabahaContract.name;
+      row.submissionPackageDocumentUrl = signedSubmissionPackage.url;
+      row.submissionPackageDocumentName = signedSubmissionPackage.name;
       if (row.customsOriginalDocuments) {
         row.customsOriginalDocuments.boe.documentUrl = signedCustomsBoe.url;
         row.customsOriginalDocuments.boe.documentName = signedCustomsBoe.name;
@@ -5670,7 +5788,7 @@ exports.getShipmentById = async (req, res) => {
         row.customsOriginalDocuments.packingList.documentName = signedCustomsPackingList.name;
       }
 
-      const [costSheetBookings, additionalClearingAdvanceRequests, qualityRows, qualityReports, paymentAllocations, paymentCostings, storageSplits] = await Promise.all([
+      const [costSheetBookings, additionalClearingAdvanceRequests, qualityRows, qualityReports, paymentAllocations, paymentCostings, storageSplits, additionalDocuments] = await Promise.all([
         Promise.all((row.costSheetBookings || []).map(async (costRow) => {
           const plainCostRow = toPlainObject(costRow);
           const signed = await toSignedDocument(costRow.attachmentDocumentUrl, costRow.attachmentDocumentName);
@@ -5745,6 +5863,15 @@ exports.getShipmentById = async (req, res) => {
             documentName: signed.name,
           };
         })),
+        Promise.all((row.additionalDocuments || []).map(async (doc) => {
+          const plainDoc = toPlainObject(doc);
+          const signed = await toSignedDocument(doc.fileUrl, doc.fileName);
+          return {
+            ...plainDoc,
+            fileUrl: signed.url,
+            fileName: signed.name,
+          };
+        })),
       ]);
 
       row.costSheetBookings = costSheetBookings;
@@ -5754,6 +5881,7 @@ exports.getShipmentById = async (req, res) => {
       row.paymentAllocations = paymentAllocations;
       row.paymentCostings = paymentCostings;
       row.storageSplits = storageSplits;
+      row.additionalDocuments = additionalDocuments;
     }));
 
     const [signedLpoUrl, signedProformaUrl, signedS1QualityUrl] = await Promise.all([
@@ -6688,6 +6816,7 @@ exports.bulkSaveTransportationArranged = async (req, res) => {
           sn: Number(booking.sn) || 0,
           containerSerialNo: booking.containerSerialNo || '',
           transportCompanyName: booking.transportCompanyName,
+          warehouse: booking.warehouse || '',
           bookedDate: toDateOrNull(booking.bookedDate),
           bookingTime: toTimeString(booking.bookingTime),
           transportDate: toDateOrNull(booking.transportDate),
@@ -6719,6 +6848,149 @@ exports.bulkSaveTransportationArranged = async (req, res) => {
   } catch (err) {
     console.error('bulkSaveTransportationArranged error:', err);
     res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+exports.uploadAdditionalRepositoryDocument = async (req, res) => {
+  try {
+    const container = await Container.findById(req.params.id);
+    if (!container) return res.status(404).json({ message: "Container not found" });
+    if (!container.actual) return res.status(400).json({ message: "Container has no actual recorded yet" });
+
+    const file = req.files?.[0];
+    if (!file) return res.status(400).json({ message: "No file uploaded" });
+
+    const { documentType, description } = req.body;
+    if (!documentType) return res.status(400).json({ message: "documentType is required" });
+
+    const uploaded = await uploadBufferToS3(file, 'shipments/logistics/repository');
+
+    const newDoc = {
+      documentType,
+      description: description || '',
+      fileUrl: uploaded.url,
+      fileName: uploaded.fileName,
+      uploadedAt: new Date(),
+      uploadedBy: req.user?.name || req.user?.email || 'System User',
+    };
+
+    container.actual.additionalDocuments.push(newDoc);
+    await container.save();
+
+    // Sync with same BL
+    await syncSameBlActualFields({
+      ContainerModel: Container,
+      sourceContainer: container,
+      fields: ['additionalDocuments'],
+    });
+
+    res.status(200).json({
+      message: "Document uploaded successfully",
+      container,
+      document: container.actual.additionalDocuments[container.actual.additionalDocuments.length - 1]
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+exports.deleteAdditionalRepositoryDocument = async (req, res) => {
+  try {
+    const container = await Container.findById(req.params.id);
+    if (!container) return res.status(404).json({ message: "Container not found" });
+    if (!container.actual) return res.status(400).json({ message: "Container has no actual recorded yet" });
+
+    const { docId } = req.params;
+    container.actual.additionalDocuments = container.actual.additionalDocuments.filter(
+      (doc) => String(doc._id) !== String(docId)
+    );
+    await container.save();
+
+    // Sync with same BL
+    await syncSameBlActualFields({
+      ContainerModel: Container,
+      sourceContainer: container,
+      fields: ['additionalDocuments'],
+    });
+
+    res.status(200).json({
+      message: "Document deleted successfully",
+      container,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+exports.createTransportationTransaction = async (req, res) => {
+  try {
+    const container = await Container.findById(req.params.id);
+    if (!container) return res.status(404).json({ message: 'Container not found' });
+    if (!container.actual) return res.status(400).json({ message: 'Container has no actual record' });
+
+    const { containerSerials, transportCompany, warehouse, transportDate } = req.body;
+
+    if (!transportCompany) return res.status(400).json({ message: 'transportCompany is required' });
+    if (!warehouse) return res.status(400).json({ message: 'warehouse is required' });
+    if (!transportDate) return res.status(400).json({ message: 'transportDate is required' });
+    if (!Array.isArray(containerSerials) || containerSerials.length === 0) {
+      return res.status(400).json({ message: 'containerSerials must be a non-empty array' });
+    }
+
+    const year = new Date().getFullYear();
+    const existingCount = (container.actual.transportationTransactions || []).length;
+    const transactionNo = `TRN-${year}-${String(existingCount + 1).padStart(4, '0')}`;
+
+    if (!Array.isArray(container.actual.transportationTransactions)) {
+      container.actual.transportationTransactions = [];
+    }
+
+    const newTransaction = {
+      transactionNo,
+      containerSerials: containerSerials || [],
+      transportCompany,
+      warehouse,
+      transportDate: transportDate ? new Date(transportDate) : null,
+      createdAt: new Date(),
+    };
+
+    container.actual.transportationTransactions.push(newTransaction);
+    await container.save();
+
+    res.status(201).json({
+      message: 'Transportation transaction created successfully',
+      transaction: newTransaction,
+      container,
+    });
+  } catch (err) {
+    console.error('createTransportationTransaction error:', err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.deleteTransportationTransaction = async (req, res) => {
+  try {
+    const container = await Container.findById(req.params.id);
+    if (!container) return res.status(404).json({ message: 'Container not found' });
+    if (!container.actual) return res.status(400).json({ message: 'Container has no actual record' });
+
+    const { txnId } = req.params;
+    const before = (container.actual.transportationTransactions || []).length;
+    container.actual.transportationTransactions = (container.actual.transportationTransactions || []).filter(
+      (t) => String(t._id) !== txnId
+    );
+
+    if (container.actual.transportationTransactions.length === before) {
+      return res.status(404).json({ message: 'Transaction not found' });
+    }
+
+    await container.save();
+    res.status(200).json({ message: 'Transportation transaction deleted successfully' });
+  } catch (err) {
+    console.error('deleteTransportationTransaction error:', err);
+    res.status(500).json({ message: err.message });
   }
 };
 

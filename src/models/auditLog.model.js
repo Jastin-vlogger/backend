@@ -27,4 +27,6 @@ const auditLogSchema = new mongoose.Schema({
   remarks: { type: String }              // optional human-readable info
 }, { timestamps: true }); // createdAt + updatedAt
 
+auditLogSchema.index({ entityId: 1 });
+
 module.exports = mongoose.model("AuditLog", auditLogSchema);

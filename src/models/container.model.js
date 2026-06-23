@@ -79,6 +79,17 @@ const storageAllocationDecisionSchema = new mongoose.Schema({
   similarItems: { type: Boolean, default: true },
   splitRequired: { type: Boolean, default: false },
   splitQuantity: { type: Number, default: 0 },
+  singleItem: { type: Boolean, default: true },
+  allocateSameWarehouse: { type: Boolean, default: true },
+  warehousesSelected: [{ type: String }],
+  itemAllocations: [{
+    itemName: { type: String },
+    expectedContainers: { type: Number, default: 0 },
+    allocations: [{
+      warehouse: { type: String },
+      containersAssigned: { type: Number, default: 0 },
+    }],
+  }],
 }, { _id: false });
 
 const storageAllocationSplitSchema = new mongoose.Schema({
@@ -87,6 +98,24 @@ const storageAllocationSplitSchema = new mongoose.Schema({
   quantity: { type: Number, default: 0 },
   warehouse: { type: String, default: '' },
 }, { _id: false });
+
+const additionalDocumentSchema = new mongoose.Schema({
+  documentType: { type: String },
+  description: { type: String },
+  fileUrl: { type: String },
+  fileName: { type: String },
+  uploadedAt: { type: Date, default: Date.now },
+  uploadedBy: { type: String },
+}, { _id: true });
+
+const transportationTransactionSchema = new mongoose.Schema({
+  transactionNo: { type: String, required: true },
+  containerSerials: [{ type: String }],
+  transportCompany: { type: String },
+  warehouse: { type: String },
+  transportDate: { type: Date },
+  createdAt: { type: Date, default: Date.now },
+}, { _id: true });
 
 const actualContainerSchema = new mongoose.Schema({
   actualSerialNo: { type: String },
@@ -162,7 +191,7 @@ const actualContainerSchema = new mongoose.Schema({
   municipalityDocumentUrl: { type: String },
   municipalityDocumentName: { type: String },
   municipalityRemarks: { type: String },
-  municipalityStatus: { type: String, enum: ['open', 'closed'], default: 'open' },
+  municipalityStatus: { type: String, enum: ['open', 'released', 'closed'], default: 'open' },
   municipalityStatusComment: { type: String },
   lockedLogisticsSections: [{ type: String }],
 
@@ -350,6 +379,7 @@ const actualContainerSchema = new mongoose.Schema({
     sn: { type: Number },
     containerSerialNo: { type: String },
     transportCompanyName: { type: String, default: '' },
+    warehouse: { type: String, default: '' },
     bookedDate: { type: Date },
     bookingTime: { type: String },
     transportDate: { type: Date },
@@ -480,6 +510,44 @@ const actualContainerSchema = new mongoose.Schema({
     landedCostPerUnit: { type: Number },
     reference: { type: String }
   }],
+  // Redesigned Document Tracker Milestones
+  bankSubmittedToBank: { type: Boolean, default: false },
+  daSignedDocumentUrl: { type: String },
+  daSignedDocumentName: { type: String },
+  dnSignedDocumentUrl: { type: String },
+  dnSignedDocumentName: { type: String },
+  skipMurabaha: { type: Boolean, default: false },
+  murabahaContractDocumentUrl: { type: String },
+  murabahaContractDocumentName: { type: String },
+  daSubmittedToBank: { type: Boolean, default: false },
+  murabahaSubmittedToBank: { type: Boolean, default: false },
+  submissionPackageDocumentUrl: { type: String },
+  submissionPackageDocumentName: { type: String },
+
+  // Redesigned Port & Clearance Milestones
+  commercialDocumentReceivedDate: { type: Date },
+  commercialDocumentDocumentUrl: { type: String },
+  commercialDocumentDocumentName: { type: String },
+  freeDetentionDays: { type: Number, default: 10 },
+  freeStorageDays: { type: Number, default: 14 },
+  clearanceRemarks: { type: String },
+  doRemarks: { type: String },
+  customerInspectionRequired: { type: Boolean, default: false },
+  municipalityReleasedDate: { type: Date },
+  municipalityResponseRemarks: { type: String },
+  municipalityComments: { type: String },
+  customerInspectionDate: { type: Date },
+  customerInspectionDocumentUrl: { type: String },
+  customerInspectionDocumentName: { type: String },
+  customerInspectionStatus: { type: String },
+  customerInspectionComments: { type: String },
+
+  // Additional Document Repository
+  additionalDocuments: [additionalDocumentSchema],
+
+  // Transportation Arrangement Transactions
+  transportationTransactions: [transportationTransactionSchema],
+
   paymentCostingDocumentUrl: { type: String },
   paymentCostingDocumentName: { type: String }
 
@@ -506,5 +574,7 @@ const containerSchema = new mongoose.Schema({
   status: { type: String, enum: ["Planned", "Actual","Documented", "Arrived","Paid", "Cleared","GRN"], default: "Planned" }
 
 }, { timestamps: true });
+
+containerSchema.index({ shipmentId: 1 });
 
 module.exports = mongoose.model("Container", containerSchema);
