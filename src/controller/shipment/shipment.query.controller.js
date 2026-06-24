@@ -968,7 +968,10 @@ exports.getShipmentById = async (req, res) => {
       .populate('actual.paymentAllocationApproval.submittedBy', 'name email role')
       .populate('actual.paymentAllocationApproval.fasManagerApprovedBy', 'name email role')
       .populate('actual.paymentCostingApproval.submittedBy', 'name email role')
-      .populate('actual.paymentCostingApproval.fasManagerApprovedBy', 'name email role');
+      .populate('actual.paymentCostingApproval.fasManagerApprovedBy', 'name email role')
+      .populate('actual.storageAllocationApproval.submittedBy', 'name email role')
+      .populate('actual.storageAllocationApproval.lastUpdatedBy', 'name email role')
+      .populate('actual.storageAllocationApproval.warehouseManagerApprovedBy', 'name email role');
     
     // DEBUG: Log additionalDocuments for each container
     containers.forEach((container, index) => {
@@ -1237,6 +1240,7 @@ exports.getShipmentById = async (req, res) => {
             // Transportation (M4)
             transportationBooked: (a.transportationBooked || []).map(tb => ({
               sn: tb.sn,
+              transactionId: tb.transactionId || '',
               containerSerialNo: tb.containerSerialNo,
               transportCompanyName: tb.transportCompanyName,
               warehouse: tb.warehouse || '',

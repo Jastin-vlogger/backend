@@ -35,6 +35,8 @@ const storageAllocationApprovalStateSchema = new mongoose.Schema({
   },
   submittedAt: { type: Date, default: null },
   submittedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  lastUpdatedAt: { type: Date, default: null },
+  lastUpdatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   warehouseManagerApprovedAt: { type: Date, default: null },
   warehouseManagerApprovedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
 }, { _id: false });
@@ -377,6 +379,7 @@ const actualContainerSchema = new mongoose.Schema({
   maximumRetentionDate: { type: Date },
   transportationBooked: [{
     sn: { type: Number },
+    transactionId: { type: String, default: '' },
     containerSerialNo: { type: String },
     transportCompanyName: { type: String, default: '' },
     warehouse: { type: String, default: '' },

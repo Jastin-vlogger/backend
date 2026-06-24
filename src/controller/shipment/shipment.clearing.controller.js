@@ -153,7 +153,7 @@ exports.updateBLDetails = async (req, res) => {
     }
 
     if (isStorageAllocationSave) {
-      container.actual.storageAllocationApproval = buildStorageAllocationPendingApproval(req.user);
+      container.actual.storageAllocationApproval = buildStorageAllocationPendingApproval(req.user, container.actual.storageAllocationApproval);
     }
 
     await container.save();
@@ -221,6 +221,12 @@ exports.updateBLDetails = async (req, res) => {
       after: cloneForAudit(container.toObject()),
       remarks: hadExistingBlTabSave ? 'B/L details updated' : 'B/L details saved'
     });
+
+    await container.populate([
+      { path: 'actual.storageAllocationApproval.submittedBy', select: 'name email role' },
+      { path: 'actual.storageAllocationApproval.lastUpdatedBy', select: 'name email role' },
+      { path: 'actual.storageAllocationApproval.warehouseManagerApprovedBy', select: 'name email role' },
+    ]);
 
     res.status(200).json({
       message: 'B/L details updated successfully',
@@ -519,6 +525,12 @@ exports.approveStorageAllocations = async (req, res) => {
       after: cloneForAudit(container.toObject()),
       remarks: 'Storage allocations approved by warehouse manager'
     });
+
+    await container.populate([
+      { path: 'actual.storageAllocationApproval.submittedBy', select: 'name email role' },
+      { path: 'actual.storageAllocationApproval.lastUpdatedBy', select: 'name email role' },
+      { path: 'actual.storageAllocationApproval.warehouseManagerApprovedBy', select: 'name email role' },
+    ]);
 
     return res.json({ message: 'Storage allocations approved successfully', container });
   } catch (err) {

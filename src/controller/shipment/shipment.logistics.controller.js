@@ -348,6 +348,7 @@ exports.updateLogisticsDetails = async (req, res) => {
 
       container.actual.transportationBooked = parsedTransportationBooked.map((row) => ({
         sn: Number(row.sn) || 0,
+        transactionId: row.transactionId || '',
         containerSerialNo: row.containerSerialNo || '',
         transportCompanyName: row.transportCompanyName || '',
         warehouse: row.warehouse || '',

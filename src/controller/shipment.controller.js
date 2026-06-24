@@ -227,10 +227,12 @@ const buildPaymentCostingPendingApproval = (user) => ({
 
 const buildPaymentAllocationPendingApproval = (user) => buildPaymentCostingPendingApproval(user);
 
-const buildStorageAllocationPendingApproval = (user) => ({
+const buildStorageAllocationPendingApproval = (user, existing) => ({
   status: STORAGE_ALLOCATION_APPROVAL_STATUSES.pendingWarehouseManager,
-  submittedAt: new Date(),
-  submittedBy: user?._id || null,
+  submittedAt: existing?.submittedAt || new Date(),
+  submittedBy: existing?.submittedBy || user?._id || null,
+  lastUpdatedAt: new Date(),
+  lastUpdatedBy: user?._id || null,
   warehouseManagerApprovedAt: null,
   warehouseManagerApprovedBy: null,
 });
@@ -2585,6 +2587,23 @@ exports.updateBLDetails = async (req, res) => {
         similarItems: parsedStorageAllocationDecision.similarItems !== false,
         splitRequired: !!parsedStorageAllocationDecision.splitRequired,
         splitQuantity: Number(parsedStorageAllocationDecision.splitQuantity) || 0,
+        singleItem: parsedStorageAllocationDecision.singleItem !== false,
+        allocateSameWarehouse: parsedStorageAllocationDecision.allocateSameWarehouse !== false,
+        warehousesSelected: Array.isArray(parsedStorageAllocationDecision.warehousesSelected)
+          ? parsedStorageAllocationDecision.warehousesSelected
+          : [],
+        itemAllocations: Array.isArray(parsedStorageAllocationDecision.itemAllocations)
+          ? parsedStorageAllocationDecision.itemAllocations.map((item) => ({
+              itemName: item.itemName || '',
+              expectedContainers: Number(item.expectedContainers) || 0,
+              allocations: Array.isArray(item.allocations)
+                ? item.allocations.map((a) => ({
+                    warehouse: a.warehouse || '',
+                    containersAssigned: Number(a.containersAssigned) || 0,
+                  }))
+                : [],
+            }))
+          : [],
       };
     }
     if (Array.isArray(parsedStorageAllocationSplits)) {
@@ -2636,7 +2655,7 @@ exports.updateBLDetails = async (req, res) => {
     }
 
     if (isStorageAllocationSave) {
-      container.actual.storageAllocationApproval = buildStorageAllocationPendingApproval(req.user);
+      container.actual.storageAllocationApproval = buildStorageAllocationPendingApproval(req.user, container.actual.storageAllocationApproval);
     }
 
     await container.save();
@@ -2707,6 +2726,12 @@ exports.updateBLDetails = async (req, res) => {
         remarks: 'Storage allocations submitted for warehouse manager approval'
       });
     }
+
+    await container.populate([
+      { path: 'actual.storageAllocationApproval.submittedBy', select: 'name email role' },
+      { path: 'actual.storageAllocationApproval.lastUpdatedBy', select: 'name email role' },
+      { path: 'actual.storageAllocationApproval.warehouseManagerApprovedBy', select: 'name email role' },
+    ]);
 
     res.status(200).json({
       message: 'B/L details updated successfully',
@@ -3269,6 +3294,7 @@ exports.updateLogisticsDetails = async (req, res) => {
 
       container.actual.transportationBooked = parsedTransportationBooked.map((row) => ({
         sn: Number(row.sn) || 0,
+        transactionId: row.transactionId || '',
         containerSerialNo: row.containerSerialNo || '',
         transportCompanyName: row.transportCompanyName || '',
         warehouse: row.warehouse || '',
@@ -6875,6 +6901,7 @@ exports.bulkSaveTransportationArranged = async (req, res) => {
 
         container.actual.transportationBooked = transportationBooked.map((booking) => ({
           sn: Number(booking.sn) || 0,
+          transactionId: booking.transactionId || '',
           containerSerialNo: booking.containerSerialNo || '',
           transportCompanyName: booking.transportCompanyName,
           warehouse: booking.warehouse || '',
