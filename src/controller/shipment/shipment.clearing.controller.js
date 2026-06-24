@@ -526,3 +526,51 @@ exports.approveStorageAllocations = async (req, res) => {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 };
+
+exports.resetStorageAllocations = async (req, res) => {
+  try {
+    const container = await Container.findById(req.params.id);
+    if (!container) return res.status(404).json({ message: 'Container not found' });
+    if (!container.actual) return res.status(400).json({ message: 'Actual not created yet' });
+
+    const allowed = await hasRoleOrPermission(
+      req.user,
+      'shipment.tab.bl_details.storage_allocations.edit',
+      ['Admin', 'Manager', 'Management']
+    );
+    if (!allowed) {
+      return res.status(403).json({ message: 'You do not have permission to reset storage allocations.' });
+    }
+
+    const beforeUpdate = cloneForAudit(container.toObject());
+
+    container.actual.storageAllocations = [];
+    container.actual.storageAllocationDecision = null;
+    container.actual.storageAllocationSplits = [];
+    container.actual.storageAllocationApproval = { status: STORAGE_ALLOCATION_APPROVAL_STATUSES.draft };
+
+    await container.save();
+
+    await syncSameBlActualFields({
+      ContainerModel: Container,
+      sourceContainer: container,
+      fields: SAME_BL_STORAGE_ALLOCATION_FIELDS,
+    });
+
+    await writeAuditLog({
+      userId: req.user._id,
+      module: 'Warehouse',
+      entity: 'Container',
+      entityId: container._id,
+      action: 'ResetStorageAllocations',
+      before: beforeUpdate,
+      after: cloneForAudit(container.toObject()),
+      remarks: 'Storage allocations reset by admin',
+    });
+
+    return res.json({ message: 'Storage allocations reset successfully', container });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};

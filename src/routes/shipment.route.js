@@ -192,6 +192,13 @@ router.patch(
 );
 
 router.patch(
+  '/container/bl-details/:id/storage-allocations/reset',
+  authMiddleware,
+  authorize({ tag: 'any-active' }),
+  controller.resetStorageAllocations
+);
+
+router.patch(
   '/container/storage/:id/approve',
   authMiddleware,
   authorize({ tag: 'any-active' }),
