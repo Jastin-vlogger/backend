@@ -393,6 +393,7 @@ const actualContainerSchema = new mongoose.Schema({
     containerSerialNo: { type: String },
     bags: { type: Number },
     warehouse: { type: String },
+    block: { type: String },
     storageAvailability: { type: Number },
     receivedOnDate: { type: Date },
     receivedOnTime: { type: String },

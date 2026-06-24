@@ -144,6 +144,19 @@ router.patch(
   controller.updateBLDetails
 );
 
+router.post(
+  '/container/bl-details/:id/replace-bl-document',
+  authMiddleware,
+  authorize({ tag: 'any-active' }),
+  (req, res, next) => {
+    upload.single('blDocument')(req, res, (err) => {
+      if (err) return res.status(400).json({ message: err.message || 'Invalid file upload' });
+      next();
+    });
+  },
+  controller.replaceBlDocument
+);
+
 router.patch(
   '/container/bl-details/:id/clearing-advance/approve',
   authMiddleware,

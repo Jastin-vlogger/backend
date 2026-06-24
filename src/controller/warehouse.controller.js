@@ -105,6 +105,34 @@ exports.deleteWarehouse = async (req, res) => {
   }
 };
 
+exports.addWarehouseBlock = async (req, res) => {
+  try {
+    const warehouse = await Warehouse.findById(req.params.id);
+    if (!warehouse) return res.status(404).json({ message: 'Warehouse not found' });
+    const { name, capacity } = req.body;
+    if (!name || !String(name).trim()) return res.status(400).json({ message: 'Block name is required' });
+    warehouse.blocks.push({ name: String(name).trim(), capacity: capacity ? Number(capacity) : undefined });
+    await warehouse.save();
+    await warehouse.populate(WAREHOUSE_POPULATE);
+    res.json(toWarehouseResponse(warehouse));
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+exports.deleteWarehouseBlock = async (req, res) => {
+  try {
+    const warehouse = await Warehouse.findById(req.params.id);
+    if (!warehouse) return res.status(404).json({ message: 'Warehouse not found' });
+    warehouse.blocks = warehouse.blocks.filter((b) => String(b._id) !== String(req.params.blockId));
+    await warehouse.save();
+    await warehouse.populate(WAREHOUSE_POPULATE);
+    res.json(toWarehouseResponse(warehouse));
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 exports.getAssignableStorekeepers = async (_req, res) => {
   try {
     const users = await User.find({ isActive: true })

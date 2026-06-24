@@ -8,7 +8,7 @@ const Item = require('../models/item.model');
 const User = require('../models/auth.model');
 const AuditLog = require('../models/auditLog.model');
 const writeAuditLog = require('../core/utils/auditLogger');
-const { uploadBufferToS3, createSignedGetUrl } = require('../core/utils/s3Upload');
+const { uploadBufferToS3, deleteFromS3, createSignedGetUrl } = require('../core/utils/s3Upload');
 const { calculateSupplierOnboardingState } = require('../core/utils/supplierOnboarding');
 const {
   sendSupplierInviteEmail,
@@ -3554,6 +3554,7 @@ exports.updateStorageDetails = async (req, res) => {
         containerSerialNo: row.containerSerialNo || '',
         bags: Number(row.bags ?? 0) || 0,
         warehouse: row.warehouse || '',
+        block: row.block || '',
         storageAvailability: Number(row.storageAvailability) || 0,
         receivedOnDate: toDateOrNull(row.receivedOnDate),
         receivedOnTime: toTimeString(row.receivedOnTime),
@@ -4352,6 +4353,16 @@ exports.approveStorageAllocations = async (req, res) => {
         return res.status(400).json({ message: 'Storage allocations are already approved.' });
       }
       return res.status(400).json({ message: 'Storage allocations must be saved before they can be approved.' });
+    }
+
+    // Reject approval if no warehouse has been assigned
+    const splitRows = container.actual.storageAllocationSplits || [];
+    const legacyRows = container.actual.storageAllocations || [];
+    const hasWarehouse =
+      splitRows.some((r) => String(r?.warehouse || '').trim()) ||
+      legacyRows.some((r) => String(r?.warehouse || '').trim());
+    if (!hasWarehouse) {
+      return res.status(400).json({ message: 'A destination warehouse must be selected before approving storage allocation.' });
     }
 
     const allowed = await hasRoleOrPermission(
@@ -6732,6 +6743,7 @@ exports.bulkSaveStorageArrival = async (req, res) => {
           containerSerialNo: split.containerSerialNo || '',
           bags: Number(split.bags) || 0,
           warehouse: split.warehouse || '',
+          block: split.block || '',
           storageAvailability: Number(split.storageAvailability) || 0,
           receivedOnDate: toDateOrNull(split.receivedOnDate),
           receivedOnTime: toTimeString(split.receivedOnTime),
@@ -6990,6 +7002,41 @@ exports.deleteTransportationTransaction = async (req, res) => {
     res.status(200).json({ message: 'Transportation transaction deleted successfully' });
   } catch (err) {
     console.error('deleteTransportationTransaction error:', err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.replaceBlDocument = async (req, res) => {
+  try {
+    const container = await Container.findById(req.params.id);
+    if (!container) return res.status(404).json({ message: 'Container not found' });
+
+    const newFile = req.file;
+    if (!newFile) return res.status(400).json({ message: 'No replacement file provided' });
+
+    const oldUrl = container.actual?.blDocumentUrl;
+    if (oldUrl) {
+      try { await deleteFromS3(oldUrl); } catch (_) { /* non-fatal */ }
+    }
+
+    const uploaded = await uploadBufferToS3(newFile, 'shipments/actual/bl-document');
+    container.actual.blDocumentUrl = uploaded.url;
+    container.actual.blDocumentName = uploaded.fileName;
+    await container.save();
+
+    await syncSameBlActualFields({
+      ContainerModel: Container,
+      sourceContainer: container,
+      fields: ['blDocumentUrl', 'blDocumentName'],
+    });
+
+    res.status(200).json({
+      message: 'BL document replaced successfully',
+      blDocumentUrl: uploaded.url,
+      blDocumentName: uploaded.fileName,
+    });
+  } catch (err) {
+    console.error('replaceBlDocument error:', err);
     res.status(500).json({ message: err.message });
   }
 };
