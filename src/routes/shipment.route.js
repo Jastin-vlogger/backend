@@ -24,6 +24,7 @@ router.get('/dashboard',           authMiddleware, authorize({ tag: 'any-active'
 router.get('/reports/export-data', authMiddleware, authorize({ tag: 'any-active' }), controller.getShipmentReportExportData);
 router.get('/reports/export/excel',authMiddleware, authorize({ tag: 'any-active' }), controller.downloadShipmentReportExcel);
 router.get('/reports/export/pdf',  authMiddleware, authorize({ tag: 'any-active' }), controller.downloadShipmentReportPdf);
+router.get('/reports/storage-arrival/excel', authMiddleware, authorize({ tag: 'any-active' }), controller.downloadStorageArrivalReport);
 router.get('/bl-row-definitions',  authMiddleware, authorize({ tag: 'any-active' }), controller.getBlRowDefinitions);
 router.get('/:id',                 authMiddleware, authorize({ tag: 'any-active' }), controller.getShipmentById);
 
