@@ -7220,6 +7220,20 @@ const buildStorageArrivalReportRows = async () => {
   return rows;
 };
 
+exports.getStorageArrivalReportData = async (req, res) => {
+  try {
+    const rows = await buildStorageArrivalReportRows();
+    const generatedAt = new Date();
+    return res.json({
+      rows,
+      generatedAt: generatedAt.toISOString(),
+    });
+  } catch (err) {
+    console.error('getStorageArrivalReportData error:', err);
+    return res.status(500).json({ message: 'Unable to fetch storage arrival report data' });
+  }
+};
+
 exports.downloadStorageArrivalReport = async (req, res) => {
   try {
     const rows = await buildStorageArrivalReportRows();
