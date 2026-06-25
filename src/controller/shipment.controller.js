@@ -5424,6 +5424,51 @@ exports.getShipmentSummary = async (req, res) => {
     const statusPivot = buildDashboardStatusPivot(shipments, containerMap, 'supplier');
     const statusPivotByItem = buildDashboardStatusPivot(shipments, containerMap, 'item');
 
+    // Department-specific chart buckets (Warehouse / FAS / Logistics) — computed
+    // from the already-loaded containers, no extra query needed.
+    const departmentCharts = (() => {
+      const warehouse = { arrived: 0, pending: 0, inTransit: 0 };
+      const fas = { submitted: 0, pending: 0, approved: 0 };
+      const logistics = { cleared: 0, notCleared: 0 };
+
+      containers.forEach((container) => {
+        // Warehouse — arrival status: reached vs awaiting receipt vs still in transit
+        if (hasSavedStorageArrivalData(container)) {
+          warehouse.arrived += 1;
+        } else if (hasAssignedWarehouse(container)) {
+          warehouse.pending += 1;
+        } else {
+          warehouse.inTransit += 1;
+        }
+
+        // Clearing advance flow drives both FAS (document approvals) and Logistics (clearance) lenses
+        const caStatus = container?.actual?.clearingAdvanceApproval?.status || null;
+        const hasClearingAdvance = !!caStatus || hasSavedClearingAdvanceData(container);
+        if (hasClearingAdvance) {
+          // FAS lens — submitted (awaiting FAS) vs pending (draft) vs approved
+          if (caStatus === CLEARING_ADVANCE_APPROVAL_STATUSES.approved) {
+            fas.approved += 1;
+          } else if (
+            caStatus === CLEARING_ADVANCE_APPROVAL_STATUSES.pendingFas ||
+            caStatus === CLEARING_ADVANCE_APPROVAL_STATUSES.pendingFasManager
+          ) {
+            fas.submitted += 1;
+          } else {
+            fas.pending += 1;
+          }
+
+          // Logistics lens — cleared (approved) vs not cleared (everything else)
+          if (caStatus === CLEARING_ADVANCE_APPROVAL_STATUSES.approved) {
+            logistics.cleared += 1;
+          } else {
+            logistics.notCleared += 1;
+          }
+        }
+      });
+
+      return { warehouse, fas, logistics };
+    })();
+
     res.status(200).json({
       kpis: {
         totalShipments: total,
@@ -5432,6 +5477,7 @@ exports.getShipmentSummary = async (req, res) => {
         underClearanceShipments: underClearance,
         totalPaymentExposure: paymentSummary.balanceAmount
       },
+      departmentCharts,
       stageBreakdown,
       monthlyTrend,
       arrivalSummary: {

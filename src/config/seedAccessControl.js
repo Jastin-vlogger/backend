@@ -38,6 +38,13 @@ const DASHBOARD_PERMISSION_TEMPLATES = [
   { key: 'dashboard.section.average_fc.view', resource: 'dashboard', screen: 'dashboard', tab: 'average_fc', type: 'action', action: 'average_fc_view', label: 'View Average FC per Unit Chart', sortOrder: 14 },
 ];
 
+// Department charts are granted per-role (not part of the bulk DASHBOARD_PERMISSION_KEYS spread).
+const DASHBOARD_DEPARTMENT_CHART_TEMPLATES = [
+  { key: 'dashboard.section.warehouse_chart.view', resource: 'dashboard', screen: 'dashboard', tab: 'dashboard', type: 'action', action: 'warehouse_chart_view', label: 'View Warehouse Arrival Chart', sortOrder: 15 },
+  { key: 'dashboard.section.fas_chart.view', resource: 'dashboard', screen: 'dashboard', tab: 'dashboard', type: 'action', action: 'fas_chart_view', label: 'View FAS Document Approvals Chart', sortOrder: 16 },
+  { key: 'dashboard.section.logistics_chart.view', resource: 'dashboard', screen: 'dashboard', tab: 'dashboard', type: 'action', action: 'logistics_chart_view', label: 'View Logistics Clearance Chart', sortOrder: 17 },
+];
+
 const DASHBOARD_PERMISSION_KEYS = DASHBOARD_PERMISSION_TEMPLATES.map((permission) => permission.key);
 
 const SETTINGS_PERMISSION_TEMPLATES = [
@@ -187,6 +194,7 @@ const LEGACY_PERMISSION_TEMPLATES = [
 const ALL_PERMISSION_TEMPLATES = [
   ...MENU_PERMISSION_TEMPLATES,
   ...DASHBOARD_PERMISSION_TEMPLATES,
+  ...DASHBOARD_DEPARTMENT_CHART_TEMPLATES,
   ...SETTINGS_PERMISSION_TEMPLATES,
   ...SHIPMENT_PERMISSION_TEMPLATES,
   ...LEGACY_PERMISSION_TEMPLATES,
@@ -251,6 +259,7 @@ const DEFAULT_ROLE_PERMISSION_MAP = {
   Logistic: [
     'menu.dashboard.view',
     ...DASHBOARD_PERMISSION_KEYS,
+    'dashboard.section.logistics_chart.view',
     'menu.shipments.view',
     'menu.reports.view',
     'menu.settings.view',
@@ -282,6 +291,7 @@ const DEFAULT_ROLE_PERMISSION_MAP = {
   FAS: [
     'menu.dashboard.view',
     ...DASHBOARD_PERMISSION_KEYS,
+    'dashboard.section.fas_chart.view',
     'menu.shipments.view',
     'menu.reports.view',
     'menu.settings.view',
@@ -324,6 +334,7 @@ const DEFAULT_ROLE_PERMISSION_MAP = {
   FasManager: [
     'menu.dashboard.view',
     ...DASHBOARD_PERMISSION_KEYS,
+    'dashboard.section.fas_chart.view',
     'menu.shipments.view',
     'menu.reports.view',
     'menu.settings.view',
@@ -342,6 +353,7 @@ const DEFAULT_ROLE_PERMISSION_MAP = {
   warehouse: [
     'menu.dashboard.view',
     ...DASHBOARD_PERMISSION_KEYS,
+    'dashboard.section.warehouse_chart.view',
     'menu.shipments.view',
     'menu.reports.view',
     'menu.settings.view',
@@ -420,6 +432,7 @@ module.exports = {
   DEFAULT_ROLES,
   MENU_PERMISSION_TEMPLATES,
   DASHBOARD_PERMISSION_TEMPLATES,
+  DASHBOARD_DEPARTMENT_CHART_TEMPLATES,
   SETTINGS_PERMISSION_TEMPLATES,
   SHIPMENT_PERMISSION_TEMPLATES,
   LEGACY_PERMISSION_TEMPLATES,
