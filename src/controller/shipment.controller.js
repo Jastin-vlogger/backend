@@ -75,6 +75,12 @@ const toDateOrNull = (value) => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
+// Pure, unit-testable mapper for the Port & Clearance / Regulatory scalar fields that
+// the logistics save previously dropped (see ./logistics.helpers.js).
+const { applyLogisticsScalarFields } = require('./logistics.helpers');
+const { isOnTransitOrLaterStatus } = require('./shipment-visibility.helpers');
+const { FAS_DOC_TRACKING_COLUMNS, mapFasDocumentTrackingRow } = require('./fas-report.helpers');
+
 const toSignedDocument = async (url, name, expiresIn = 900) => {
   if (!url) return { url: null, name: name || null };
   const signedUrl = await createSignedGetUrl(url, expiresIn).catch(() => url);
@@ -2784,6 +2790,7 @@ exports.updateFASContainer = async (req, res) => {
       murabahaContractDocumentUrl,
       murabahaContractDocumentName,
       daSubmittedToBank,
+      daSubmittedToBankDate,
       murabahaSubmittedToBank,
       submissionPackageDocumentUrl,
       submissionPackageDocumentName
@@ -2902,6 +2909,10 @@ exports.updateFASContainer = async (req, res) => {
     if (daSubmittedToBank !== undefined) {
       container.actual.daSubmittedToBank = daSubmittedToBank === 'true' || daSubmittedToBank === true;
       addDocumentTrackerSyncField('daSubmittedToBank');
+    }
+    if (daSubmittedToBankDate !== undefined) {
+      container.actual.daSubmittedToBankDate = toDateOrNull(daSubmittedToBankDate);
+      addDocumentTrackerSyncField('daSubmittedToBankDate');
     }
     if (murabahaSubmittedToBank !== undefined) {
       container.actual.murabahaSubmittedToBank = murabahaSubmittedToBank === 'true' || murabahaSubmittedToBank === true;
@@ -3166,8 +3177,15 @@ exports.updateLogisticsDetails = async (req, res) => {
     if (municipalityClearanceDocumentUrl !== undefined) container.actual.municipalityClearanceDocumentUrl = municipalityClearanceDocumentUrl || '';
     if (municipalityClearanceDate !== undefined) container.actual.municipalityClearanceDate = toDateOrNull(municipalityClearanceDate);
 
+    // Persist Port & Clearance / Regulatory scalar fields that were previously dropped
+    // (commercial document received date, free storage days, clearance/DO remarks,
+    // customer inspection flag, municipality released date / response / comments).
+    applyLogisticsScalarFields(container.actual, req.body);
+
     const arrivalNoticeDocument = files?.arrivalNoticeDocument?.[0];
     const advanceRequestDocument = files?.advanceRequestDocument?.[0];
+    const commercialDocument = files?.commercialDocument?.[0] || files?.commercialDocumentDocument?.[0];
+    const arrivalDocument = files?.arrivalDocument?.[0];
     const doReleasedDocument = files?.doReleasedDocument?.[0];
     const boePassingDocument = files?.boePassingDocument?.[0];
     const customsClearanceDocument = files?.customsClearanceDocument?.[0];
@@ -3184,6 +3202,16 @@ exports.updateLogisticsDetails = async (req, res) => {
       const uploaded = await uploadBufferToS3(arrivalNoticeDocument, 'shipments/logistics/arrival-notice');
       container.actual.arrivalNoticeDocumentUrl = uploaded.url;
       container.actual.arrivalNoticeDocumentName = uploaded.fileName;
+    }
+    if (commercialDocument) {
+      const uploaded = await uploadBufferToS3(commercialDocument, 'shipments/logistics/commercial-document');
+      container.actual.commercialDocumentDocumentUrl = uploaded.url;
+      container.actual.commercialDocumentDocumentName = uploaded.fileName;
+    }
+    if (arrivalDocument) {
+      const uploaded = await uploadBufferToS3(arrivalDocument, 'shipments/logistics/arrival-document');
+      container.actual.arrivalDocumentUrl = uploaded.url;
+      container.actual.arrivalDocumentName = uploaded.fileName;
     }
     if (advanceRequestDocument) {
       const uploaded = await uploadBufferToS3(advanceRequestDocument, 'shipments/logistics/advance-request');
@@ -3249,15 +3277,8 @@ exports.updateLogisticsDetails = async (req, res) => {
       container.actual.customsOriginalDocuments.packingListDocumentName = uploaded.fileName;
     }
 
-    const shouldValidateBoePassing =
-      sectionKey === 'boePassingDate' || (isBulkSave && parsedBulkSectionKeys.includes('boePassingDate'));
-    if (shouldValidateBoePassing) {
-      if (!container.actual.dpInvoiceDocumentUrl) {
-        return res.status(400).json({
-          message: 'DP Invoice document is required',
-        });
-      }
-    }
+    // Note: DP Invoice is no longer collected in the Bill Of Entry (BOE) UI, so it is
+    // not a mandatory field for saving the boePassingDate section.
 
     const shouldValidateCustomsClearance =
       sectionKey === 'customsClearance' || (isBulkSave && parsedBulkSectionKeys.includes('customsClearance'));
@@ -4634,18 +4655,44 @@ const getActualWorkflowShipmentIds = async () => {
   ];
 };
 
+// Point 1: FAS users only see shipments that are "On Transit" or later. We compute the
+// allowed shipment IDs by evaluating each shipment's computed status against the
+// pure isOnTransitOrLaterStatus predicate.
+const getOnTransitOrLaterShipmentIds = async () => {
+  const shipments = await Shipment.find({}).lean();
+  const shipmentIds = shipments.map((s) => s._id);
+  const containers = await Container.find({ shipmentId: { $in: shipmentIds } })
+    .select('shipmentId actual planned')
+    .lean();
+  const byShipment = new Map();
+  containers.forEach((c) => {
+    const key = String(c.shipmentId);
+    if (!byShipment.has(key)) byShipment.set(key, []);
+    byShipment.get(key).push(c);
+  });
+  return shipments
+    .filter((s) => isOnTransitOrLaterStatus(getShipmentReportStatus(s, byShipment.get(String(s._id)) || [])))
+    .map((s) => String(s._id));
+};
+
 const shouldRestrictShipmentListForPendingBlRoles = (user) =>
   normalizeRole(user?.role || '') === 'Logistic';
 
+const shouldRestrictShipmentListToOnTransit = (user) =>
+  normalizeRole(user?.role || '') === 'FAS';
+
 const fetchShipmentList = async ({ page = 1, limit = 20, search = '', status = '', user = null }) => {
-  const actualWorkflowShipmentIds = shouldRestrictShipmentListForPendingBlRoles(user)
-    ? await getActualWorkflowShipmentIds()
-    : null;
+  let restrictedShipmentIds = null;
+  if (shouldRestrictShipmentListForPendingBlRoles(user)) {
+    restrictedShipmentIds = await getActualWorkflowShipmentIds();
+  } else if (shouldRestrictShipmentListToOnTransit(user)) {
+    restrictedShipmentIds = await getOnTransitOrLaterShipmentIds();
+  }
   const commercialInvoiceShipmentIds = await getCommercialInvoiceShipmentIds(search);
   const query = buildShipmentListQuery({
     search,
     status,
-    shipmentIds: actualWorkflowShipmentIds,
+    shipmentIds: restrictedShipmentIds,
     commercialInvoiceShipmentIds,
   });
   const total = await Shipment.countDocuments(query);
@@ -5469,6 +5516,113 @@ exports.getShipmentSummary = async (req, res) => {
       return { warehouse, fas, logistics };
     })();
 
+    const fasDashboard = (() => {
+      let bankReceiver = 0;
+      let directReceiver = 0;
+
+      let statusCompleted = 0;
+      let statusInProgress = 0;
+      let statusPending = 0;
+      let statusOverdue = 0;
+
+      let stageDaReceived = 0;
+      let stageSubmittedToBank = 0;
+      let stageDaSigned = 0;
+      let stageMurabahaRequired = 0;
+      let stageMurabahaSubmitted = 0;
+      let stageFinalContract = 0;
+
+      const providers = { DHL: 0, Aramex: 0, UPS: 0, TNT: 0, Other: 0 };
+
+      let pendingPaymentRequested = 0;
+      let paymentAllocationPending = 0;
+
+      containers.forEach((container) => {
+        const actual = container.actual || {};
+        const receiver = String(actual.receiver || '').trim().toLowerCase();
+
+        // 1. Receiver Type
+        const isBank = receiver.includes('bank');
+        if (isBank) {
+          bankReceiver++;
+        } else if (receiver) {
+          directReceiver++;
+        }
+
+        // 2. Status Breakdown
+        const isCompleted = ['Cleared', 'GRN', 'Paid'].includes(container.status) || !!actual.clearedOn;
+        if (isCompleted) {
+          statusCompleted++;
+        } else if (container.status === 'Planned') {
+          statusPending++;
+        } else {
+          const eta = container.planned?.eta ? new Date(container.planned.eta) : null;
+          if (eta && eta < startOfToday) {
+            statusOverdue++;
+          } else {
+            statusInProgress++;
+          }
+        }
+
+        // 3. Document Stage (Bank Receiver Only)
+        if (isBank) {
+          if (actual.inwardCollectionAdviceDocumentUrl || actual.inwardCollectionAdviceReceivedAt) {
+            stageDaReceived++;
+          }
+          if (actual.bankSubmittedToBank) {
+            stageSubmittedToBank++;
+          }
+          if (actual.daSignedDocumentUrl) {
+            stageDaSigned++;
+          }
+          if (actual.skipMurabaha === false || actual.skipMurabaha === 'false') {
+            stageMurabahaRequired++;
+          }
+          if (actual.murabahaSubmittedToBank || actual.daSubmittedToBank) {
+            stageMurabahaSubmitted++;
+          }
+          if (actual.documentsReleasedDocumentUrl || actual.documentsReleasedDate) {
+            stageFinalContract++;
+          }
+        }
+
+        // 4. Provider Wise
+        const provider = String(actual.courierServiceProvider || '').trim().toLowerCase();
+        if (provider.includes('dhl')) providers.DHL++;
+        else if (provider.includes('aramex')) providers.Aramex++;
+        else if (provider.includes('ups')) providers.UPS++;
+        else if (provider.includes('tnt')) providers.TNT++;
+        else if (provider) providers.Other++;
+
+        // 5. Approvals
+        const caStatus = actual.clearingAdvanceApproval?.status || null;
+        if (caStatus === 'pending_fas') {
+          pendingPaymentRequested++;
+        }
+        const paStatus = actual.paymentAllocationApproval?.status || null;
+        if (paStatus === 'pending_fas_manager') {
+          paymentAllocationPending++;
+        }
+      });
+
+      return {
+        receiverType: { bank: bankReceiver, direct: directReceiver, total: bankReceiver + directReceiver },
+        statusBreakdown: { completed: statusCompleted, inProgress: statusInProgress, pending: statusPending, overdue: statusOverdue, total: statusCompleted + statusInProgress + statusPending + statusOverdue },
+        stageOverview: {
+          totalBank: bankReceiver,
+          daReceived: stageDaReceived,
+          submittedToBank: stageSubmittedToBank,
+          daSigned: stageDaSigned,
+          murabahaRequired: stageMurabahaRequired,
+          murabahaSubmitted: stageMurabahaSubmitted,
+          finalContract: stageFinalContract
+        },
+        providerWise: providers,
+        pendingPaymentRequested,
+        paymentAllocationPending
+      };
+    })();
+
     res.status(200).json({
       kpis: {
         totalShipments: total,
@@ -5478,6 +5632,7 @@ exports.getShipmentSummary = async (req, res) => {
         totalPaymentExposure: paymentSummary.balanceAmount
       },
       departmentCharts,
+      fasDashboard,
       stageBreakdown,
       monthlyTrend,
       arrivalSummary: {
@@ -5696,6 +5851,7 @@ exports.getShipmentById = async (req, res) => {
             murabahaContractDocumentUrl: a.murabahaContractDocumentUrl,
             murabahaContractDocumentName: a.murabahaContractDocumentName,
             daSubmittedToBank: a.daSubmittedToBank || false,
+            daSubmittedToBankDate: a.daSubmittedToBankDate,
             murabahaSubmittedToBank: a.murabahaSubmittedToBank || false,
             submissionPackageDocumentUrl: a.submissionPackageDocumentUrl,
             submissionPackageDocumentName: a.submissionPackageDocumentName,
@@ -7280,6 +7436,113 @@ exports.getStorageArrivalReportData = async (req, res) => {
   }
 };
 
+// ── FAS Document Tracking report (Point 2) ───────────────────────────────────
+const buildFasDocumentTrackingRows = async () => {
+  const shipments = await Shipment.find({})
+    .populate('supplierId', 'name')
+    .sort({ createdAt: -1, orderDate: -1 })
+    .lean();
+  const shipmentIds = shipments.map((s) => s._id);
+  const containers = await Container.find({ shipmentId: { $in: shipmentIds } })
+    .sort({ createdAt: 1 })
+    .lean();
+  const byShipment = new Map();
+  containers.forEach((c) => {
+    const key = String(c.shipmentId);
+    if (!byShipment.has(key)) byShipment.set(key, []);
+    byShipment.get(key).push(c);
+  });
+
+  const rows = [];
+  let slNo = 0;
+  shipments.forEach((shipment) => {
+    const shipmentContainers = byShipment.get(String(shipment._id)) || [];
+    const status = getShipmentReportStatus(shipment, shipmentContainers);
+    // One row per container with document-tracking data; fall back to a single row.
+    const tracked = shipmentContainers.filter((c) => c?.actual);
+    const source = tracked.length ? tracked : [{ actual: {} }];
+    source.forEach((container) => {
+      slNo += 1;
+      rows.push(
+        mapFasDocumentTrackingRow({
+          slNo,
+          shipment,
+          actual: container.actual || {},
+          status,
+          formatDate: (d) => formatDateValue(d) || '',
+        })
+      );
+    });
+  });
+  return rows;
+};
+
+exports.getFasDocumentTrackingData = async (req, res) => {
+  try {
+    const rows = await buildFasDocumentTrackingRows();
+    return res.json({ rows, generatedAt: new Date().toISOString() });
+  } catch (err) {
+    console.error('getFasDocumentTrackingData error:', err);
+    return res.status(500).json({ message: 'Unable to fetch FAS document tracking data' });
+  }
+};
+
+exports.downloadFasDocumentTrackingReport = async (req, res) => {
+  try {
+    const rows = await buildFasDocumentTrackingRows();
+    const downloadedBy = req.user?.name || 'Royal Horizon User';
+    const downloadedAt = formatDateTimeValue(new Date());
+    const totalColumns = FAS_DOC_TRACKING_COLUMNS.length;
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('FAS Document Tracking', {
+      views: [{ state: 'frozen', ySplit: 4 }],
+    });
+    const border = { style: 'thin', color: { argb: 'FF94A3B8' } };
+    const fullBorder = { top: border, bottom: border, left: border, right: border };
+
+    worksheet.columns = FAS_DOC_TRACKING_COLUMNS.map((c) => ({ key: c.key, width: c.width }));
+    const titleRow = worksheet.addRow(['Royal Horizon Group']);
+    const subtitleRow = worksheet.addRow(['FAS Department - Document Tracking Summary']);
+    const metaRow = worksheet.addRow([
+      `Downloaded By: ${downloadedBy}`,
+      ...Array.from({ length: totalColumns - 2 }, () => ''),
+      `Downloaded At: ${downloadedAt}`,
+    ]);
+    const headerRow = worksheet.addRow(FAS_DOC_TRACKING_COLUMNS.map((c) => c.header));
+
+    worksheet.mergeCells(1, 1, 1, totalColumns);
+    worksheet.mergeCells(2, 1, 2, totalColumns);
+    worksheet.getCell(1, 1).font = { name: 'Calibri', size: 14, bold: true };
+    worksheet.getCell(2, 1).font = { name: 'Calibri', size: 12, bold: true };
+    titleRow.height = 20; subtitleRow.height = 18; metaRow.height = 16; headerRow.height = 22;
+
+    headerRow.eachCell((cell) => {
+      cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF334155' } };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+      cell.border = fullBorder;
+    });
+    rows.forEach((row) => {
+      const dataRow = worksheet.addRow(FAS_DOC_TRACKING_COLUMNS.map((c) => row[c.key] ?? ''));
+      dataRow.eachCell((cell) => {
+        cell.font = { name: 'Calibri', size: 11 };
+        cell.alignment = { vertical: 'middle', horizontal: 'left' };
+        cell.border = fullBorder;
+      });
+    });
+
+    const filename = `fas-document-tracking-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    const buffer = await workbook.xlsx.writeBuffer();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.send(Buffer.from(buffer));
+  } catch (err) {
+    console.error('downloadFasDocumentTrackingReport error:', err);
+    return res.status(500).json({ message: 'Unable to generate FAS document tracking report' });
+  }
+};
+
 exports.downloadStorageArrivalReport = async (req, res) => {
   try {
     const rows = await buildStorageArrivalReportRows();
@@ -7352,5 +7615,6 @@ if (process.env.NODE_ENV === 'test') {
     buildDashboardStatusPivot,
     normalizeDpwCargoExtraction,
     applyCommercialInvoiceDocumentUpload,
+    applyLogisticsScalarFields,
   };
 }

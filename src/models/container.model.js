@@ -525,6 +525,7 @@ const actualContainerSchema = new mongoose.Schema({
   murabahaContractDocumentName: { type: String },
   daSubmittedToBank: { type: Boolean, default: false },
   murabahaSubmittedToBank: { type: Boolean, default: false },
+  daSubmittedToBankDate: { type: Date },
   submissionPackageDocumentUrl: { type: String },
   submissionPackageDocumentName: { type: String },
 
@@ -532,6 +533,8 @@ const actualContainerSchema = new mongoose.Schema({
   commercialDocumentReceivedDate: { type: Date },
   commercialDocumentDocumentUrl: { type: String },
   commercialDocumentDocumentName: { type: String },
+  arrivalDocumentUrl: { type: String },
+  arrivalDocumentName: { type: String },
   freeDetentionDays: { type: Number, default: 10 },
   freeStorageDays: { type: Number, default: 14 },
   clearanceRemarks: { type: String },

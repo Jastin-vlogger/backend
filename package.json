@@ -3,6 +3,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
+    "test": "node --test src/**/*.test.js",
+    "test:logistics-helpers": "node --test src/controller/logistics.helpers.test.js",
     "test:same-bl-sync": "node scripts/testSameBlSync.js",
     "test:dashboard-metrics": "node scripts/testDashboardMetrics.js",
     "test:bl-commercial-invoice": "node scripts/testBlDetailsCommercialInvoice.js",

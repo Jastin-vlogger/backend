@@ -1133,6 +1133,7 @@ exports.getShipmentById = async (req, res) => {
             murabahaContractDocumentUrl: a.murabahaContractDocumentUrl,
             murabahaContractDocumentName: a.murabahaContractDocumentName,
             daSubmittedToBank: a.daSubmittedToBank || false,
+            daSubmittedToBankDate: a.daSubmittedToBankDate,
             murabahaSubmittedToBank: a.murabahaSubmittedToBank || false,
             submissionPackageDocumentUrl: a.submissionPackageDocumentUrl,
             submissionPackageDocumentName: a.submissionPackageDocumentName,

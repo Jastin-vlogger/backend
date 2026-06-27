@@ -26,6 +26,8 @@ router.get('/reports/export/excel',authMiddleware, authorize({ tag: 'any-active'
 router.get('/reports/export/pdf',  authMiddleware, authorize({ tag: 'any-active' }), controller.downloadShipmentReportPdf);
 router.get('/reports/storage-arrival/data', authMiddleware, authorize({ tag: 'any-active' }), controller.getStorageArrivalReportData);
 router.get('/reports/storage-arrival/excel', authMiddleware, authorize({ tag: 'any-active' }), controller.downloadStorageArrivalReport);
+router.get('/reports/fas-document-tracking/data', authMiddleware, authorize({ tag: 'any-active' }), controller.getFasDocumentTrackingData);
+router.get('/reports/fas-document-tracking/excel', authMiddleware, authorize({ tag: 'any-active' }), controller.downloadFasDocumentTrackingReport);
 router.get('/bl-row-definitions',  authMiddleware, authorize({ tag: 'any-active' }), controller.getBlRowDefinitions);
 router.get('/:id',                 authMiddleware, authorize({ tag: 'any-active' }), controller.getShipmentById);
 
@@ -237,6 +239,8 @@ router.patch(
   (req, res, next) => {
     upload.fields([
       { name: 'commercialDocumentDocument', maxCount: 1 },
+      { name: 'commercialDocument', maxCount: 1 },
+      { name: 'arrivalDocument', maxCount: 1 },
       { name: 'arrivalNoticeDocument', maxCount: 1 },
       { name: 'advanceRequestDocument', maxCount: 1 },
       { name: 'doReleasedDocument', maxCount: 1 },

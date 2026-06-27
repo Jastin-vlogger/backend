@@ -167,6 +167,7 @@ const SHIPMENT_PERMISSION_TEMPLATES = [
   // Sub-tab: Payment Allocation
   { key: 'shipment.tab.payment_costing.payment_allocation.view', resource: 'shipment', screen: 'shipment_tracker', tab: 'payment_costing', type: 'action', action: 'payment_allocation_view', label: 'View Payment Allocation', sortOrder: 181 },
   { key: 'shipment.tab.payment_costing.payment_allocation.edit', resource: 'shipment', screen: 'shipment_tracker', tab: 'payment_costing', type: 'action', action: 'payment_allocation_edit', label: 'Edit Payment Allocation', sortOrder: 182 },
+  { key: 'shipment.tab.payment_costing.payment_allocation.approve_fas_manager', resource: 'shipment', screen: 'shipment_tracker', tab: 'payment_costing', type: 'action', action: 'payment_allocation_approve_fas_manager', label: 'Approve Payment Allocation (FAS Manager)', sortOrder: 182.1 },
   // Sub-tab: Payment Costing
   { key: 'shipment.tab.payment_costing.costing_table.view', resource: 'shipment', screen: 'shipment_tracker', tab: 'payment_costing', type: 'action', action: 'costing_table_view', label: 'View Payment Costing Table', sortOrder: 183 },
   { key: 'shipment.tab.payment_costing.costing_table.edit', resource: 'shipment', screen: 'shipment_tracker', tab: 'payment_costing', type: 'action', action: 'costing_table_edit', label: 'Edit Payment Costing Table', sortOrder: 184 },

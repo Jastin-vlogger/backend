@@ -242,6 +242,7 @@ const SAME_BL_DOCUMENT_TRACKER_FIELDS = [
   'murabahaContractDocumentUrl',
   'murabahaContractDocumentName',
   'daSubmittedToBank',
+  'daSubmittedToBankDate',
   'murabahaSubmittedToBank',
   'submissionPackageDocumentUrl',
   'submissionPackageDocumentName',

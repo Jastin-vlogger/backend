@@ -51,6 +51,7 @@ exports.updateFASContainer = async (req, res) => {
       murabahaContractDocumentUrl,
       murabahaContractDocumentName,
       daSubmittedToBank,
+      daSubmittedToBankDate,
       murabahaSubmittedToBank,
       submissionPackageDocumentUrl,
       submissionPackageDocumentName
@@ -169,6 +170,10 @@ exports.updateFASContainer = async (req, res) => {
     if (daSubmittedToBank !== undefined) {
       container.actual.daSubmittedToBank = daSubmittedToBank === 'true' || daSubmittedToBank === true;
       addDocumentTrackerSyncField('daSubmittedToBank');
+    }
+    if (daSubmittedToBankDate !== undefined) {
+      container.actual.daSubmittedToBankDate = toDateOrNull(daSubmittedToBankDate);
+      addDocumentTrackerSyncField('daSubmittedToBankDate');
     }
     if (murabahaSubmittedToBank !== undefined) {
       container.actual.murabahaSubmittedToBank = murabahaSubmittedToBank === 'true' || murabahaSubmittedToBank === true;
