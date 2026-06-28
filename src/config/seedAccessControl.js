@@ -46,6 +46,9 @@ const DASHBOARD_DEPARTMENT_CHART_TEMPLATES = [
   { key: 'dashboard.section.warehouse_allocation_status.view', resource: 'dashboard', screen: 'dashboard', tab: 'dashboard', type: 'action', action: 'warehouse_allocation_status_view', label: 'View Warehouse Allocation Status', sortOrder: 18 },
   { key: 'dashboard.section.warehouse_allocation_table.view', resource: 'dashboard', screen: 'dashboard', tab: 'dashboard', type: 'action', action: 'warehouse_allocation_table_view', label: 'View Warehouse Allocation & Receiving Table', sortOrder: 19 },
   { key: 'dashboard.section.warehouse_receiving_status.view', resource: 'dashboard', screen: 'dashboard', tab: 'dashboard', type: 'action', action: 'warehouse_receiving_status_view', label: 'View Warehouse Receiving Status', sortOrder: 20 },
+  { key: 'dashboard.section.storekeeper_receiving_status.view', resource: 'dashboard', screen: 'dashboard', tab: 'dashboard', type: 'action', action: 'storekeeper_receiving_status_view', label: 'View Storekeeper Allocation & Receiving Status', sortOrder: 21 },
+  { key: 'dashboard.section.storekeeper_receiving_timeline.view', resource: 'dashboard', screen: 'dashboard', tab: 'dashboard', type: 'action', action: 'storekeeper_receiving_timeline_view', label: 'View Storekeeper Receiving Progress Over Time', sortOrder: 22 },
+  { key: 'dashboard.section.storekeeper_summary.view', resource: 'dashboard', screen: 'dashboard', tab: 'dashboard', type: 'action', action: 'storekeeper_summary_view', label: 'View Storekeeper Warehouse Summary', sortOrder: 23 },
 ];
 
 const DASHBOARD_PERMISSION_KEYS = DASHBOARD_PERMISSION_TEMPLATES.map((permission) => permission.key);
@@ -373,6 +376,22 @@ const DEFAULT_ROLE_PERMISSION_MAP = {
     'shipment.tab.storage.storage_arrival.view',
     'shipment.tab.storage.storage_arrival.approve_warehouse_manager',
     'shipment.action.reports.view',
+  ],
+  StoreKeeper: [
+    'menu.dashboard.view',
+    'dashboard.section.storekeeper_receiving_status.view',
+    'dashboard.section.storekeeper_receiving_timeline.view',
+    'dashboard.section.storekeeper_summary.view',
+    'menu.shipments.view',
+    'menu.settings.view',
+    'settings.tab.warehouses.view',
+    'shipment.screen.shipment_tracker.view',
+    'shipment.tab.bl_details.view',
+    'shipment.tab.bl_details.storage_allocations.view',
+    'shipment.tab.storage.view',
+    'shipment.tab.storage.storage_allocation.view',
+    'shipment.tab.storage.storage_arrival.view',
+    'shipment.tab.storage.storage_arrival.approve_warehouse_manager',
   ],
 };
 

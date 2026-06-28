@@ -9,15 +9,34 @@ const pct = (n, d) => (d > 0 ? round2((n / d) * 100) : 0);
 const isSplitReceived = (split = {}) =>
   !!(String(split.grn || '').trim() || String(split.batch || '').trim() || split.receivedOnDate);
 
+// Constructs the canonical label stored in container.storageAllocations[].warehouse,
+// matching the format the UI dropdown creates: "${name} - ${code}" or just "${name}".
+const warehouseLabel = (wh) => {
+  const name = String(wh.name || '').trim();
+  const code = String(wh.code || '').trim();
+  return code ? `${name} - ${code}` : name;
+};
+
 /**
  * Builds the warehouse dashboard aggregates from a list of (lean) containers.
+ *
+ * @param {object[]} containers - lean Container documents
+ * @param {object[]} [dbWarehouses] - active Warehouse documents from the Warehouse collection.
+ *   When supplied, ALL db warehouses appear in byWarehouse (even with 0 allocations),
+ *   ensuring the table is anchored to the database rather than container string data.
  *
  * Allocation source: actual.storageAllocationDecision.itemAllocations[].allocations[]
  *   ({ warehouse, containersAssigned }) with per-item expectedContainers.
  *   Falls back to counting actual.storageAllocations[] rows (one FCL each) per warehouse.
  * Received source: actual.storageSplits[] rows with GRN/received data, grouped by warehouse.
  */
-const buildWarehouseDashboard = (containers = []) => {
+const buildWarehouseDashboard = (containers = [], dbWarehouses = []) => {
+  // When dbWarehouses are supplied, only count allocations for known warehouses.
+  // This prevents stale container strings (old/renamed warehouses) from appearing.
+  const knownLabels = dbWarehouses.length
+    ? new Set(dbWarehouses.map(warehouseLabel))
+    : null; // null = no filter (legacy / no-db mode)
+
   const allocByWh = new Map();
   const recvByWh = new Map();
   let totalAllocated = 0;
@@ -27,12 +46,14 @@ const buildWarehouseDashboard = (containers = []) => {
   const addAlloc = (wh, fcl) => {
     const key = String(wh || '').trim();
     if (!key || fcl <= 0) return;
+    if (knownLabels && !knownLabels.has(key)) return;
     allocByWh.set(key, (allocByWh.get(key) || 0) + fcl);
     totalAllocated += fcl;
   };
   const addRecv = (wh, fcl) => {
     const key = String(wh || '').trim();
     if (!key || fcl <= 0) return;
+    if (knownLabels && !knownLabels.has(key)) return;
     recvByWh.set(key, (recvByWh.get(key) || 0) + fcl);
     totalReceived += fcl;
   };
@@ -76,7 +97,12 @@ const buildWarehouseDashboard = (containers = []) => {
     });
   });
 
-  const warehouses = new Set([...allocByWh.keys(), ...recvByWh.keys()]);
+  // Use db warehouses as the canonical list when available; fall back to whatever
+  // strings were found in container data (legacy mode without db warehouses).
+  const warehouses = dbWarehouses.length
+    ? new Set(dbWarehouses.map(warehouseLabel))
+    : new Set([...allocByWh.keys(), ...recvByWh.keys()]);
+
   const byWarehouse = [...warehouses]
     .map((warehouse) => {
       const allocated = allocByWh.get(warehouse) || 0;

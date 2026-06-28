@@ -91,28 +91,33 @@ const computeFasDocumentStatus = ({
 };
 
 // Column definitions (header + key) shared by the JSON endpoint and the Excel export.
+// Order matches the FAS_Department_Document_Tracking_Summary.xlsx template exactly.
 const FAS_DOC_TRACKING_COLUMNS = [
-  { header: 'Sl No', key: 'slNo', width: 8 },
-  { header: 'Courier Track No', key: 'courierTrackNo', width: 18 },
-  { header: 'Provider', key: 'provider', width: 12 },
-  { header: 'Receiver Type', key: 'receiverType', width: 14 },
-  { header: 'Receiver', key: 'receiver', width: 22 },
-  { header: 'Bank Name', key: 'bankName', width: 22 },
-  { header: 'Expected Document Receipt Date', key: 'expectedDocDate', width: 16 },
-  { header: 'DA Received', key: 'daReceived', width: 12 },
-  { header: 'Submitted to Bank', key: 'submittedToBank', width: 14 },
-  { header: 'Bank Submission Date', key: 'bankSubmissionDate', width: 16 },
-  { header: 'DA Signed & Stamped', key: 'daSigned', width: 14 },
-  { header: 'Murabaha Required', key: 'murabahaRequired', width: 14 },
-  { header: 'Murabaha Released Date', key: 'murabahaReleasedDate', width: 16 },
-  { header: 'Murabaha Attached', key: 'murabahaAttached', width: 14 },
-  { header: 'Murabaha Submitted to Bank', key: 'murabahaSubmittedToBank', width: 16 },
-  { header: 'Murabaha Submission Date', key: 'murabahaSubmissionDate', width: 16 },
-  { header: 'Final Contract Received', key: 'finalContractReceived', width: 16 },
-  { header: 'Final Contract Attached', key: 'finalContractAttached', width: 16 },
-  { header: 'Final Contract Submission Date', key: 'finalContractSubmissionDate', width: 16 },
-  { header: 'Status', key: 'status', width: 16 },
-  { header: 'Remarks', key: 'remarks', width: 24 },
+  { header: 'Sl No',                           key: 'slNo',                       width: 7  },
+  { header: 'Shipment No',                     key: 'shipmentNo',                 width: 14 },
+  { header: 'LPO',                             key: 'lpo',                        width: 12 },
+  { header: 'BL No',                           key: 'blNo',                       width: 14 },
+  { header: 'Commercial No',                   key: 'commercialNo',               width: 16 },
+  { header: 'Courier Track No',                key: 'courierTrackNo',             width: 18 },
+  { header: 'Provider',                        key: 'provider',                   width: 10 },
+  { header: 'Receiver',                        key: 'receiver',                   width: 10 },
+  { header: 'Bank Name',                       key: 'bankName',                   width: 14 },
+  { header: 'Expected Document Receipt Date',  key: 'expectedDocDate',            width: 16 },
+  { header: 'DA Received',                     key: 'daReceived',                 width: 12 },
+  { header: 'Submitted to Bank',               key: 'submittedToBank',            width: 14 },
+  { header: 'Bank Submission Date',            key: 'bankSubmissionDate',         width: 16 },
+  { header: 'DA Signed & Stamped',             key: 'daSigned',                   width: 16 },
+  { header: 'Murabaha Required',               key: 'murabahaRequired',           width: 14 },
+  { header: 'Murabaha Released Date',          key: 'murabahaReleasedDate',       width: 18 },
+  { header: 'Murabaha Attached',               key: 'murabahaAttached',           width: 14 },
+  { header: 'Murabaha Submitted to Bank',      key: 'murabahaSubmittedToBank',    width: 20 },
+  { header: 'Murabaha Submission Date',        key: 'murabahaSubmissionDate',     width: 18 },
+  { header: 'Final Contract Received',         key: 'finalContractReceived',      width: 18 },
+  { header: 'Final Contract Attached',         key: 'finalContractAttached',      width: 18 },
+  { header: 'Final Contract Submission Date',  key: 'finalContractSubmissionDate',width: 20 },
+  { header: 'Payment Request Status',          key: 'paymentRequestStatus',       width: 20 },
+  { header: 'Payment Allocation Status',       key: 'paymentAllocationStatus',    width: 20 },
+  { header: 'Remarks',                         key: 'remarks',                    width: 24 },
 ];
 
 /**
@@ -129,31 +134,49 @@ const FAS_DOC_TRACKING_COLUMNS = [
 const mapFasDocumentTrackingRow = ({ slNo, shipment = {}, actual = {}, status = '', formatDate = (d) => (d ? String(d) : '') }) => {
   const flags = deriveFasFlags(actual);
   const bank = flags.isBank;
+  // For Direct receivers, bank-only tracking fields show N/A.
   const na = (value) => (bank ? value : 'N/A');
+
   const fasStatus = computeFasDocumentStatus({ shipmentStatus: status, ...flags });
+
+  // Payment Request Status: submitted when pending_fas_manager; Approved when approved.
+  const paymentApprovalStatus = actual.paymentAllocationApproval?.status || 'draft';
+  const paymentRequestStatus =
+    paymentApprovalStatus === 'approved'          ? 'Approved' :
+    paymentApprovalStatus === 'pending_fas_manager' ? 'Pending Approval' : '';
+  const paymentAllocationStatus = paymentApprovalStatus === 'approved' ? 'Allocated' : '';
+
+  // Receiver column shows capitalised label ('Bank' / 'Direct'), not the raw value.
+  const receiverLabel = actual.receiver
+    ? actual.receiver.charAt(0).toUpperCase() + actual.receiver.slice(1).toLowerCase()
+    : '';
 
   return {
     slNo,
-    courierTrackNo: actual.courierTrackNo || '',
-    provider: actual.courierServiceProvider || '',
-    receiverType: actual.receiver || '',
-    receiver: bank ? (actual.bankName || '') : COMPANY_RECEIVER_NAME,
-    bankName: bank ? (actual.bankName || '') : '',
-    expectedDocDate: formatDate(actual.expectedDocDate),
-    daReceived: na(yesNo(flags.daReceived)),
-    submittedToBank: na(yesNo(flags.submittedToBank)),
-    bankSubmissionDate: bank ? formatDate(actual.daSubmittedToBankDate) : 'N/A',
-    daSigned: na(yesNo(!!actual.daSignedDocumentUrl)),
-    murabahaRequired: na(yesNo(flags.murabahaRequired)),
-    murabahaReleasedDate: bank ? formatDate(actual.murabahaContractReleasedDate || actual.murabahaContractApprovedDate) : 'N/A',
-    murabahaAttached: na(yesNo(!!actual.murabahaContractDocumentUrl)),
-    murabahaSubmittedToBank: na(yesNo(flags.murabahaSubmitted)),
-    murabahaSubmissionDate: bank ? formatDate(actual.murabahaContractSubmittedDate) : 'N/A',
-    finalContractReceived: yesNo(!!actual.documentsReleasedDate || !!actual.documentsReleasedDocumentUrl),
-    finalContractAttached: yesNo(!!actual.documentsReleasedDocumentUrl),
+    shipmentNo:                 shipment.shipmentNo || '',
+    lpo:                        shipment.poNumber   || '',
+    blNo:                       actual.BLNo         || '',
+    commercialNo:               actual.commercialInvoiceNo || '',
+    courierTrackNo:             actual.courierTrackNo || '',
+    provider:                   actual.courierServiceProvider || '',
+    receiver:                   receiverLabel,
+    bankName:                   na(actual.bankName || ''),
+    expectedDocDate:            na(formatDate(actual.expectedDocDate)),
+    daReceived:                 na(yesNo(flags.daReceived)),
+    submittedToBank:            na(yesNo(flags.submittedToBank)),
+    bankSubmissionDate:         bank ? formatDate(actual.daSubmittedToBankDate) : 'N/A',
+    daSigned:                   na(yesNo(!!actual.daSignedDocumentUrl)),
+    murabahaRequired:           na(yesNo(flags.murabahaRequired)),
+    murabahaReleasedDate:       bank ? formatDate(actual.murabahaContractReleasedDate || actual.murabahaContractApprovedDate) : 'N/A',
+    murabahaAttached:           na(yesNo(!!actual.murabahaContractDocumentUrl)),
+    murabahaSubmittedToBank:    na(yesNo(flags.murabahaSubmitted)),
+    murabahaSubmissionDate:     bank ? formatDate(actual.murabahaContractSubmittedDate) : 'N/A',
+    finalContractReceived:      yesNo(!!actual.documentsReleasedDate || !!actual.documentsReleasedDocumentUrl),
+    finalContractAttached:      yesNo(!!actual.documentsReleasedDocumentUrl),
     finalContractSubmissionDate: formatDate(actual.documentsReleasedDate),
-    status: fasStatus,
-    remarks: actual.docArrivalNotes || shipment.remarks || '',
+    paymentRequestStatus,
+    paymentAllocationStatus,
+    remarks:                    [fasStatus, actual.docArrivalNotes || ''].filter(Boolean).join(' | '),
   };
 };
 

@@ -97,3 +97,46 @@ test('empty input yields zeroed dashboard', () => {
   assert.equal(d.receivingStatus.received, 0);
   assert.deepEqual(d.byWarehouse, []);
 });
+
+test('dbWarehouses seeds byWarehouse with 0-allocation warehouses', () => {
+  const dbWarehouses = [
+    { name: 'SHARJAH', code: 'SHJ' },
+    { name: 'AL AIN', code: 'AAN' },
+  ];
+  // Only AL AIN has container data; SHARJAH has none yet.
+  const containers = [
+    mkContainer([{ warehouse: 'AL AIN - AAN', containersAssigned: 10 }], [], 10),
+  ];
+  const d = buildWarehouseDashboard(containers, dbWarehouses);
+  const sharjah = d.byWarehouse.find((w) => w.warehouse === 'SHARJAH - SHJ');
+  const alain = d.byWarehouse.find((w) => w.warehouse === 'AL AIN - AAN');
+  assert.ok(sharjah, 'SHARJAH should appear even with 0 allocations');
+  assert.equal(sharjah.allocated, 0);
+  assert.equal(sharjah.received, 0);
+  assert.ok(alain, 'AL AIN should appear with its allocations');
+  assert.equal(alain.allocated, 10);
+});
+
+test('dbWarehouses with no code uses just the name as label', () => {
+  const dbWarehouses = [{ name: 'MUSAFFAH', code: '' }];
+  const d = buildWarehouseDashboard([], dbWarehouses);
+  const row = d.byWarehouse.find((w) => w.warehouse === 'MUSAFFAH');
+  assert.ok(row);
+  assert.equal(row.allocated, 0);
+});
+
+test('stale container warehouse strings are ignored when dbWarehouses supplied', () => {
+  const dbWarehouses = [{ name: 'AL AIN', code: 'AL AIN' }];
+  const containers = [
+    // Valid warehouse (matches db)
+    mkContainer([{ warehouse: 'AL AIN - AL AIN', containersAssigned: 50 }], [], 50),
+    // Stale / removed warehouse — should be ignored
+    mkContainer([{ warehouse: 'SHARJAH - SAJAH', containersAssigned: 30 }], [], 30),
+    mkContainer([{ warehouse: 'Sharjah Block C - 0039 - Sharjah', containersAssigned: 10 }], [], 10),
+  ];
+  const d = buildWarehouseDashboard(containers, dbWarehouses);
+  assert.equal(d.byWarehouse.length, 1, 'only known warehouses should appear');
+  assert.equal(d.byWarehouse[0].warehouse, 'AL AIN - AL AIN');
+  assert.equal(d.byWarehouse[0].allocated, 50);
+  assert.equal(d.allocationStatus.allocated, 50, 'stale allocations excluded from totals');
+});

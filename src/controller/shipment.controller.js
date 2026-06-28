@@ -81,6 +81,7 @@ const { applyLogisticsScalarFields } = require('./logistics.helpers');
 const { isOnTransitOrLaterStatus, isAtPortOrLaterStatus } = require('./shipment-visibility.helpers');
 const { FAS_DOC_TRACKING_COLUMNS, mapFasDocumentTrackingRow, classifyFasReceiver } = require('./fas-report.helpers');
 const { buildWarehouseDashboard } = require('./warehouse-dashboard.helpers');
+const Warehouse = require('../models/warehouse.model');
 
 const toSignedDocument = async (url, name, expiresIn = 900) => {
   if (!url) return { url: null, name: name || null };
@@ -4703,6 +4704,34 @@ const shouldRestrictShipmentListToOnTransit = (user) =>
 const shouldRestrictShipmentListToAtPort = (user) =>
   normalizeRole(user?.role || '') === 'warehouse';
 
+const isStorekeeper = (user) =>
+  normalizeRole(user?.role || '') === 'storekeeper';
+
+// Returns shipment IDs for containers allocated to any of the given warehouse labels.
+const getStorekeeperShipmentIds = async (warehouseLabels) => {
+  if (!warehouseLabels.length) return [];
+  const labelSet = new Set(warehouseLabels);
+  const containers = await Container.find({}).select('shipmentId actual').lean();
+  const matchedShipmentIds = new Set();
+  containers.forEach((c) => {
+    const actual = c.actual || {};
+    const allocs = Array.isArray(actual.storageAllocations) ? actual.storageAllocations : [];
+    const splits = Array.isArray(actual.storageSplits) ? actual.storageSplits : [];
+    const decision = actual.storageAllocationDecision || {};
+    const itemAllocs = Array.isArray(decision.itemAllocations) ? decision.itemAllocations : [];
+    const hasMatch =
+      allocs.some((a) => labelSet.has(String(a.warehouse || '').trim())) ||
+      splits.some((s) => labelSet.has(String(s.warehouse || '').trim())) ||
+      itemAllocs.some((item) =>
+        (Array.isArray(item.allocations) ? item.allocations : []).some((a) =>
+          labelSet.has(String(a.warehouse || '').trim())
+        )
+      );
+    if (hasMatch) matchedShipmentIds.add(String(c.shipmentId));
+  });
+  return [...matchedShipmentIds];
+};
+
 const fetchShipmentList = async ({ page = 1, limit = 20, search = '', status = '', user = null }) => {
   let restrictedShipmentIds = null;
   if (shouldRestrictShipmentListForPendingBlRoles(user)) {
@@ -4711,6 +4740,15 @@ const fetchShipmentList = async ({ page = 1, limit = 20, search = '', status = '
     restrictedShipmentIds = await getOnTransitOrLaterShipmentIds();
   } else if (shouldRestrictShipmentListToAtPort(user)) {
     restrictedShipmentIds = await getAtPortOrLaterShipmentIds();
+  } else if (isStorekeeper(user)) {
+    const assignedWarehouses = await Warehouse.find({ assignedStorekeepers: user._id, status: 'Active' })
+      .select('name code').lean();
+    const labels = assignedWarehouses.map((w) => {
+      const code = String(w.code || '').trim();
+      const name = String(w.name || '').trim();
+      return code ? `${name} - ${code}` : name;
+    });
+    restrictedShipmentIds = await getStorekeeperShipmentIds(labels);
   }
   const commercialInvoiceShipmentIds = await getCommercialInvoiceShipmentIds(search);
   const query = buildShipmentListQuery({
@@ -5649,7 +5687,143 @@ exports.getShipmentSummary = async (req, res) => {
       };
     })();
 
-    const warehouseDashboard = buildWarehouseDashboard(containers);
+    const activeWarehouses = await Warehouse.find({ status: 'Active' }).select('name code').lean();
+    const warehouseDashboard = buildWarehouseDashboard(containers, activeWarehouses);
+
+    // ── Storekeeper dashboard ────────────────────────────────────────────────
+    const storekeeperDashboard = await (async () => {
+      const normalizedRole = normalizeRole(req.user?.role || '');
+      const isAdmin = normalizedRole === 'Admin' || normalizedRole === 'Manager';
+      if (normalizedRole !== 'storekeeper' && !isAdmin) return null;
+
+      const myWarehouses = isAdmin
+        ? await Warehouse.find({ status: 'Active' }).select('name code').lean()
+        : await Warehouse.find({ assignedStorekeepers: req.user._id, status: 'Active' }).select('name code').lean();
+
+      const emptyDashboard = {
+        warehouseNames: [],
+        receivingStatus: { allocated: 0, received: 0, pendingReceiving: 0, receivedPct: 0, pendingPct: 0 },
+        receivingTimeline: [],
+        byWarehouse: [],
+      };
+      if (!myWarehouses.length) return emptyDashboard;
+      const myLabels = myWarehouses.map((w) => {
+        const code = String(w.code || '').trim();
+        const name = String(w.name || '').trim();
+        return code ? `${name} - ${code}` : name;
+      });
+      const labelSet = new Set(myLabels);
+
+      // Aggregate allocation & receiving for assigned warehouses only.
+      let totalAllocated = 0;
+      let totalReceived = 0;
+      const receivedByDate = new Map(); // "DD-Mon" -> { received, pending }
+
+      containers.forEach((container) => {
+        const actual = container?.actual || {};
+        const decision = actual.storageAllocationDecision || {};
+        const itemAllocs = Array.isArray(decision.itemAllocations) ? decision.itemAllocations : [];
+        const allocationRows = Array.isArray(actual.storageAllocations) ? actual.storageAllocations : [];
+        const splits = Array.isArray(actual.storageSplits) ? actual.storageSplits : [];
+
+        if (itemAllocs.length) {
+          itemAllocs.forEach((item) => {
+            (Array.isArray(item.allocations) ? item.allocations : []).forEach((a) => {
+              if (labelSet.has(String(a.warehouse || '').trim())) {
+                totalAllocated += Number(a.containersAssigned) || 0;
+              }
+            });
+          });
+        } else {
+          allocationRows.forEach((row) => {
+            if (labelSet.has(String(row.warehouse || '').trim())) totalAllocated += 1;
+          });
+        }
+
+        splits.forEach((split) => {
+          if (!labelSet.has(String(split.warehouse || '').trim())) return;
+          const isReceived = !!(
+            String(split.grn || '').trim() ||
+            String(split.batch || '').trim() ||
+            split.receivedOnDate
+          );
+          if (!isReceived) return;
+          totalReceived += 1;
+          if (split.receivedOnDate) {
+            const d = new Date(split.receivedOnDate);
+            if (!Number.isNaN(d.getTime())) {
+              const label = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }).replace(' ', '-');
+              const existing = receivedByDate.get(label) || { received: 0, date: d };
+              existing.received += 1;
+              receivedByDate.set(label, existing);
+            }
+          }
+        });
+      });
+
+      // Build timeline: sort by date, compute cumulative pending.
+      const timelineEntries = [...receivedByDate.entries()]
+        .map(([label, v]) => ({ label, received: v.received, _date: v.date }))
+        .sort((a, b) => a._date - b._date);
+
+      let cumulativeReceived = 0;
+      const receivingTimeline = timelineEntries.map(({ label, received }) => {
+        cumulativeReceived += received;
+        return {
+          label,
+          received: cumulativeReceived,
+          pending: Math.max(totalAllocated - cumulativeReceived, 0),
+        };
+      });
+
+      const pendingReceiving = Math.max(totalAllocated - totalReceived, 0);
+      const pct = (n, d) => (d > 0 ? Math.round((n / d) * 100) : 0);
+
+      return {
+        warehouseNames: myLabels,
+        receivingStatus: {
+          allocated: totalAllocated,
+          received: totalReceived,
+          pendingReceiving,
+          receivedPct: pct(totalReceived, totalAllocated),
+          pendingPct: pct(pendingReceiving, totalAllocated),
+        },
+        receivingTimeline,
+        byWarehouse: myLabels.map((label) => {
+          const whContainers = containers.filter((c) => {
+            const actual = c?.actual || {};
+            const splits = Array.isArray(actual.storageSplits) ? actual.storageSplits : [];
+            return splits.some((s) => String(s.warehouse || '').trim() === label);
+          });
+          let alloc = 0;
+          let recv = 0;
+          containers.forEach((c) => {
+            const actual = c?.actual || {};
+            const decision = actual.storageAllocationDecision || {};
+            const itemAllocs = Array.isArray(decision.itemAllocations) ? decision.itemAllocations : [];
+            const allocationRows = Array.isArray(actual.storageAllocations) ? actual.storageAllocations : [];
+            if (itemAllocs.length) {
+              itemAllocs.forEach((item) => {
+                (Array.isArray(item.allocations) ? item.allocations : []).forEach((a) => {
+                  if (String(a.warehouse || '').trim() === label)
+                    alloc += Number(a.containersAssigned) || 0;
+                });
+              });
+            } else {
+              allocationRows.forEach((row) => {
+                if (String(row.warehouse || '').trim() === label) alloc += 1;
+              });
+            }
+            (Array.isArray(actual.storageSplits) ? actual.storageSplits : []).forEach((s) => {
+              if (String(s.warehouse || '').trim() !== label) return;
+              if (String(s.grn || '').trim() || String(s.batch || '').trim() || s.receivedOnDate) recv += 1;
+            });
+          });
+          const pending = Math.max(alloc - recv, 0);
+          return { warehouse: label, allocated: alloc, received: recv, pendingReceiving: pending, progress: pct(recv, alloc) };
+        }),
+      };
+    })();
 
     res.status(200).json({
       kpis: {
@@ -5662,6 +5836,7 @@ exports.getShipmentSummary = async (req, res) => {
       departmentCharts,
       fasDashboard,
       warehouseDashboard,
+      storekeeperDashboard,
       stageBreakdown,
       monthlyTrend,
       arrivalSummary: {

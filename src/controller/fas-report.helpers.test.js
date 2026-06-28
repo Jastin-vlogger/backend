@@ -4,9 +4,15 @@ const { mapFasDocumentTrackingRow, FAS_DOC_TRACKING_COLUMNS, isBankReceiver, com
 
 const idDate = (d) => (d ? String(d) : '');
 
-test('Point 2: has the 21 report columns', () => {
-  assert.equal(FAS_DOC_TRACKING_COLUMNS.length, 21);
+test('Point 2: has the 25 report columns', () => {
+  assert.equal(FAS_DOC_TRACKING_COLUMNS.length, 25);
   assert.equal(FAS_DOC_TRACKING_COLUMNS[0].header, 'Sl No');
+  assert.equal(FAS_DOC_TRACKING_COLUMNS[1].header, 'Shipment No');
+  assert.equal(FAS_DOC_TRACKING_COLUMNS[2].header, 'LPO');
+  assert.equal(FAS_DOC_TRACKING_COLUMNS[3].header, 'BL No');
+  assert.equal(FAS_DOC_TRACKING_COLUMNS[4].header, 'Commercial No');
+  assert.equal(FAS_DOC_TRACKING_COLUMNS[22].header, 'Payment Request Status');
+  assert.equal(FAS_DOC_TRACKING_COLUMNS[23].header, 'Payment Allocation Status');
   assert.equal(FAS_DOC_TRACKING_COLUMNS.at(-1).header, 'Remarks');
 });
 
@@ -27,8 +33,8 @@ test('Point 2: Bank receiver maps Yes/No + dates', () => {
       docArrivalNotes: 'All documents completed',
     },
   });
-  assert.equal(row.receiverType, 'Bank');
-  assert.equal(row.receiver, 'Emirates NBD');
+  assert.equal(row.receiver, 'Bank');
+  assert.equal(row.bankName, 'Emirates NBD');
   assert.equal(row.daReceived, 'Yes');
   assert.equal(row.submittedToBank, 'Yes');
   assert.equal(row.daSigned, 'Yes');
@@ -36,9 +42,9 @@ test('Point 2: Bank receiver maps Yes/No + dates', () => {
   assert.equal(row.murabahaAttached, 'Yes');
   assert.equal(row.finalContractReceived, 'Yes');
   assert.equal(row.finalContractAttached, 'Yes');
-  // Final contract attached, no payment request yet -> Pending Payment Request.
-  assert.equal(row.status, 'Pending Payment Request');
-  assert.equal(row.remarks, 'All documents completed');
+  // Status is embedded in remarks; docArrivalNotes appended when present.
+  assert.ok(row.remarks.startsWith('Pending Payment Request'));
+  assert.ok(row.remarks.includes('All documents completed'));
 });
 
 test('Point 2: Direct receiver shows N/A for bank-only columns', () => {
@@ -49,9 +55,9 @@ test('Point 2: Direct receiver shows N/A for bank-only columns', () => {
       documentsReleasedDate: '2025-08-10', documentsReleasedDocumentUrl: 's3://final.pdf',
     },
   });
-  assert.equal(row.receiverType, 'Direct');
-  assert.equal(row.receiver, 'Royal Horizon LLC');
-  assert.equal(row.bankName, '');
+  assert.equal(row.receiver, 'Direct');
+  assert.equal(row.bankName, 'N/A');
+  assert.equal(row.expectedDocDate, 'N/A');
   assert.equal(row.daReceived, 'N/A');
   assert.equal(row.submittedToBank, 'N/A');
   assert.equal(row.daSigned, 'N/A');
