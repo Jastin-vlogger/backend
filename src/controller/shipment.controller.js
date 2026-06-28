@@ -7487,6 +7487,9 @@ const buildFasDocumentTrackingRows = async () => {
   shipments.forEach((shipment) => {
     const shipmentContainers = byShipment.get(String(shipment._id)) || [];
     const status = getShipmentReportStatus(shipment, shipmentContainers);
+    // FAS document tracking only applies from "On Transit" onward (per the status
+    // condition table). Skip pre-transit shipments (ETD yet to be confirmed / Due).
+    if (!isOnTransitOrLaterStatus(status)) return;
     // One row per container with document-tracking data; fall back to a single row.
     const tracked = shipmentContainers.filter((c) => c?.actual);
     const source = tracked.length ? tracked : [{ actual: {} }];
