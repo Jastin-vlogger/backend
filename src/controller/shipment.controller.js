@@ -78,8 +78,9 @@ const toDateOrNull = (value) => {
 // Pure, unit-testable mapper for the Port & Clearance / Regulatory scalar fields that
 // the logistics save previously dropped (see ./logistics.helpers.js).
 const { applyLogisticsScalarFields } = require('./logistics.helpers');
-const { isOnTransitOrLaterStatus } = require('./shipment-visibility.helpers');
-const { FAS_DOC_TRACKING_COLUMNS, mapFasDocumentTrackingRow } = require('./fas-report.helpers');
+const { isOnTransitOrLaterStatus, isAtPortOrLaterStatus } = require('./shipment-visibility.helpers');
+const { FAS_DOC_TRACKING_COLUMNS, mapFasDocumentTrackingRow, classifyFasReceiver } = require('./fas-report.helpers');
+const { buildWarehouseDashboard } = require('./warehouse-dashboard.helpers');
 
 const toSignedDocument = async (url, name, expiresIn = 900) => {
   if (!url) return { url: null, name: name || null };
@@ -4675,11 +4676,32 @@ const getOnTransitOrLaterShipmentIds = async () => {
     .map((s) => String(s._id));
 };
 
+// Warehouse managers only see shipments at "At Port of Discharge" or later.
+const getAtPortOrLaterShipmentIds = async () => {
+  const shipments = await Shipment.find({}).lean();
+  const shipmentIds = shipments.map((s) => s._id);
+  const containers = await Container.find({ shipmentId: { $in: shipmentIds } })
+    .select('shipmentId actual planned')
+    .lean();
+  const byShipment = new Map();
+  containers.forEach((c) => {
+    const key = String(c.shipmentId);
+    if (!byShipment.has(key)) byShipment.set(key, []);
+    byShipment.get(key).push(c);
+  });
+  return shipments
+    .filter((s) => isAtPortOrLaterStatus(getShipmentReportStatus(s, byShipment.get(String(s._id)) || [])))
+    .map((s) => String(s._id));
+};
+
 const shouldRestrictShipmentListForPendingBlRoles = (user) =>
   normalizeRole(user?.role || '') === 'Logistic';
 
 const shouldRestrictShipmentListToOnTransit = (user) =>
   normalizeRole(user?.role || '') === 'FAS';
+
+const shouldRestrictShipmentListToAtPort = (user) =>
+  normalizeRole(user?.role || '') === 'warehouse';
 
 const fetchShipmentList = async ({ page = 1, limit = 20, search = '', status = '', user = null }) => {
   let restrictedShipmentIds = null;
@@ -4687,6 +4709,8 @@ const fetchShipmentList = async ({ page = 1, limit = 20, search = '', status = '
     restrictedShipmentIds = await getActualWorkflowShipmentIds();
   } else if (shouldRestrictShipmentListToOnTransit(user)) {
     restrictedShipmentIds = await getOnTransitOrLaterShipmentIds();
+  } else if (shouldRestrictShipmentListToAtPort(user)) {
+    restrictedShipmentIds = await getAtPortOrLaterShipmentIds();
   }
   const commercialInvoiceShipmentIds = await getCommercialInvoiceShipmentIds(search);
   const query = buildShipmentListQuery({
@@ -5541,11 +5565,13 @@ exports.getShipmentSummary = async (req, res) => {
         const actual = container.actual || {};
         const receiver = String(actual.receiver || '').trim().toLowerCase();
 
-        // 1. Receiver Type
-        const isBank = receiver.includes('bank');
-        if (isBank) {
+        // 1. Receiver Type — Direct counts when there is document activity even if the
+        // receiver field was never set (see classifyFasReceiver).
+        const receiverClass = classifyFasReceiver(actual);
+        const isBank = receiverClass === 'bank';
+        if (receiverClass === 'bank') {
           bankReceiver++;
-        } else if (receiver) {
+        } else if (receiverClass === 'direct') {
           directReceiver++;
         }
 
@@ -5623,6 +5649,8 @@ exports.getShipmentSummary = async (req, res) => {
       };
     })();
 
+    const warehouseDashboard = buildWarehouseDashboard(containers);
+
     res.status(200).json({
       kpis: {
         totalShipments: total,
@@ -5633,6 +5661,7 @@ exports.getShipmentSummary = async (req, res) => {
       },
       departmentCharts,
       fasDashboard,
+      warehouseDashboard,
       stageBreakdown,
       monthlyTrend,
       arrivalSummary: {

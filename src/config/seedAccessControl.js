@@ -43,6 +43,9 @@ const DASHBOARD_DEPARTMENT_CHART_TEMPLATES = [
   { key: 'dashboard.section.warehouse_chart.view', resource: 'dashboard', screen: 'dashboard', tab: 'dashboard', type: 'action', action: 'warehouse_chart_view', label: 'View Warehouse Arrival Chart', sortOrder: 15 },
   { key: 'dashboard.section.fas_chart.view', resource: 'dashboard', screen: 'dashboard', tab: 'dashboard', type: 'action', action: 'fas_chart_view', label: 'View FAS Document Approvals Chart', sortOrder: 16 },
   { key: 'dashboard.section.logistics_chart.view', resource: 'dashboard', screen: 'dashboard', tab: 'dashboard', type: 'action', action: 'logistics_chart_view', label: 'View Logistics Clearance Chart', sortOrder: 17 },
+  { key: 'dashboard.section.warehouse_allocation_status.view', resource: 'dashboard', screen: 'dashboard', tab: 'dashboard', type: 'action', action: 'warehouse_allocation_status_view', label: 'View Warehouse Allocation Status', sortOrder: 18 },
+  { key: 'dashboard.section.warehouse_allocation_table.view', resource: 'dashboard', screen: 'dashboard', tab: 'dashboard', type: 'action', action: 'warehouse_allocation_table_view', label: 'View Warehouse Allocation & Receiving Table', sortOrder: 19 },
+  { key: 'dashboard.section.warehouse_receiving_status.view', resource: 'dashboard', screen: 'dashboard', tab: 'dashboard', type: 'action', action: 'warehouse_receiving_status_view', label: 'View Warehouse Receiving Status', sortOrder: 20 },
 ];
 
 const DASHBOARD_PERMISSION_KEYS = DASHBOARD_PERMISSION_TEMPLATES.map((permission) => permission.key);
@@ -354,7 +357,9 @@ const DEFAULT_ROLE_PERMISSION_MAP = {
   warehouse: [
     'menu.dashboard.view',
     ...DASHBOARD_PERMISSION_KEYS,
-    'dashboard.section.warehouse_chart.view',
+    'dashboard.section.warehouse_allocation_status.view',
+    'dashboard.section.warehouse_allocation_table.view',
+    'dashboard.section.warehouse_receiving_status.view',
     'menu.shipments.view',
     'menu.reports.view',
     'menu.settings.view',

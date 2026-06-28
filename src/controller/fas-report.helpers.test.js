@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { mapFasDocumentTrackingRow, FAS_DOC_TRACKING_COLUMNS, isBankReceiver } = require('./fas-report.helpers');
+const { mapFasDocumentTrackingRow, FAS_DOC_TRACKING_COLUMNS, isBankReceiver, computeFasDocumentStatus, classifyFasReceiver } = require('./fas-report.helpers');
 
 const idDate = (d) => (d ? String(d) : '');
 
@@ -36,7 +36,8 @@ test('Point 2: Bank receiver maps Yes/No + dates', () => {
   assert.equal(row.murabahaAttached, 'Yes');
   assert.equal(row.finalContractReceived, 'Yes');
   assert.equal(row.finalContractAttached, 'Yes');
-  assert.equal(row.status, 'On Transit');
+  // Final contract attached, no payment request yet -> Pending Payment Request.
+  assert.equal(row.status, 'Pending Payment Request');
   assert.equal(row.remarks, 'All documents completed');
 });
 
@@ -76,4 +77,102 @@ test('isBankReceiver is case-insensitive', () => {
   assert.equal(isBankReceiver('Bank'), true);
   assert.equal(isBankReceiver('Direct'), false);
   assert.equal(isBankReceiver(''), false);
+});
+
+// Dashboard "Documents by Receiver Type" classification fix (Direct = 1 bug).
+test('classifyFasReceiver: bank receiver -> bank', () => {
+  assert.equal(classifyFasReceiver({ receiver: 'Bank' }), 'bank');
+});
+
+test('classifyFasReceiver: no receiver but has document activity -> direct', () => {
+  assert.equal(classifyFasReceiver({ courierTrackNo: '3091143742', courierServiceProvider: 'DHL' }), 'direct');
+});
+
+test('classifyFasReceiver: explicit Direct receiver -> direct', () => {
+  assert.equal(classifyFasReceiver({ receiver: 'Direct', expectedDocDate: '2026-06-01' }), 'direct');
+});
+
+test('classifyFasReceiver: empty planned container (no receiver, no docs) -> null', () => {
+  assert.equal(classifyFasReceiver({}), null);
+  assert.equal(classifyFasReceiver({ qtyMT: 100 }), null);
+});
+
+// Point 2/3: FAS Status condition table (screenshot).
+test('FAS Status: Shipment On Transit -> Documents In Transit', () => {
+  assert.equal(computeFasDocumentStatus({ shipmentStatus: 'On Transit' }), 'Documents In Transit');
+});
+
+test('FAS Status: arrived, no receiver flow -> Awaiting Documents', () => {
+  assert.equal(
+    computeFasDocumentStatus({ shipmentStatus: 'At Port of Discharge' }),
+    'Awaiting Documents'
+  );
+});
+
+test('FAS Status: Bank & DA not received -> Awaiting DA', () => {
+  assert.equal(
+    computeFasDocumentStatus({ shipmentStatus: 'At Port of Discharge', isBank: true, daReceived: false }),
+    'Awaiting DA'
+  );
+});
+
+test('FAS Status: DA received & not submitted -> Pending Bank Submission', () => {
+  assert.equal(
+    computeFasDocumentStatus({ shipmentStatus: 'Reached WH', isBank: true, daReceived: true, submittedToBank: false }),
+    'Pending Bank Submission'
+  );
+});
+
+test('FAS Status: Murabaha required & not submitted -> Pending Murabaha', () => {
+  assert.equal(
+    computeFasDocumentStatus({
+      shipmentStatus: 'Reached WH', isBank: true, daReceived: true, submittedToBank: true,
+      murabahaRequired: true, murabahaSubmitted: false,
+    }),
+    'Pending Murabaha'
+  );
+});
+
+test('FAS Status: Murabaha not required (bank) -> Pending Final Contract (Skip Murabaha)', () => {
+  assert.equal(
+    computeFasDocumentStatus({
+      shipmentStatus: 'Reached WH', isBank: true, daReceived: true, submittedToBank: true, murabahaRequired: false,
+    }),
+    'Pending Final Contract (Skip Murabaha)'
+  );
+});
+
+test('FAS Status: Receiver Direct -> Pending Final Contract (Skip DA & Murabaha)', () => {
+  assert.equal(
+    computeFasDocumentStatus({ shipmentStatus: 'At Port of Discharge', isDirect: true }),
+    'Pending Final Contract (Skip DA & Murabaha)'
+  );
+});
+
+test('FAS Status: Final Contract Attached -> Pending Payment Request', () => {
+  assert.equal(
+    computeFasDocumentStatus({ shipmentStatus: 'Reached WH', isBank: true, finalContractAttached: true }),
+    'Pending Payment Request'
+  );
+});
+
+test('FAS Status: Payment Request Created -> Payment Allocation Pending', () => {
+  assert.equal(
+    computeFasDocumentStatus({ shipmentStatus: 'Reached WH', finalContractAttached: true, paymentRequestCreated: true }),
+    'Payment Allocation Pending'
+  );
+});
+
+test('FAS Status: Payment Allocation Completed -> Completed', () => {
+  assert.equal(
+    computeFasDocumentStatus({ shipmentStatus: 'GRN Completed', paymentAllocationCompleted: true }),
+    'Completed'
+  );
+});
+
+test('FAS Status: pre-transit falls back to shipment status', () => {
+  assert.equal(
+    computeFasDocumentStatus({ shipmentStatus: 'ETD yet to be confirmed' }),
+    'ETD yet to be confirmed'
+  );
 });

@@ -12,4 +12,14 @@ const isOnTransitOrLaterStatus = (status) => {
   return true;
 };
 
-module.exports = { isOnTransitOrLaterStatus };
+// Warehouse managers only see shipments that have reached the port or later
+// (At Port of Discharge, Reached/Delivered WH, GRN Completed). On Transit and all
+// pre-transit stages are hidden.
+const isAtPortOrLaterStatus = (status) => {
+  const s = String(status || '').trim().toLowerCase();
+  if (!isOnTransitOrLaterStatus(status)) return false;
+  if (s === 'on transit') return false;
+  return true;
+};
+
+module.exports = { isOnTransitOrLaterStatus, isAtPortOrLaterStatus };
