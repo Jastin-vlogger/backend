@@ -2,12 +2,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { buildWarehouseDashboard, isSplitReceived } = require('./warehouse-dashboard.helpers');
 
-const mkContainer = (allocations, splits, expectedContainers) => ({
+const mkContainer = (allocations, splits, expectedContainers, approvalStatus = 'approved') => ({
   actual: {
     storageAllocationDecision: {
       itemAllocations: [{ itemName: 'Rice', expectedContainers, allocations }],
     },
     storageSplits: splits,
+    storageAllocationApproval: { status: approvalStatus },
   },
 });
 
@@ -98,7 +99,7 @@ test('empty input yields zeroed dashboard', () => {
   assert.deepEqual(d.byWarehouse, []);
 });
 
-test('dbWarehouses seeds byWarehouse with 0-allocation warehouses', () => {
+test('dbWarehouses seeds byWarehouse but filters out 0-allocation warehouses', () => {
   const dbWarehouses = [
     { name: 'SHARJAH', code: 'SHJ' },
     { name: 'AL AIN', code: 'AAN' },
@@ -110,19 +111,20 @@ test('dbWarehouses seeds byWarehouse with 0-allocation warehouses', () => {
   const d = buildWarehouseDashboard(containers, dbWarehouses);
   const sharjah = d.byWarehouse.find((w) => w.warehouse === 'SHARJAH - SHJ');
   const alain = d.byWarehouse.find((w) => w.warehouse === 'AL AIN - AAN');
-  assert.ok(sharjah, 'SHARJAH should appear even with 0 allocations');
-  assert.equal(sharjah.allocated, 0);
-  assert.equal(sharjah.received, 0);
+  assert.equal(sharjah, undefined, 'SHARJAH should be excluded since it has 0 allocations');
   assert.ok(alain, 'AL AIN should appear with its allocations');
   assert.equal(alain.allocated, 10);
 });
 
-test('dbWarehouses with no code uses just the name as label', () => {
+test('dbWarehouses with no code uses just the name as label (when allocated > 0)', () => {
   const dbWarehouses = [{ name: 'MUSAFFAH', code: '' }];
-  const d = buildWarehouseDashboard([], dbWarehouses);
+  const containers = [
+    mkContainer([{ warehouse: 'MUSAFFAH', containersAssigned: 5 }], [], 5),
+  ];
+  const d = buildWarehouseDashboard(containers, dbWarehouses);
   const row = d.byWarehouse.find((w) => w.warehouse === 'MUSAFFAH');
   assert.ok(row);
-  assert.equal(row.allocated, 0);
+  assert.equal(row.allocated, 5);
 });
 
 test('stale container warehouse strings are ignored when dbWarehouses supplied', () => {
@@ -140,3 +142,20 @@ test('stale container warehouse strings are ignored when dbWarehouses supplied',
   assert.equal(d.byWarehouse[0].allocated, 50);
   assert.equal(d.allocationStatus.allocated, 50, 'stale allocations excluded from totals');
 });
+
+test('draft storage allocations are ignored from allocated counts but counted as pending', () => {
+  const containers = [
+    // Draft allocation of 10 FCL with expected 10
+    mkContainer([{ warehouse: 'AL AIN', containersAssigned: 10 }], [], 10, 'draft'),
+    // Approved allocation of 5 FCL with expected 5
+    mkContainer([{ warehouse: 'DIC', containersAssigned: 5 }], [], 5, 'approved'),
+  ];
+  const d = buildWarehouseDashboard(containers);
+  // Total allocated should only be 5 (from DIC, AL AIN is draft)
+  assert.equal(d.allocationStatus.allocated, 5);
+  // Total expected is 15 (10 expected for AL AIN + 5 expected for DIC)
+  assert.equal(d.allocationStatus.total, 15);
+  // Pending allocation should be 10 (15 expected - 5 allocated)
+  assert.equal(d.allocationStatus.pendingAllocation, 10);
+});
+

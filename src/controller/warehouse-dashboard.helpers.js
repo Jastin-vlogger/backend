@@ -66,19 +66,27 @@ const buildWarehouseDashboard = (containers = [], dbWarehouses = []) => {
     const allocationRows = Array.isArray(actual.storageAllocations) ? actual.storageAllocations : [];
     const splits = Array.isArray(actual.storageSplits) ? actual.storageSplits : [];
 
+    const approval = actual.storageAllocationApproval;
+    const approvalStatus = approval ? (approval.status || 'draft') : null;
+    const isAllocatedState = approvalStatus
+      ? (approvalStatus === 'pending_warehouse_manager' || approvalStatus === 'approved')
+      : true; // Legacy fallback if approval state object is missing
+
     let containerExpected = 0;
     let containerAllocated = 0;
 
     if (itemAllocations.length) {
       itemAllocations.forEach((item) => {
         containerExpected += num(item.expectedContainers);
-        (Array.isArray(item.allocations) ? item.allocations : []).forEach((a) => {
-          const fcl = num(a.containersAssigned);
-          addAlloc(a.warehouse, fcl);
-          containerAllocated += fcl;
-        });
+        if (isAllocatedState) {
+          (Array.isArray(item.allocations) ? item.allocations : []).forEach((a) => {
+            const fcl = num(a.containersAssigned);
+            addAlloc(a.warehouse, fcl);
+            containerAllocated += fcl;
+          });
+        }
       });
-    } else if (allocationRows.length) {
+    } else if (allocationRows.length && isAllocatedState) {
       // Fallback: each storageAllocations row represents one allocated container (FCL).
       allocationRows.forEach((row) => {
         addAlloc(row.warehouse, 1);
@@ -110,6 +118,7 @@ const buildWarehouseDashboard = (containers = [], dbWarehouses = []) => {
       const pendingReceiving = Math.max(allocated - received, 0);
       return { warehouse, allocated, received, pendingReceiving, progress: pct(received, allocated) };
     })
+    .filter((w) => w.allocated > 0 || w.received > 0)
     .sort((a, b) => b.allocated - a.allocated);
 
   const pendingAllocation = Math.max(totalExpected - totalAllocated, 0);

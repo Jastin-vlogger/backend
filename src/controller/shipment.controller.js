@@ -1553,8 +1553,29 @@ const ensureSupplierPortalAccessForShipment = async (shipment) => {
   return { supplier, supplierCreated, inviteSent, inviteStatusMessage };
 };
 
-const buildShipmentReportRows = async (filters = {}) => {
-  const shipments = await Shipment.find({})
+const buildShipmentReportRows = async (filters = {}, user = null) => {
+  let labelSet = null;
+  let isStorekeeperUser = false;
+  let matchedShipmentIds = null;
+
+  if (user && normalizeRole(user.role || '') === 'storekeeper') {
+    isStorekeeperUser = true;
+    const assignedWarehouses = await Warehouse.find({ assignedStorekeepers: user._id, status: 'Active' })
+      .select('name code').lean();
+    const labels = assignedWarehouses.map((w) => {
+      const code = String(w.code || '').trim();
+      const name = String(w.name || '').trim();
+      return code ? `${name} - ${code}` : name;
+    });
+    labelSet = new Set(labels);
+    matchedShipmentIds = new Set(await getStorekeeperShipmentIds(labels));
+  }
+
+  const query = isStorekeeperUser && matchedShipmentIds
+    ? { _id: { $in: [...matchedShipmentIds] } }
+    : {};
+
+  const shipments = await Shipment.find(query)
     .populate('supplierId', 'name')
     .populate('itemId', 'description')
     .sort({ createdAt: -1, orderDate: -1 })
@@ -1583,7 +1604,28 @@ const buildShipmentReportRows = async (filters = {}) => {
     const planned = firstContainer?.planned || {};
     const splitCount = getShipmentSplitCount(shipment, shipmentContainers);
     const reportStatus = getShipmentReportStatus(shipment, shipmentContainers);
-    const children = shipmentContainers.map((container, childIndex) => {
+    const children = shipmentContainers
+      .filter((container) => {
+        if (!isStorekeeperUser) return true;
+        const actual = container?.actual || {};
+        const approval = actual.storageAllocationApproval;
+        const approvalStatus = approval ? (approval.status || 'draft') : null;
+        if (approvalStatus !== null && approvalStatus !== 'pending_warehouse_manager' && approvalStatus !== 'approved') return false;
+
+        const allocs = Array.isArray(actual.storageAllocations) ? actual.storageAllocations : [];
+        const splits = Array.isArray(actual.storageSplits) ? actual.storageSplits : [];
+        const decision = actual.storageAllocationDecision || {};
+        const itemAllocs = Array.isArray(decision.itemAllocations) ? decision.itemAllocations : [];
+
+        return allocs.some((a) => labelSet.has(String(a.warehouse || '').trim())) ||
+               splits.some((s) => labelSet.has(String(s.warehouse || '').trim())) ||
+               itemAllocs.some((item) =>
+                 (Array.isArray(item.allocations) ? item.allocations : []).some((a) =>
+                   labelSet.has(String(a.warehouse || '').trim())
+                 )
+               );
+      })
+      .map((container, childIndex) => {
       const childActual = container?.actual || {};
       const childPlanned = container?.planned || {};
       const scheduledEtdSource = childPlanned.etd || shipment.plannedETD;
@@ -4715,6 +4757,10 @@ const getStorekeeperShipmentIds = async (warehouseLabels) => {
   const matchedShipmentIds = new Set();
   containers.forEach((c) => {
     const actual = c.actual || {};
+    const approval = actual.storageAllocationApproval;
+    const approvalStatus = approval ? (approval.status || 'draft') : null;
+    if (approvalStatus !== null && approvalStatus !== 'pending_warehouse_manager' && approvalStatus !== 'approved') return;
+
     const allocs = Array.isArray(actual.storageAllocations) ? actual.storageAllocations : [];
     const splits = Array.isArray(actual.storageSplits) ? actual.storageSplits : [];
     const decision = actual.storageAllocationDecision || {};
@@ -4832,7 +4878,7 @@ exports.searchShipments = async (req, res) => {
 
 exports.getShipmentReportExportData = async (req, res) => {
   try {
-    const rows = await buildShipmentReportRows(req.query);
+    const rows = await buildShipmentReportRows(req.query, req.user);
 
     return res.status(200).json({
       rows,
@@ -4847,7 +4893,7 @@ exports.getShipmentReportExportData = async (req, res) => {
 
 exports.downloadShipmentReportExcel = async (req, res) => {
   try {
-    const rows = await buildShipmentReportRows(req.query);
+    const rows = await buildShipmentReportRows(req.query, req.user);
     const parentColumns = selectReportColumns(SHIPMENT_REPORT_COLUMNS, req.query.columns);
     const childColumns = selectReportColumns(SHIPMENT_REPORT_CHILD_COLUMNS, req.query.childColumns);
     const flattenedRows = buildShipmentReportExportRows(rows, parentColumns, childColumns);
@@ -5023,7 +5069,7 @@ exports.downloadShipmentReportExcel = async (req, res) => {
 
 exports.downloadShipmentReportPdf = async (req, res) => {
   try {
-    const rows = await buildShipmentReportRows(req.query);
+    const rows = await buildShipmentReportRows(req.query, req.user);
     const parentColumns = selectReportColumns(SHIPMENT_REPORT_COLUMNS, req.query.columns);
     const childColumns = selectReportColumns(SHIPMENT_REPORT_CHILD_COLUMNS, req.query.childColumns);
     const flattenedRows = buildShipmentReportExportRows(rows, parentColumns, childColumns);
@@ -5688,7 +5734,11 @@ exports.getShipmentSummary = async (req, res) => {
     })();
 
     const activeWarehouses = await Warehouse.find({ status: 'Active' }).select('name code').lean();
-    const warehouseDashboard = buildWarehouseDashboard(containers, activeWarehouses);
+    const warehouseContainers = containers.filter((container) => {
+      const shipment = shipments.find((s) => String(s._id) === String(container.shipmentId));
+      return isAtPortOrLaterStatus(getDashboardStatusColumn(shipment, container));
+    });
+    const warehouseDashboard = buildWarehouseDashboard(warehouseContainers, activeWarehouses);
 
     // ── Storekeeper dashboard ────────────────────────────────────────────────
     const storekeeperDashboard = await (async () => {
@@ -5714,12 +5764,22 @@ exports.getShipmentSummary = async (req, res) => {
       });
       const labelSet = new Set(myLabels);
 
+      const storekeeperContainers = containers.filter((container) => {
+        const actual = container?.actual || {};
+        const approval = actual.storageAllocationApproval;
+        const approvalStatus = approval ? (approval.status || 'draft') : null;
+        if (approvalStatus !== null && approvalStatus !== 'pending_warehouse_manager' && approvalStatus !== 'approved') return false;
+
+        const shipment = shipments.find((s) => String(s._id) === String(container.shipmentId));
+        return isAtPortOrLaterStatus(getDashboardStatusColumn(shipment, container));
+      });
+
       // Aggregate allocation & receiving for assigned warehouses only.
       let totalAllocated = 0;
       let totalReceived = 0;
       const receivedByDate = new Map(); // "DD-Mon" -> { received, pending }
 
-      containers.forEach((container) => {
+      storekeeperContainers.forEach((container) => {
         const actual = container?.actual || {};
         const decision = actual.storageAllocationDecision || {};
         const itemAllocs = Array.isArray(decision.itemAllocations) ? decision.itemAllocations : [];
@@ -5790,14 +5850,14 @@ exports.getShipmentSummary = async (req, res) => {
         },
         receivingTimeline,
         byWarehouse: myLabels.map((label) => {
-          const whContainers = containers.filter((c) => {
+          const whContainers = storekeeperContainers.filter((c) => {
             const actual = c?.actual || {};
             const splits = Array.isArray(actual.storageSplits) ? actual.storageSplits : [];
             return splits.some((s) => String(s.warehouse || '').trim() === label);
           });
           let alloc = 0;
           let recv = 0;
-          containers.forEach((c) => {
+          storekeeperContainers.forEach((c) => {
             const actual = c?.actual || {};
             const decision = actual.storageAllocationDecision || {};
             const itemAllocs = Array.isArray(decision.itemAllocations) ? decision.itemAllocations : [];
@@ -5821,7 +5881,8 @@ exports.getShipmentSummary = async (req, res) => {
           });
           const pending = Math.max(alloc - recv, 0);
           return { warehouse: label, allocated: alloc, received: recv, pendingReceiving: pending, progress: pct(recv, alloc) };
-        }),
+        })
+        .filter((w) => w.allocated > 0 || w.received > 0),
       };
     })();
 
@@ -7550,7 +7611,21 @@ const STORAGE_ARRIVAL_REPORT_COLUMNS = [
   { header: 'Remarks', key: 'remarks', width: 22 },
 ];
 
-const buildStorageArrivalReportRows = async () => {
+const buildStorageArrivalReportRows = async (user = null) => {
+  let labelSet = null;
+  let isStorekeeperUser = false;
+  if (user && normalizeRole(user.role || '') === 'storekeeper') {
+    isStorekeeperUser = true;
+    const assignedWarehouses = await Warehouse.find({ assignedStorekeepers: user._id, status: 'Active' })
+      .select('name code').lean();
+    const labels = assignedWarehouses.map((w) => {
+      const code = String(w.code || '').trim();
+      const name = String(w.name || '').trim();
+      return code ? `${name} - ${code}` : name;
+    });
+    labelSet = new Set(labels);
+  }
+
   const shipments = await Shipment.find({})
     .populate('supplierId', 'name')
     .populate('itemId', 'description')
@@ -7580,16 +7655,23 @@ const buildStorageArrivalReportRows = async () => {
     shipmentContainers.forEach((container) => {
       const actual = container?.actual || {};
       const planned = container?.planned || {};
+
+      if (isStorekeeperUser) {
+        const approval = actual.storageAllocationApproval;
+        const approvalStatus = approval ? (approval.status || 'draft') : null;
+        if (approvalStatus !== null && approvalStatus !== 'pending_warehouse_manager' && approvalStatus !== 'approved') return;
+      }
+
       const splits = Array.isArray(actual.storageSplits) ? actual.storageSplits : [];
       const allocations = Array.isArray(actual.storageAllocations) ? actual.storageAllocations : [];
 
-      // Mirror the Storage Arrival UI: rows come from the allocation set (or splits when no
-      // allocations exist), with the matching received split merged in. No GRN filter — a row
-      // is "Arrived" once it has received data, otherwise it's still "Pending".
       const baseRows = allocations.length ? allocations : splits;
       if (!baseRows.length) return;
 
       baseRows.forEach((base, index) => {
+        const whName = String(base?.warehouse || '').trim();
+        if (isStorekeeperUser && labelSet && !labelSet.has(whName)) return;
+
         const key = normalizeSerial(base?.containerSerialNo);
         const split = (key && splits.find((s) => normalizeSerial(s?.containerSerialNo) === key)) || splits[index] || {};
         const alloc = allocations.length ? base : {};
@@ -7628,7 +7710,7 @@ const buildStorageArrivalReportRows = async () => {
 
 exports.getStorageArrivalReportData = async (req, res) => {
   try {
-    const rows = await buildStorageArrivalReportRows();
+    const rows = await buildStorageArrivalReportRows(req.user);
     const generatedAt = new Date();
     return res.json({
       rows,
@@ -7752,7 +7834,7 @@ exports.downloadFasDocumentTrackingReport = async (req, res) => {
 
 exports.downloadStorageArrivalReport = async (req, res) => {
   try {
-    const rows = await buildStorageArrivalReportRows();
+    const rows = await buildStorageArrivalReportRows(req.user);
     const downloadedBy = req.user?.name || 'Royal Horizon User';
     const downloadedAt = formatDateTimeValue(new Date());
     const totalColumns = STORAGE_ARRIVAL_REPORT_COLUMNS.length;
