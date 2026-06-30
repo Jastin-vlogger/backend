@@ -250,7 +250,6 @@ router.patch(
       { name: 'commercialDocumentDocument', maxCount: 1 },
       { name: 'commercialDocument', maxCount: 1 },
       { name: 'arrivalDocument', maxCount: 1 },
-      { name: 'finalContractDocument', maxCount: 1 },
       { name: 'arrivalNoticeDocument', maxCount: 1 },
       { name: 'advanceRequestDocument', maxCount: 1 },
       { name: 'doReleasedDocument', maxCount: 1 },

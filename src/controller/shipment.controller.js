@@ -3338,7 +3338,6 @@ exports.updateLogisticsDetails = async (req, res) => {
     const advanceRequestDocument = files?.advanceRequestDocument?.[0];
     const commercialDocument = files?.commercialDocument?.[0] || files?.commercialDocumentDocument?.[0];
     const arrivalDocument = files?.arrivalDocument?.[0];
-    const finalContractDocument = files?.finalContractDocument?.[0];
     const doReleasedDocument = files?.doReleasedDocument?.[0];
     const boePassingDocument = files?.boePassingDocument?.[0];
     const customsClearanceDocument = files?.customsClearanceDocument?.[0];
@@ -3365,12 +3364,6 @@ exports.updateLogisticsDetails = async (req, res) => {
       const uploaded = await uploadBufferToS3(arrivalDocument, 'shipments/logistics/arrival-document');
       container.actual.arrivalDocumentUrl = uploaded.url;
       container.actual.arrivalDocumentName = uploaded.fileName;
-    }
-    if (finalContractDocument) {
-      // Point 17: Final Contract document in the Port & Clearance document section.
-      const uploaded = await uploadBufferToS3(finalContractDocument, 'shipments/logistics/final-contract-document');
-      container.actual.finalContractDocumentUrl = uploaded.url;
-      container.actual.finalContractDocumentName = uploaded.fileName;
     }
     if (advanceRequestDocument) {
       const uploaded = await uploadBufferToS3(advanceRequestDocument, 'shipments/logistics/advance-request');

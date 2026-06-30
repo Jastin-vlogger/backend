@@ -535,9 +535,6 @@ const actualContainerSchema = new mongoose.Schema({
   commercialDocumentDocumentName: { type: String },
   arrivalDocumentUrl: { type: String },
   arrivalDocumentName: { type: String },
-  // Point 17: Final Contract document shown in the Port & Clearance document section.
-  finalContractDocumentUrl: { type: String },
-  finalContractDocumentName: { type: String },
   freeDetentionDays: { type: Number, default: 10 },
   freeStorageDays: { type: Number, default: 14 },
   clearanceRemarks: { type: String },
