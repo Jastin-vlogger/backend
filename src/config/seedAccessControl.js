@@ -198,12 +198,21 @@ const LEGACY_PERMISSION_TEMPLATES = [
   { key: 'shipment.action.payment_costing.generate_report',  resource: 'shipment', screen: 'shipment_tracker', tab: 'payment_costing',  type: 'action', action: 'generate_report',  label: '[Legacy] Generate Payment Report',   sortOrder: 903 },
 ];
 
+// Point 23: per-report view permissions for the three Reports-tab dropdown reports.
+const REPORTS_PERMISSION_TEMPLATES = [
+  { key: 'report.quality_activity.view',   resource: 'reports', screen: 'reports', tab: 'quality_activity',   type: 'action', action: 'view', label: 'View Quality Activity Status Report',   sortOrder: 281 },
+  { key: 'report.warehouse_activity.view', resource: 'reports', screen: 'reports', tab: 'warehouse_activity', type: 'action', action: 'view', label: 'View Warehouse Activity Status Report', sortOrder: 282 },
+  { key: 'report.fas_activity.view',       resource: 'reports', screen: 'reports', tab: 'fas_activity',       type: 'action', action: 'view', label: 'View FAS Activity Status Report',       sortOrder: 283 },
+];
+const REPORTS_PERMISSION_KEYS = REPORTS_PERMISSION_TEMPLATES.map((template) => template.key);
+
 const ALL_PERMISSION_TEMPLATES = [
   ...MENU_PERMISSION_TEMPLATES,
   ...DASHBOARD_PERMISSION_TEMPLATES,
   ...DASHBOARD_DEPARTMENT_CHART_TEMPLATES,
   ...SETTINGS_PERMISSION_TEMPLATES,
   ...SHIPMENT_PERMISSION_TEMPLATES,
+  ...REPORTS_PERMISSION_TEMPLATES,
   ...LEGACY_PERMISSION_TEMPLATES,
 ];
 
@@ -216,6 +225,7 @@ const DEFAULT_ROLE_PERMISSION_MAP = {
     'menu.shipments.view',
     'menu.suppliers.view',
     'menu.reports.view',
+    ...REPORTS_PERMISSION_KEYS,
     'menu.settings.view',
     'settings.tab.warehouses.view',
     'settings.tab.exchange_rates.view',
@@ -269,6 +279,7 @@ const DEFAULT_ROLE_PERMISSION_MAP = {
     'dashboard.section.logistics_chart.view',
     'menu.shipments.view',
     'menu.reports.view',
+    ...REPORTS_PERMISSION_KEYS,
     'menu.settings.view',
     'settings.tab.warehouses.view',
     'settings.tab.transportation.view',
@@ -301,6 +312,7 @@ const DEFAULT_ROLE_PERMISSION_MAP = {
     'dashboard.section.fas_chart.view',
     'menu.shipments.view',
     'menu.reports.view',
+    ...REPORTS_PERMISSION_KEYS,
     'menu.settings.view',
     'settings.tab.exchange_rates.view',
     'settings.tab.exchange_rates.edit',
@@ -344,6 +356,7 @@ const DEFAULT_ROLE_PERMISSION_MAP = {
     'dashboard.section.fas_chart.view',
     'menu.shipments.view',
     'menu.reports.view',
+    ...REPORTS_PERMISSION_KEYS,
     'menu.settings.view',
     'settings.tab.exchange_rates.view',
     'shipment.screen.shipment_tracker.view',
@@ -365,6 +378,7 @@ const DEFAULT_ROLE_PERMISSION_MAP = {
     'dashboard.section.warehouse_receiving_status.view',
     'menu.shipments.view',
     'menu.reports.view',
+    ...REPORTS_PERMISSION_KEYS,
     'menu.settings.view',
     'settings.tab.warehouses.view',
     'shipment.screen.shipment_tracker.view',

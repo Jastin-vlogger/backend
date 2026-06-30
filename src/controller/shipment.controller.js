@@ -1301,17 +1301,23 @@ const buildDashboardStatusPivot = (shipments, containerMap, groupBy = 'supplier'
 };
 
 const buildDashboardRStatusMetrics = (shipments, containerMap) => {
-  const metrics = {
-    'At The Port': 0,
-    'On Transit': 0,
-    'ETD Yet To Due': 0,
-    'ETD Yet To Be Confirmed': 0,
-    'Total LPO': shipments.length,
-    'Total Shipments': 0,
-    'Open LPO': 0,
-    'Completed LPO': 0,
-    'Delivered WH': 0,
-  };
+  // Each bucket tracks the count (quantity), plus summed FCL and MT (buying qty) volume
+  // so the dashboard Status Snapshot can show STATUS / QUANTITY / FCL / MT per row.
+  const labelOrder = [
+    'At The Port',
+    'On Transit',
+    'ETD Yet To Due',
+    'ETD Yet To Be Confirmed',
+    'Total LPO',
+    'Total Shipments',
+    'Open LPO',
+    'Completed LPO',
+    'Delivered WH',
+  ];
+  const metrics = {};
+  labelOrder.forEach((label) => {
+    metrics[label] = { count: 0, fcl: 0, mt: 0 };
+  });
   const permissionKeys = {
     'At The Port': 'dashboard.snapshot.at_port.view',
     'On Transit': 'dashboard.snapshot.on_transit.view',
@@ -1324,6 +1330,14 @@ const buildDashboardRStatusMetrics = (shipments, containerMap) => {
     'Delivered WH': 'dashboard.snapshot.delivered_wh.view',
   };
 
+  const add = (label, count, mt, fcl) => {
+    const bucket = metrics[label];
+    if (!bucket) return;
+    bucket.count += count || 0;
+    bucket.mt += Number(mt) || 0;
+    bucket.fcl += Number(fcl) || 0;
+  };
+
   shipments.forEach((shipment) => {
     const shipmentContainers = containerMap.get(String(shipment._id)) || [];
     const splitCount = getShipmentSplitCount(shipment, shipmentContainers);
@@ -1334,31 +1348,64 @@ const buildDashboardRStatusMetrics = (shipments, containerMap) => {
     const isPendingEntryStage = isShipmentEntryPendingSchedule(shipment);
     const pendingEntryCount = isPendingEntryStage ? 1 : 0;
 
+    // Planned (LPO-level) volume, used as a fallback when container data is missing.
+    const plannedMt = Number(shipment?.plannedQtyMT || shipment?.totalOrderedQtyMT || 0) || 0;
+    const plannedFcl = Number(shipment?.fcl || 0) || 0;
+
+    // Per-shipment FCL/MT from container data (falls back to planned when no containers).
+    const containerMt = dashboardContainers.reduce(
+      (sum, container) => sum + getDashboardChildQuantity(shipment, container, splitCount),
+      0
+    );
+    const containerFcl = dashboardContainers.reduce(
+      (sum, container) => sum + getDashboardChildFcl(shipment, container, splitCount),
+      0
+    );
+    const missingShare = missingSplitCount ? missingSplitCount / Math.max(splitCount, 1) : 0;
+    const missingMt = plannedMt * missingShare;
+    const missingFcl = plannedFcl * missingShare;
+    const lpoMt = dashboardContainers.length ? containerMt + missingMt : plannedMt;
+    const lpoFcl = dashboardContainers.length ? containerFcl + missingFcl : plannedFcl;
+
+    // Total LPO — one row per shipment, carrying the whole LPO volume.
+    add('Total LPO', 1, lpoMt, lpoFcl);
+
     if (!shipmentContainers.length && !missingSplitCount) {
-      metrics['Open LPO'] += 1;
-      metrics['Total Shipments'] += pendingEntryCount;
-      metrics['ETD Yet To Be Confirmed'] += pendingEntryCount;
+      add('Open LPO', 1, lpoMt, lpoFcl);
+      if (pendingEntryCount) {
+        add('Total Shipments', pendingEntryCount, plannedMt, plannedFcl);
+        add('ETD Yet To Be Confirmed', pendingEntryCount, plannedMt, plannedFcl);
+      }
       return;
     }
 
-    metrics['Total Shipments'] += dashboardContainers.length + missingSplitCount;
-    metrics['ETD Yet To Be Confirmed'] += missingSplitCount;
+    add('Total Shipments', dashboardContainers.length + missingSplitCount, containerMt + missingMt, containerFcl + missingFcl);
+    add('ETD Yet To Be Confirmed', missingSplitCount, missingMt, missingFcl);
 
     const isCompletedLpo = missingSplitCount === 0 && dashboardContainers.length > 0 && dashboardContainers.every((container) => hasSavedStorageArrivalData(container));
-    if (isCompletedLpo) metrics['Completed LPO'] += 1;
-    else metrics['Open LPO'] += 1;
+    if (isCompletedLpo) add('Completed LPO', 1, lpoMt, lpoFcl);
+    else add('Open LPO', 1, lpoMt, lpoFcl);
 
     dashboardContainers.forEach((container) => {
       const status = isPendingEntryStage ? REPORT_STATUS_ETD_UNCONFIRMED : getDashboardStatusColumn(shipment, container);
-      if (status === 'Delivered WH') metrics['Delivered WH'] += 1;
-      else if (status === 'On Transit') metrics['On Transit'] += 1;
-      else if (status === 'At the Port') metrics['At The Port'] += 1;
-      else if (status === REPORT_STATUS_ETD_DUE || status === 'ETA yet to due') metrics['ETD Yet To Due'] += 1;
-      else metrics['ETD Yet To Be Confirmed'] += 1;
+      const mt = getDashboardChildQuantity(shipment, container, splitCount);
+      const fcl = getDashboardChildFcl(shipment, container, splitCount);
+      if (status === 'Delivered WH') add('Delivered WH', 1, mt, fcl);
+      else if (status === 'On Transit') add('On Transit', 1, mt, fcl);
+      else if (status === 'At the Port') add('At The Port', 1, mt, fcl);
+      else if (status === REPORT_STATUS_ETD_DUE || status === 'ETA yet to due') add('ETD Yet To Due', 1, mt, fcl);
+      else add('ETD Yet To Be Confirmed', 1, mt, fcl);
     });
   });
 
-  return Object.entries(metrics).map(([label, value]) => ({ label, value, permissionKey: permissionKeys[label] }));
+  return labelOrder.map((label) => ({
+    label,
+    value: metrics[label].count,
+    quantity: metrics[label].count,
+    fcl: Number(metrics[label].fcl.toFixed(2)),
+    mt: Number(metrics[label].mt.toFixed(2)),
+    permissionKey: permissionKeys[label],
+  }));
 };
 
 const getMeaningfulNumber = (value) => {
@@ -2793,6 +2840,67 @@ exports.updateBLDetails = async (req, res) => {
   }
 };
 
+// Point 9: lightweight, isolated update of the editable "No of Bags" values on the
+// BL Details → Packing List Confirmation tab. Kept separate from updateBLDetails so a
+// bag edit never triggers clearing-advance / storage-allocation approval side effects.
+exports.updatePackagingBags = async (req, res) => {
+  try {
+    const container = await Container.findById(req.params.id);
+    if (!container) {
+      return res.status(404).json({ message: 'Container not found' });
+    }
+    if (!container.actual || !container.actual.packagingList) {
+      return res.status(400).json({ message: 'No packaging list available to update' });
+    }
+
+    const bags = parseJsonField(req.body.bags) ?? req.body.bags;
+    if (!Array.isArray(bags)) {
+      return res.status(400).json({ message: 'bags must be an array of { index, no_of_bags }' });
+    }
+
+    const containerInfo = container.actual.packagingList.containerInfo;
+    if (!Array.isArray(containerInfo) || !containerInfo.length) {
+      return res.status(400).json({ message: 'Packaging list has no container rows to update' });
+    }
+
+    const beforeUpdate = cloneForAudit(container.toObject());
+
+    bags.forEach(({ index, no_of_bags }) => {
+      const idx = Number(index);
+      if (Number.isInteger(idx) && idx >= 0 && idx < containerInfo.length) {
+        const parsed = no_of_bags === '' || no_of_bags == null ? 0 : Number(no_of_bags);
+        containerInfo[idx].no_of_bags = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+      }
+    });
+
+    // Keep the packaging summary total consistent with the edited rows.
+    container.actual.packagingList.totalBags = containerInfo.reduce(
+      (sum, ci) => sum + (Number(ci.no_of_bags) || 0),
+      0
+    );
+    container.markModified('actual.packagingList');
+    await container.save();
+
+    await writeAuditLog({
+      userId: req.user?._id,
+      module: 'Logistics',
+      entity: 'Container',
+      entityId: container._id,
+      action: 'UpdatePackagingBags',
+      before: beforeUpdate,
+      after: cloneForAudit(container.toObject()),
+      remarks: 'Packing list bag counts updated',
+    });
+
+    return res.status(200).json({
+      message: 'Packaging bags updated successfully',
+      packagingList: container.actual.packagingList,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
 
 exports.updateFASContainer = async (req, res) => {
   try {
@@ -3230,6 +3338,7 @@ exports.updateLogisticsDetails = async (req, res) => {
     const advanceRequestDocument = files?.advanceRequestDocument?.[0];
     const commercialDocument = files?.commercialDocument?.[0] || files?.commercialDocumentDocument?.[0];
     const arrivalDocument = files?.arrivalDocument?.[0];
+    const finalContractDocument = files?.finalContractDocument?.[0];
     const doReleasedDocument = files?.doReleasedDocument?.[0];
     const boePassingDocument = files?.boePassingDocument?.[0];
     const customsClearanceDocument = files?.customsClearanceDocument?.[0];
@@ -3256,6 +3365,12 @@ exports.updateLogisticsDetails = async (req, res) => {
       const uploaded = await uploadBufferToS3(arrivalDocument, 'shipments/logistics/arrival-document');
       container.actual.arrivalDocumentUrl = uploaded.url;
       container.actual.arrivalDocumentName = uploaded.fileName;
+    }
+    if (finalContractDocument) {
+      // Point 17: Final Contract document in the Port & Clearance document section.
+      const uploaded = await uploadBufferToS3(finalContractDocument, 'shipments/logistics/final-contract-document');
+      container.actual.finalContractDocumentUrl = uploaded.url;
+      container.actual.finalContractDocumentName = uploaded.fileName;
     }
     if (advanceRequestDocument) {
       const uploaded = await uploadBufferToS3(advanceRequestDocument, 'shipments/logistics/advance-request');
@@ -4778,7 +4893,43 @@ const getStorekeeperShipmentIds = async (warehouseLabels) => {
   return [...matchedShipmentIds];
 };
 
-const fetchShipmentList = async ({ page = 1, limit = 20, search = '', status = '', user = null }) => {
+// Maps a Shipment document to the Order/Shipment list row shape.
+const mapShipmentListRow = (s, shipmentContainers = [], precomputedStatus = null) => ({
+  _id: s._id,
+  year: s.year,
+  shipmentNo: s.shipmentNo,
+  orderNumber: s.orderNumber,
+  orderDate: s.orderDate,
+  supplier: s.supplierId?.name || s.supplierName || null,
+  description: s.itemId?.description || s.itemDescription || null,
+  buyingQty: s.plannedQtyMT || s.totalOrderedQtyMT || 0,
+  fcPerUnit: s.fcPerUnit || 0,
+  totalFC: s.totalFC || 0,
+  noOfShipments: s.noOfShipments || s.assumedContainerCount || 0,
+  status: precomputedStatus ?? getShipmentReportStatus(s, shipmentContainers),
+});
+
+// Builds a Map<shipmentId, container[]> from a flat container array.
+const groupContainersByShipment = (containers = []) => {
+  const containerMap = new Map();
+  containers.forEach((container) => {
+    const key = String(container.shipmentId);
+    if (!containerMap.has(key)) containerMap.set(key, []);
+    containerMap.get(key).push(container);
+  });
+  return containerMap;
+};
+
+// Normalizes a comma-separated / array status-filter input into a lowercase Set (or null).
+const buildStatusFilterSet = (statuses) => {
+  const list = Array.isArray(statuses)
+    ? statuses
+    : String(statuses || '').split(',');
+  const normalized = list.map((s) => String(s || '').trim().toLowerCase()).filter(Boolean);
+  return normalized.length ? new Set(normalized) : null;
+};
+
+const fetchShipmentList = async ({ page = 1, limit = 20, search = '', status = '', statuses = null, user = null }) => {
   let restrictedShipmentIds = null;
   if (shouldRestrictShipmentListForPendingBlRoles(user)) {
     restrictedShipmentIds = await getActualWorkflowShipmentIds();
@@ -4803,6 +4954,39 @@ const fetchShipmentList = async ({ page = 1, limit = 20, search = '', status = '
     shipmentIds: restrictedShipmentIds,
     commercialInvoiceShipmentIds,
   });
+
+  // Point 3: multi-select status filter. The displayed status is computed from container
+  // data (not a single stored field), so when statuses are requested we compute the status
+  // for every matching shipment, filter, then paginate in memory.
+  const statusFilterSet = buildStatusFilterSet(statuses);
+  if (statusFilterSet) {
+    const allShipments = await Shipment.find(query)
+      .populate("supplierId", "name")
+      .populate("itemId", "description")
+      .sort({ orderDate: -1, createdAt: -1 });
+    const allIds = allShipments.map((s) => s._id);
+    const allContainers = await Container.find({ shipmentId: { $in: allIds } }).lean();
+    const containerMap = groupContainersByShipment(allContainers);
+
+    const matched = allShipments
+      .map((s) => {
+        const computedStatus = getShipmentReportStatus(s, containerMap.get(String(s._id)) || []);
+        return { row: mapShipmentListRow(s, [], computedStatus), computedStatus };
+      })
+      .filter(({ computedStatus }) => statusFilterSet.has(String(computedStatus || '').trim().toLowerCase()))
+      .map(({ row }) => row);
+
+    const total = matched.length;
+    const start = (page - 1) * limit;
+    return {
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      totalRecords: total,
+      shipments: matched.slice(start, start + limit),
+    };
+  }
+
   const total = await Shipment.countDocuments(query);
 
   const shipments = await Shipment.find(query)
@@ -4814,29 +4998,9 @@ const fetchShipmentList = async ({ page = 1, limit = 20, search = '', status = '
 
   const shipmentIds = shipments.map((shipment) => shipment._id);
   const containers = await Container.find({ shipmentId: { $in: shipmentIds } }).lean();
-  const containerMap = new Map();
-  containers.forEach((container) => {
-    const key = String(container.shipmentId);
-    if (!containerMap.has(key)) {
-      containerMap.set(key, []);
-    }
-    containerMap.get(key).push(container);
-  });
+  const containerMap = groupContainersByShipment(containers);
 
-  const formatted = shipments.map(s => ({
-    _id: s._id,
-    year: s.year,
-    shipmentNo: s.shipmentNo,
-    orderNumber: s.orderNumber,
-    orderDate: s.orderDate,
-    supplier: s.supplierId?.name || s.supplierName || null,
-    description: s.itemId?.description || s.itemDescription || null,
-    buyingQty: s.plannedQtyMT || s.totalOrderedQtyMT || 0,
-    fcPerUnit: s.fcPerUnit || 0,
-    totalFC: s.totalFC || 0,
-    noOfShipments: s.noOfShipments || s.assumedContainerCount || 0,
-    status: getShipmentReportStatus(s, containerMap.get(String(s._id)) || [])
-  }));
+  const formatted = shipments.map((s) => mapShipmentListRow(s, containerMap.get(String(s._id)) || []));
 
   return {
     page,
@@ -4847,13 +5011,118 @@ const fetchShipmentList = async ({ page = 1, limit = 20, search = '', status = '
   };
 };
 
+// Point 4: flat list of every individual shipment (one row per container/split) across all
+// LPOs. Reuses the same role restrictions, search and status computation as the Order list.
+const fetchFlatShipmentList = async ({ page = 1, limit = 20, search = '', statuses = null, user = null }) => {
+  let restrictedShipmentIds = null;
+  if (shouldRestrictShipmentListForPendingBlRoles(user)) {
+    restrictedShipmentIds = await getActualWorkflowShipmentIds();
+  } else if (shouldRestrictShipmentListToOnTransit(user)) {
+    restrictedShipmentIds = await getOnTransitOrLaterShipmentIds();
+  } else if (shouldRestrictShipmentListToAtPort(user)) {
+    restrictedShipmentIds = await getAtPortOrLaterShipmentIds();
+  } else if (isStorekeeper(user)) {
+    const assignedWarehouses = await Warehouse.find({ assignedStorekeepers: user._id, status: 'Active' })
+      .select('name code').lean();
+    const labels = assignedWarehouses.map((w) => {
+      const code = String(w.code || '').trim();
+      const name = String(w.name || '').trim();
+      return code ? `${name} - ${code}` : name;
+    });
+    restrictedShipmentIds = await getStorekeeperShipmentIds(labels);
+  }
+
+  const commercialInvoiceShipmentIds = await getCommercialInvoiceShipmentIds(search);
+  const query = buildShipmentListQuery({
+    search,
+    status: '',
+    shipmentIds: restrictedShipmentIds,
+    commercialInvoiceShipmentIds,
+  });
+
+  const shipments = await Shipment.find(query)
+    .populate("supplierId", "name")
+    .populate("itemId", "description")
+    .sort({ orderDate: -1, createdAt: -1 });
+  const allIds = shipments.map((s) => s._id);
+  const allContainers = await Container.find({ shipmentId: { $in: allIds } }).lean();
+  const containerMap = groupContainersByShipment(allContainers);
+
+  const statusFilterSet = buildStatusFilterSet(statuses);
+  const rows = [];
+
+  shipments.forEach((s) => {
+    const shipmentContainers = containerMap.get(String(s._id)) || [];
+    const splitCount = getShipmentSplitCount(s, shipmentContainers);
+    const effectiveContainers = splitCount > 0 ? shipmentContainers.slice(0, splitCount) : shipmentContainers;
+    const base = String(s.shipmentNo || '').replace(/\([^)]*\)/g, '').trim();
+    const supplier = s.supplierId?.name || s.supplierName || null;
+    const description = s.itemId?.description || s.itemDescription || null;
+
+    const buildRow = (childIndex, container) => ({
+      shipmentId: base ? `${base}-${childIndex + 1}` : `${String(s._id)}-${childIndex + 1}`,
+      parentId: s._id,
+      childIndex,
+      shipmentNo: s.shipmentNo,
+      orderNumber: s.orderNumber,
+      orderDate: s.orderDate,
+      supplier,
+      description,
+      blNo: container?.actual?.BLNo || '',
+      commercialInvoiceNo: container?.actual?.commercialInvoiceNo || '',
+      buyingQty: container ? getDashboardChildQuantity(s, container, splitCount) : (s.plannedQtyMT || s.totalOrderedQtyMT || 0),
+      fcl: container ? getDashboardChildFcl(s, container, splitCount) : (s.fcl || 0),
+      status: container ? getDashboardStatusColumn(s, container) : getShipmentReportStatus(s, []),
+    });
+
+    if (!effectiveContainers.length) {
+      rows.push(buildRow(0, null));
+      return;
+    }
+    effectiveContainers.forEach((container, idx) => rows.push(buildRow(idx, container)));
+  });
+
+  const filtered = statusFilterSet
+    ? rows.filter((row) => statusFilterSet.has(String(row.status || '').trim().toLowerCase()))
+    : rows;
+
+  const total = filtered.length;
+  const start = (page - 1) * limit;
+  return {
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit),
+    totalRecords: total,
+    shipments: filtered.slice(start, start + limit),
+  };
+};
+
+exports.getAllShipmentsFlat = async (req, res) => {
+  try {
+    let { page = 1, limit = 20, search = '', q = '', statuses = '' } = req.query;
+    page = parseInt(page);
+    limit = parseInt(limit);
+    const result = await fetchFlatShipmentList({
+      page,
+      limit,
+      search: String(search || q || ''),
+      statuses,
+      user: req.user,
+    });
+    res.json(result);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
 exports.getAllShipments = async (req, res) => {
   try {
-    let { page = 1, limit = 20, search = '', status = '' } = req.query;
+    let { page = 1, limit = 20, search = '', status = '', statuses = '' } = req.query;
 
     page = parseInt(page);
     limit = parseInt(limit);
-    const result = await fetchShipmentList({ page, limit, search, status, user: req.user });
+    const result = await fetchShipmentList({ page, limit, search, status, statuses, user: req.user });
     res.json(result);
 
   } catch (err) {
@@ -4864,11 +5133,11 @@ exports.getAllShipments = async (req, res) => {
 
 exports.searchShipments = async (req, res) => {
   try {
-    let { page = 1, limit = 20, q = '', status = '' } = req.query;
+    let { page = 1, limit = 20, q = '', status = '', statuses = '' } = req.query;
     page = parseInt(page);
     limit = parseInt(limit);
 
-    const result = await fetchShipmentList({ page, limit, search: q, status, user: req.user });
+    const result = await fetchShipmentList({ page, limit, search: q, status, statuses, user: req.user });
     res.json(result);
   } catch (err) {
     console.error(err);
@@ -7744,9 +8013,8 @@ const buildFasDocumentTrackingRows = async () => {
   shipments.forEach((shipment) => {
     const shipmentContainers = byShipment.get(String(shipment._id)) || [];
     const status = getShipmentReportStatus(shipment, shipmentContainers);
-    // FAS document tracking only applies from "On Transit" onward (per the status
-    // condition table). Skip pre-transit shipments (ETD yet to be confirmed / Due).
-    if (!isOnTransitOrLaterStatus(status)) return;
+    // Point 20: list every shipment in the FAS Activity Status report (previously only
+    // "On Transit" or later shipments were included, which hid most of them).
     // One row per container with document-tracking data; fall back to a single row.
     const tracked = shipmentContainers.filter((c) => c?.actual);
     const source = tracked.length ? tracked : [{ actual: {} }];

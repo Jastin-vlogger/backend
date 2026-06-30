@@ -19,6 +19,7 @@ const upload = multer({
 // ── Read endpoints — any active role ────────────────────────────────────────
 
 router.get('/',                    authMiddleware, authorize({ tag: 'any-active' }), controller.getAllShipments);
+router.get('/all-shipments',       authMiddleware, authorize({ tag: 'any-active' }), controller.getAllShipmentsFlat);
 router.get('/search',              authMiddleware, authorize({ tag: 'any-active' }), controller.searchShipments);
 router.get('/dashboard',           authMiddleware, authorize({ tag: 'any-active' }), controller.getShipmentSummary);
 router.get('/reports/export-data', authMiddleware, authorize({ tag: 'any-active' }), controller.getShipmentReportExportData);
@@ -148,6 +149,14 @@ router.patch(
   controller.updateBLDetails
 );
 
+// Point 9: editable "No of Bags" save on the Packing List Confirmation tab.
+router.patch(
+  '/container/bl-details/:id/packaging-bags',
+  authMiddleware,
+  authorize({ tag: 'any-active' }),
+  controller.updatePackagingBags
+);
+
 router.post(
   '/container/bl-details/:id/replace-bl-document',
   authMiddleware,
@@ -241,6 +250,7 @@ router.patch(
       { name: 'commercialDocumentDocument', maxCount: 1 },
       { name: 'commercialDocument', maxCount: 1 },
       { name: 'arrivalDocument', maxCount: 1 },
+      { name: 'finalContractDocument', maxCount: 1 },
       { name: 'arrivalNoticeDocument', maxCount: 1 },
       { name: 'advanceRequestDocument', maxCount: 1 },
       { name: 'doReleasedDocument', maxCount: 1 },
