@@ -1341,9 +1341,13 @@ const buildDashboardRStatusMetrics = (shipments, containerMap) => {
   shipments.forEach((shipment) => {
     const shipmentContainers = containerMap.get(String(shipment._id)) || [];
     const splitCount = getShipmentSplitCount(shipment, shipmentContainers);
-    const dashboardContainers = splitCount > 0
-      ? shipmentContainers.slice(0, splitCount)
-      : shipmentContainers;
+    // Always count every container that actually exists in the DB — `splitCount` (the
+    // manually-confirmed "No of Shipments" field) is only used below to model containers
+    // that are PLANNED but not yet created (splitCount > actual containers). It must never
+    // truncate real container rows, since that stored count can go stale (e.g. a row gets
+    // added after the last time someone clicked "Confirm") and silently hide real, later
+    // containers — including their status — from every dashboard bucket.
+    const dashboardContainers = shipmentContainers;
     const missingSplitCount = Math.max(splitCount - dashboardContainers.length, 0);
     const isPendingEntryStage = isShipmentEntryPendingSchedule(shipment);
     const pendingEntryCount = isPendingEntryStage ? 1 : 0;
@@ -5033,10 +5037,32 @@ const fetchFlatShipmentList = async ({ page = 1, limit = 20, search = '', status
     commercialInvoiceShipmentIds,
   });
 
-  const shipments = await Shipment.find(query)
+  let shipments = await Shipment.find(query)
     .populate("supplierId", "name")
     .populate("itemId", "description")
     .sort({ orderDate: -1, createdAt: -1 });
+
+  // The "Shipment ID" shown per row (e.g. "RHST-0021/PO01-1242-3") is a computed label —
+  // base LPO shipmentNo + split index — not a stored field, so a direct search for the
+  // exact displayed ID won't match shipmentNo. If nothing matched and the search ends in
+  // a "-<N>" split suffix, retry against the base shipmentNo so the parent LPO is still found.
+  const trimmedSearch = String(search || '').trim();
+  const splitSuffixMatch = /^(.*)-(\d+)$/.exec(trimmedSearch);
+  if (!shipments.length && splitSuffixMatch) {
+    const baseSearch = splitSuffixMatch[1].trim();
+    const fallbackCommercialInvoiceShipmentIds = await getCommercialInvoiceShipmentIds(baseSearch);
+    const fallbackQuery = buildShipmentListQuery({
+      search: baseSearch,
+      status: '',
+      shipmentIds: restrictedShipmentIds,
+      commercialInvoiceShipmentIds: fallbackCommercialInvoiceShipmentIds,
+    });
+    shipments = await Shipment.find(fallbackQuery)
+      .populate("supplierId", "name")
+      .populate("itemId", "description")
+      .sort({ orderDate: -1, createdAt: -1 });
+  }
+
   const allIds = shipments.map((s) => s._id);
   const allContainers = await Container.find({ shipmentId: { $in: allIds } }).lean();
   const containerMap = groupContainersByShipment(allContainers);
@@ -5052,21 +5078,132 @@ const fetchFlatShipmentList = async ({ page = 1, limit = 20, search = '', status
     const supplier = s.supplierId?.name || s.supplierName || null;
     const description = s.itemId?.description || s.itemDescription || null;
 
-    const buildRow = (childIndex, container) => ({
-      shipmentId: base ? `${base}-${childIndex + 1}` : `${String(s._id)}-${childIndex + 1}`,
-      parentId: s._id,
-      childIndex,
-      shipmentNo: s.shipmentNo,
-      orderNumber: s.orderNumber,
-      orderDate: s.orderDate,
-      supplier,
-      description,
-      blNo: container?.actual?.BLNo || '',
-      commercialInvoiceNo: container?.actual?.commercialInvoiceNo || '',
-      buyingQty: container ? getDashboardChildQuantity(s, container, splitCount) : (s.plannedQtyMT || s.totalOrderedQtyMT || 0),
-      fcl: container ? getDashboardChildFcl(s, container, splitCount) : (s.fcl || 0),
-      status: container ? getDashboardStatusColumn(s, container) : getShipmentReportStatus(s, []),
-    });
+    const buildRow = (childIndex, container) => {
+      const actual = container?.actual || {};
+      const planned = container?.planned || {};
+      const clearingApproval = actual.clearingAdvanceApproval || {};
+      const clearingPayment = actual.clearingAdvancePaymentDetails || {};
+      const storageDecision = actual.storageAllocationDecision || {};
+      const storageApproval = actual.storageAllocationApproval || {};
+      const paymentAllocationApproval = actual.paymentAllocationApproval || {};
+      const costSheetBookings = Array.isArray(actual.costSheetBookings) ? actual.costSheetBookings : [];
+      const transportationBooked = Array.isArray(actual.transportationBooked) ? actual.transportationBooked : [];
+      const paymentAllocations = Array.isArray(actual.paymentAllocations) ? actual.paymentAllocations : [];
+      const storageSplits = Array.isArray(actual.storageSplits) ? actual.storageSplits : [];
+
+      // "Planned (Containers)" = containers already assigned to a warehouse per the
+      // storage allocation decision; "Not Planned" is whatever's left of noOfContainers.
+      const itemAllocations = Array.isArray(storageDecision.itemAllocations) ? storageDecision.itemAllocations : [];
+      const plannedContainers = itemAllocations.reduce(
+        (sum, item) => sum + (Array.isArray(item.allocations) ? item.allocations : [])
+          .reduce((inner, a) => inner + (Number(a?.containersAssigned) || 0), 0),
+        0
+      );
+      const totalContainersForRow = Number(actual.noOfContainers) || 0;
+      const notPlannedContainers = Math.max(totalContainersForRow - plannedContainers, 0);
+
+      // "Containers Received" = storage split rows that have actually been received at the warehouse.
+      const containersReceived = storageSplits.filter((row) => !!row?.receivedOnDate).length;
+      const containersRemaining = Math.max(totalContainersForRow - containersReceived, 0);
+
+      const paymentReceivedAmount = paymentAllocations.reduce((sum, row) => sum + (Number(row?.paidAmount) || 0), 0);
+      const paymentRequestAmount = paymentAllocations.reduce((sum, row) => sum + (Number(row?.requestAmount) || 0), 0);
+
+      return {
+        shipmentId: base ? `${base}-${childIndex + 1}` : `${String(s._id)}-${childIndex + 1}`,
+        parentId: s._id,
+        childIndex,
+        shipmentNo: s.shipmentNo,
+        orderNumber: s.orderNumber,
+        orderDate: s.orderDate,
+        supplier,
+        description,
+        blNo: actual.BLNo || '',
+        commercialInvoiceNo: actual.commercialInvoiceNo || '',
+        buyingQty: container ? getDashboardChildQuantity(s, container, splitCount) : (s.plannedQtyMT || s.totalOrderedQtyMT || 0),
+        fcl: container ? getDashboardChildFcl(s, container, splitCount) : (s.fcl || 0),
+        status: container ? getDashboardStatusColumn(s, container) : getShipmentReportStatus(s, []),
+
+        // ===== Full-detail export columns, matching the "Final Data.xlsx" reference format =====
+        // Purchase Department
+        itemCode: s.itemCode || '',
+        commodity: s.commodity || '',
+        brandName: s.brandName || '',
+        packing: s.packing || '',
+        variant: s.variant || '',
+        barcode: s.barcode || '',
+        countryOfOrigin: s.countryOfOrigin || '',
+        hsCode: s.hsCode || '',
+        bags: actual.bags ?? planned.bags ?? s.bags ?? 0,
+        pallet: actual.pallet ?? planned.pallet ?? s.pallet ?? 0,
+        portOfLoading: actual.portOfLoading || s.portOfLoading || '',
+        portOfDischarge: actual.portOfDischarge || s.portOfDischarge || '',
+        bankName: actual.bankName || s.bankName || '',
+        incoterms: s.incoterms || '',
+        etd: actual.updatedETD || planned.etd || null,
+        eta: actual.updatedETA || planned.eta || null,
+        shipOnBoardDate: actual.shipOnBoardDate || null,
+        shippingLine: actual.shippingLine || '',
+        noOfContainers: actual.noOfContainers ?? '',
+        freeDetentionDays: actual.freeDetentionDays ?? '',
+        maximumDetentionDays: actual.maximumDetentionDays ?? '',
+        shipmentArrived: actual.shipmentArrived || 'No',
+        courierTrackNo: actual.courierTrackNo || '',
+        provider: actual.courierServiceProvider || '',
+        receiver: actual.receiver || '',
+        expectedDocDate: actual.expectedDocDate || null,
+        arrivalDocumentReceived: actual.arrivalDocumentUrl ? 'Yes' : 'No',
+
+        // Logistics Department (Clearing Advance request)
+        clearingAdvanceRequestDate: clearingApproval.submittedAt || null,
+        clearingAdvanceAmount: costSheetBookings.reduce((sum, row) => sum + (Number(row?.requestAmount) || 0), 0),
+
+        // FAS Department (Clearing Advance approval)
+        clearingAdvanceApprovedDate: clearingApproval.fasApprovedAt || null,
+        chequeNo: clearingPayment.chequeNo || '',
+        chequeDate: clearingPayment.chequeDate || null,
+
+        // Warehouse Department (Warehouse Manager)
+        storageAllocationDate: storageApproval.submittedAt || null,
+        allocateSameWarehouse: storageDecision.allocateSameWarehouse === true ? 'Yes' : storageDecision.allocateSameWarehouse === false ? 'No' : '',
+        destinationWarehouses: Array.isArray(storageDecision.warehousesSelected) ? storageDecision.warehousesSelected.join(', ') : '',
+
+        // FAS Department (Bank / Murabaha submission)
+        daSubmittedToBank: actual.daSubmittedToBank ? 'Yes' : 'No',
+        submissionDate: actual.daSubmittedToBankDate || null,
+        skipMurabaha: actual.skipMurabaha ? 'Yes' : 'No',
+        murabahaReleasedDate: actual.documentsReleasedDate || null,
+        murabahaSubmittedToBank: actual.murabahaSubmittedToBank ? 'Yes' : 'No',
+        murabahaSubmissionDate: actual.daSubmittedToBankDate || null,
+        finalContractReceivedDate: actual.documentsReleasedDate || null,
+
+        // Logistics Department (Port & Clearance)
+        commercialDocumentReceivedDate: actual.commercialDocumentReceivedDate || null,
+        arrivalDate: actual.shipmentArrivedOn || null,
+        shippingLineFreeDetentionDays: actual.freeDetentionDays ?? '',
+        portFreeStorageDays: actual.freeStorageDays ?? '',
+        doDate: actual.doReleasedDate || null,
+        boeNumber: '',
+        boeDate: actual.boePassingDate || null,
+        customerInspectionRequired: actual.customerInspectionRequired ? 'Yes' : 'No',
+        municipalityRefNo: '',
+        municipalityInspectionDate: actual.municipalityDate || null,
+        municipalityStatus: actual.municipalityStatus || '',
+        municipalityReleasedDate: actual.municipalityReleasedDate || null,
+        transportationArrangement: transportationBooked.length ? 'Yes' : 'No',
+        transportCompany: transportationBooked.map((t) => t.transportCompanyName).filter(Boolean).join('; '),
+        plannedContainers,
+        notPlannedContainers,
+
+        // FAS / Warehouse (Storekeepers) — Payment
+        paymentAllocationRequestDate: paymentAllocationApproval.submittedAt || null,
+        paymentReceivedAmount,
+        paymentApprovedDate: paymentAllocationApproval.fasManagerApprovedAt || null,
+        differenceAmount: paymentRequestAmount - paymentReceivedAmount,
+        containersReceived,
+        containersRemaining,
+      };
+    };
 
     if (!effectiveContainers.length) {
       rows.push(buildRow(0, null));
