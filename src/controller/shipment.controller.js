@@ -2231,8 +2231,15 @@ exports.createPlannedContainersBulk = async (req, res) => {
       processedContainers.push(container);
     }
 
-    // 3️⃣ Recalculate shipment totals and save noOfShipments
-    shipment.plannedQtyMT = currentPlannedMT;
+    // 3️⃣ Recalculate shipment totals and save noOfShipments.
+    // plannedQtyMT must reflect every real container on the shipment, not just whichever
+    // subset was submitted in this save — callers now correctly omit rows that already
+    // have real actual/BL data (status !== "Planned"), so summing only `currentPlannedMT`
+    // would silently drop those containers' quantity from the shipment total.
+    const retainedQtyMT = existingAllContainers
+      .filter((container) => container.status !== "Planned")
+      .reduce((sum, container) => sum + (Number(container.planned?.qtyMT) || 0), 0);
+    shipment.plannedQtyMT = retainedQtyMT + currentPlannedMT;
     shipment.assumedContainerCount = processedContainers.length;
     if (noOfShipments != null && noOfShipments !== '') shipment.noOfShipments = Number(noOfShipments);
     shipment.currentStage = "Planned Split";
