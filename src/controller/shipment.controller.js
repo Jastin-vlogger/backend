@@ -2635,6 +2635,7 @@ exports.updateBLDetails = async (req, res) => {
       chequeDate,
       paymentVoucherNo,
       transactionId,
+      submitClearingAdvanceForApproval,
       actualBags,
       expiryDate,
       hsCode,
@@ -2781,31 +2782,49 @@ exports.updateBLDetails = async (req, res) => {
     }
 
     if (isClearingAdvanceSave) {
-      const normalizedPaymentDetails = {
-        chequeNo: String(chequeNo ?? parsedClearingAdvancePaymentDetails.chequeNo ?? '').trim(),
-        chequeDate: chequeDate ?? parsedClearingAdvancePaymentDetails.chequeDate ?? null,
-        paymentVoucherNo: String(paymentVoucherNo ?? parsedClearingAdvancePaymentDetails.paymentVoucherNo ?? '').trim(),
-        transactionId: String(transactionId ?? parsedClearingAdvancePaymentDetails.transactionId ?? '').trim(),
-      };
-      const missingPaymentFields = [];
-      if (!normalizedPaymentDetails.chequeNo) missingPaymentFields.push('Cheque No');
-      if (!normalizedPaymentDetails.chequeDate) missingPaymentFields.push('Cheque Date');
-      if (!normalizedPaymentDetails.paymentVoucherNo) missingPaymentFields.push('Payment Voucher No');
-      if (missingPaymentFields.length) {
-        return res.status(400).json({
-          message: `Please provide ${missingPaymentFields.join(', ')} before submitting clearing advance.`,
-        });
+      // Cheque/voucher details are only REQUIRED, and the approval status only advances to
+      // "pending FAS", when this save is an explicit submit-for-approval (now triggered from
+      // the Approve button, not every row edit). A plain edit of cost sheet rows should just
+      // save the rows and leave whatever payment details/approval state already exist alone.
+      const isSubmittingForApproval = submitClearingAdvanceForApproval === true || submitClearingAdvanceForApproval === 'true';
+      const hasPaymentDetailsInPayload =
+        clearingAdvancePaymentDetails !== undefined ||
+        chequeNo !== undefined || chequeDate !== undefined || paymentVoucherNo !== undefined || transactionId !== undefined;
+
+      if (isSubmittingForApproval || hasPaymentDetailsInPayload) {
+        const normalizedPaymentDetails = {
+          chequeNo: String(chequeNo ?? parsedClearingAdvancePaymentDetails.chequeNo ?? '').trim(),
+          chequeDate: chequeDate ?? parsedClearingAdvancePaymentDetails.chequeDate ?? null,
+          paymentVoucherNo: String(paymentVoucherNo ?? parsedClearingAdvancePaymentDetails.paymentVoucherNo ?? '').trim(),
+          transactionId: String(transactionId ?? parsedClearingAdvancePaymentDetails.transactionId ?? '').trim(),
+        };
+
+        if (isSubmittingForApproval) {
+          const missingPaymentFields = [];
+          if (!normalizedPaymentDetails.chequeNo) missingPaymentFields.push('Cheque No');
+          if (!normalizedPaymentDetails.chequeDate) missingPaymentFields.push('Cheque Date');
+          if (!normalizedPaymentDetails.paymentVoucherNo) missingPaymentFields.push('Payment Voucher No');
+          if (missingPaymentFields.length) {
+            return res.status(400).json({
+              message: `Please provide ${missingPaymentFields.join(', ')} before submitting clearing advance.`,
+            });
+          }
+        }
+
+        container.actual.clearingAdvancePaymentDetails = {
+          ...(container.actual.clearingAdvancePaymentDetails?.toObject
+            ? container.actual.clearingAdvancePaymentDetails.toObject()
+            : container.actual.clearingAdvancePaymentDetails || {}),
+          chequeNo: normalizedPaymentDetails.chequeNo,
+          chequeDate: toDateOrNull(normalizedPaymentDetails.chequeDate),
+          paymentVoucherNo: normalizedPaymentDetails.paymentVoucherNo,
+          transactionId: normalizedPaymentDetails.transactionId,
+        };
       }
-      container.actual.clearingAdvancePaymentDetails = {
-        ...(container.actual.clearingAdvancePaymentDetails?.toObject
-          ? container.actual.clearingAdvancePaymentDetails.toObject()
-          : container.actual.clearingAdvancePaymentDetails || {}),
-        chequeNo: normalizedPaymentDetails.chequeNo,
-        chequeDate: toDateOrNull(normalizedPaymentDetails.chequeDate),
-        paymentVoucherNo: normalizedPaymentDetails.paymentVoucherNo,
-        transactionId: normalizedPaymentDetails.transactionId,
-      };
-      container.actual.clearingAdvanceApproval = buildClearingAdvancePendingApproval(req.user);
+
+      if (isSubmittingForApproval) {
+        container.actual.clearingAdvanceApproval = buildClearingAdvancePendingApproval(req.user);
+      }
     }
 
     if (isStorageAllocationSave) {
@@ -2858,15 +2877,16 @@ exports.updateBLDetails = async (req, res) => {
     }
 
     if (isClearingAdvanceSave) {
+      const wasSubmittedForApproval = submitClearingAdvanceForApproval === true || submitClearingAdvanceForApproval === 'true';
       await writeAuditLog({
         userId: req.user._id,
         module: 'Logistics',
         entity: 'Container',
         entityId: container._id,
-        action: 'SubmitClearingAdvance',
+        action: wasSubmittedForApproval ? 'SubmitClearingAdvance' : 'UpdateClearingAdvanceCostSheet',
         before: beforeUpdate,
         after: cloneForAudit(container.toObject()),
-        remarks: 'Clearing advance submitted for FAS approval'
+        remarks: wasSubmittedForApproval ? 'Clearing advance submitted for FAS approval' : 'Clearing advance cost sheet updated'
       });
     } else if (isStorageAllocationSave) {
       await writeAuditLog({
