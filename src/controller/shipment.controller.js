@@ -2358,6 +2358,52 @@ exports.createPlannedContainersBulk = async (req, res) => {
   }
 };
 
+// Deletes a single scheduled ("Planned") container. Only allowed while the row is still
+// "ETD yet to due" (status === "Planned", no real BL/actual data attached) — once a row
+// has been actualized it must never be deletable from here. Recomputes noOfShipments from
+// the real remaining container count so it can never drift, unlike a manual DB delete.
+exports.deletePlannedContainer = async (req, res) => {
+  try {
+    const container = await Container.findById(req.params.id);
+    if (!container) return res.status(404).json({ message: "Container not found" });
+
+    if (container.status !== "Planned" || hasMeaningfulActualData(container)) {
+      return res.status(400).json({
+        message: "This shipment has already progressed past scheduling and cannot be deleted here."
+      });
+    }
+
+    const shipmentId = container.shipmentId;
+    await Container.deleteOne({ _id: container._id });
+
+    const shipment = await Shipment.findById(shipmentId);
+    if (shipment) {
+      const remainingCount = await Container.countDocuments({ shipmentId });
+      shipment.noOfShipments = remainingCount;
+      shipment.assumedContainerCount = remainingCount;
+      await shipment.save();
+    }
+
+    await writeAuditLog({
+      userId: req.user._id,
+      module: 'Purchase',
+      entity: 'Container',
+      entityId: container._id,
+      action: 'DeletePlannedContainer',
+      before: cloneForAudit(container.toObject()),
+      after: {},
+      remarks: 'Scheduled (Planned) container deleted before actualization',
+    });
+
+    res.json({
+      message: 'Scheduled shipment deleted successfully.',
+      noOfShipments: shipment?.noOfShipments ?? null,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message, error: err.message });
+  }
+};
 
 
 
@@ -4252,6 +4298,60 @@ exports.approveClearingAdvance = async (req, res) => {
     }
 
     return res.status(400).json({ message: 'Clearing advance must be saved before it can be approved.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+// Edits the Cheque No / Cheque Date / Payment Voucher No / Transaction ID shown in the
+// "Clearing Advance Information" modal, after the fact — restricted to FAS-tier roles.
+exports.updateClearingAdvancePaymentDetails = async (req, res) => {
+  try {
+    const container = await Container.findById(req.params.id);
+    if (!container) return res.status(404).json({ message: 'Container not found' });
+    if (!container.actual) return res.status(400).json({ message: 'Actual not created yet' });
+
+    const allowed = await hasRoleOrPermission(
+      req.user,
+      'shipment.tab.bl_details.clearing_advance.edit_payment_details',
+      ['FAS', 'FasManager', 'Admin', 'Manager', 'Management']
+    );
+    if (!allowed) {
+      return res.status(403).json({ message: 'You do not have permission to edit clearing advance payment details.' });
+    }
+
+    const beforeUpdate = cloneForAudit(container.toObject());
+    const { chequeNo, chequeDate, paymentVoucherNo, transactionId } = req.body;
+    const existing = container.actual.clearingAdvancePaymentDetails?.toObject
+      ? container.actual.clearingAdvancePaymentDetails.toObject()
+      : container.actual.clearingAdvancePaymentDetails || {};
+
+    container.actual.clearingAdvancePaymentDetails = {
+      ...existing,
+      chequeNo: chequeNo !== undefined ? String(chequeNo).trim() : (existing.chequeNo || ''),
+      chequeDate: chequeDate !== undefined ? toDateOrNull(chequeDate) : (existing.chequeDate || null),
+      paymentVoucherNo: paymentVoucherNo !== undefined ? String(paymentVoucherNo).trim() : (existing.paymentVoucherNo || ''),
+      transactionId: transactionId !== undefined ? String(transactionId).trim() : (existing.transactionId || ''),
+    };
+
+    await container.save();
+
+    await writeAuditLog({
+      userId: req.user._id,
+      module: 'FAS',
+      entity: 'Container',
+      entityId: container._id,
+      action: 'UpdateClearingAdvancePaymentDetails',
+      before: beforeUpdate,
+      after: cloneForAudit(container.toObject()),
+      remarks: 'Clearing advance payment details (cheque/voucher/transaction) updated',
+    });
+
+    res.json({
+      message: 'Payment details updated successfully.',
+      clearingAdvancePaymentDetails: container.actual.clearingAdvancePaymentDetails,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error', error: err.message });

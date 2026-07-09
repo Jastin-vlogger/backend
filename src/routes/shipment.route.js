@@ -116,6 +116,7 @@ router.post(
 
 // Planned containers — Purchase team only
 router.post('/container/planned', authMiddleware, authorize({ tag: 'any-active' }), controller.createPlannedContainersBulk);
+router.delete('/container/planned/:id', authMiddleware, authorize({ tag: 'any-active' }), controller.deletePlannedContainer);
 
 // Actual container (BL entry) — Purchase team only
 router.patch(
@@ -299,6 +300,7 @@ router.delete('/container/:id/transportation-transaction/:txnId', authMiddleware
 
 // Clearance payment — permission-driven access
 router.patch('/container/clearence-payment/:id', authMiddleware, authorize({ tag: 'any-active' }), controller.addContainerPayment);
+router.patch('/container/:id/clearing-advance-payment-details', authMiddleware, authorize({ tag: 'any-active' }), controller.updateClearingAdvancePaymentDetails);
 
 // Clearance final — permission-driven access
 router.patch('/container/clearance/:id', authMiddleware, authorize({ tag: 'any-active' }), controller.clearContainer);
