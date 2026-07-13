@@ -2782,6 +2782,19 @@ exports.updateBLDetails = async (req, res) => {
     }
 
     if (isClearingAdvanceSave) {
+      // A plain Save by whoever entered the cost sheet (Logistic) is the real "submitted for
+      // FAS review" event — FAS needs to know who to hold accountable, and that person is the
+      // one who saved the data, not whoever eventually clicks Approve. Record it here, once,
+      // the first time this container has real cost sheet data — never overwrite an existing
+      // submission (that would credit a later editor/approver for someone else's submission).
+      if (
+        (container.actual.clearingAdvanceApproval?.status || CLEARING_ADVANCE_APPROVAL_STATUSES.draft) ===
+          CLEARING_ADVANCE_APPROVAL_STATUSES.draft &&
+        hasSavedClearingAdvanceData(container)
+      ) {
+        container.actual.clearingAdvanceApproval = buildClearingAdvancePendingApproval(req.user);
+      }
+
       // Cheque/voucher details are only REQUIRED, and the approval status only advances to
       // "pending FAS", when this save is an explicit submit-for-approval (now triggered from
       // the Approve button, not every row edit). A plain edit of cost sheet rows should just
@@ -2823,7 +2836,18 @@ exports.updateBLDetails = async (req, res) => {
       }
 
       if (isSubmittingForApproval) {
-        container.actual.clearingAdvanceApproval = buildClearingAdvancePendingApproval(req.user);
+        // Never overwrite a submission that already happened (e.g. the combined "submit then
+        // approve" flow, triggered from the Approve button when cheque/voucher details are
+        // still missing, hits this same code path as the FAS approver — it must not steal
+        // credit for a submission the Logistic user already made when they saved the rows).
+        const existingApproval = container.actual.clearingAdvanceApproval?.toObject
+          ? container.actual.clearingAdvanceApproval.toObject()
+          : container.actual.clearingAdvanceApproval || {};
+        const alreadySubmitted =
+          existingApproval.status && existingApproval.status !== CLEARING_ADVANCE_APPROVAL_STATUSES.draft;
+        container.actual.clearingAdvanceApproval = alreadySubmitted
+          ? { ...existingApproval, status: CLEARING_ADVANCE_APPROVAL_STATUSES.pendingFas }
+          : buildClearingAdvancePendingApproval(req.user);
       }
     }
 
@@ -2905,6 +2929,8 @@ exports.updateBLDetails = async (req, res) => {
       { path: 'actual.storageAllocationApproval.submittedBy', select: 'name email role' },
       { path: 'actual.storageAllocationApproval.lastUpdatedBy', select: 'name email role' },
       { path: 'actual.storageAllocationApproval.warehouseManagerApprovedBy', select: 'name email role' },
+      { path: 'actual.clearingAdvanceApproval.submittedBy', select: 'name email role' },
+      { path: 'actual.clearingAdvanceApproval.fasApprovedBy', select: 'name email role' },
     ]);
 
     res.status(200).json({
@@ -4872,7 +4898,13 @@ exports.getBlRowDefinitions = async (_req, res) => {
   }
 };
 
-const buildShipmentListQuery = ({ search = '', status = '', shipmentIds = null, commercialInvoiceShipmentIds = null }) => {
+const buildShipmentListQuery = ({
+  search = '',
+  status = '',
+  shipmentIds = null,
+  commercialInvoiceShipmentIds = null,
+  blNoShipmentIds = null,
+}) => {
   const query = {};
   const normalizedSearch = String(search || '').trim();
   const normalizedStatus = String(status || '').trim();
@@ -4895,6 +4927,23 @@ const buildShipmentListQuery = ({ search = '', status = '', shipmentIds = null, 
     if (Array.isArray(commercialInvoiceShipmentIds) && commercialInvoiceShipmentIds.length) {
       query.$or.push({ _id: { $in: commercialInvoiceShipmentIds } });
     }
+
+    if (Array.isArray(blNoShipmentIds) && blNoShipmentIds.length) {
+      query.$or.push({ _id: { $in: blNoShipmentIds } });
+    }
+
+    // Shipment Tracker search — the ID shown per row (e.g. "RHST-0021/PO01-1242-1") is a
+    // computed label (base LPO shipmentNo + split index), not a stored field, so searching
+    // the exact displayed tracker number won't match shipmentNo directly. Strip a trailing
+    // "-<N>" split suffix and match the base too, as a first-class condition rather than a
+    // separate zero-results-only retry, so it works alongside every other search term here.
+    const splitSuffixMatch = /^(.*)-(\d+)$/.exec(normalizedSearch);
+    if (splitSuffixMatch) {
+      const baseSearch = splitSuffixMatch[1].trim();
+      if (baseSearch) {
+        query.$or.push({ shipmentNo: { $regex: baseSearch, $options: 'i' } });
+      }
+    }
   }
 
   if (normalizedStatus) {
@@ -4910,6 +4959,28 @@ const getCommercialInvoiceShipmentIds = async (search = '') => {
 
   const containers = await Container.find({
     'actual.commercialInvoiceNo': { $regex: normalizedSearch, $options: 'i' },
+  })
+    .select('shipmentId')
+    .lean();
+
+  return [
+    ...new Set(
+      containers
+        .map((container) => String(container.shipmentId || ''))
+        .filter(Boolean)
+    ),
+  ];
+};
+
+// B/L-wise search — the B/L number lives on the container's actual data, not the Shipment
+// document itself, so it needs the same "find matching containers, resolve to shipmentIds"
+// pattern already used for the commercial invoice number search above.
+const getBlNoShipmentIds = async (search = '') => {
+  const normalizedSearch = String(search || '').trim();
+  if (!normalizedSearch) return [];
+
+  const containers = await Container.find({
+    'actual.BLNo': { $regex: normalizedSearch, $options: 'i' },
   })
     .select('shipmentId')
     .lean();
@@ -5072,11 +5143,13 @@ const fetchShipmentList = async ({ page = 1, limit = 20, search = '', status = '
     restrictedShipmentIds = await getStorekeeperShipmentIds(labels);
   }
   const commercialInvoiceShipmentIds = await getCommercialInvoiceShipmentIds(search);
+  const blNoShipmentIds = await getBlNoShipmentIds(search);
   const query = buildShipmentListQuery({
     search,
     status,
     shipmentIds: restrictedShipmentIds,
     commercialInvoiceShipmentIds,
+    blNoShipmentIds,
   });
 
   // Point 3: multi-select status filter. The displayed status is computed from container
@@ -5157,38 +5230,22 @@ const fetchFlatShipmentList = async ({ page = 1, limit = 20, search = '', status
   }
 
   const commercialInvoiceShipmentIds = await getCommercialInvoiceShipmentIds(search);
+  const blNoShipmentIds = await getBlNoShipmentIds(search);
+  // Shipment Tracker search (e.g. "RHST-0021/PO01-1242-3") and B/L search are both handled
+  // as first-class conditions inside buildShipmentListQuery — see its split-suffix handling
+  // and blNoShipmentIds param — so a single query covers every search term here.
   const query = buildShipmentListQuery({
     search,
     status: '',
     shipmentIds: restrictedShipmentIds,
     commercialInvoiceShipmentIds,
+    blNoShipmentIds,
   });
 
-  let shipments = await Shipment.find(query)
+  const shipments = await Shipment.find(query)
     .populate("supplierId", "name")
     .populate("itemId", "description")
     .sort({ orderDate: -1, createdAt: -1 });
-
-  // The "Shipment ID" shown per row (e.g. "RHST-0021/PO01-1242-3") is a computed label —
-  // base LPO shipmentNo + split index — not a stored field, so a direct search for the
-  // exact displayed ID won't match shipmentNo. If nothing matched and the search ends in
-  // a "-<N>" split suffix, retry against the base shipmentNo so the parent LPO is still found.
-  const trimmedSearch = String(search || '').trim();
-  const splitSuffixMatch = /^(.*)-(\d+)$/.exec(trimmedSearch);
-  if (!shipments.length && splitSuffixMatch) {
-    const baseSearch = splitSuffixMatch[1].trim();
-    const fallbackCommercialInvoiceShipmentIds = await getCommercialInvoiceShipmentIds(baseSearch);
-    const fallbackQuery = buildShipmentListQuery({
-      search: baseSearch,
-      status: '',
-      shipmentIds: restrictedShipmentIds,
-      commercialInvoiceShipmentIds: fallbackCommercialInvoiceShipmentIds,
-    });
-    shipments = await Shipment.find(fallbackQuery)
-      .populate("supplierId", "name")
-      .populate("itemId", "description")
-      .sort({ orderDate: -1, createdAt: -1 });
-  }
 
   const allIds = shipments.map((s) => s._id);
   const allContainers = await Container.find({ shipmentId: { $in: allIds } }).lean();
