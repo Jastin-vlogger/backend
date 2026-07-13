@@ -6584,6 +6584,9 @@ exports.getShipmentById = async (req, res) => {
             quantityByMt: a.quantityByMt,
             shippingLine: a.shippingLine,
             freeDetentionDays: a.freeDetentionDays,
+            freeStorageDays: a.freeStorageDays,
+            commercialDocumentReceivedDate: a.commercialDocumentReceivedDate,
+            clearanceRemarks: a.clearanceRemarks,
             maximumDetentionDays: a.maximumDetentionDays,
             freightPrepared: a.freightPrepared,
             billExtractionData: a.billExtractionData || null,
@@ -6651,6 +6654,8 @@ exports.getShipmentById = async (req, res) => {
             bankAdvanceSubmittedOn: a.bankAdvanceSubmittedOn,
             docToBeReleasedOn: a.docToBeReleasedOn,
             arrivalOn: a.arrivalOn,
+            arrivalDocumentUrl: a.arrivalDocumentUrl,
+            arrivalDocumentName: a.arrivalDocumentName,
             shipmentFreeRetentionDate: a.shipmentFreeRetentionDate,
             portRetentionWithPenaltyDate: a.portRetentionWithPenaltyDate,
             maximumRetentionDate: a.maximumRetentionDate,
@@ -6665,10 +6670,12 @@ exports.getShipmentById = async (req, res) => {
             doReleasedDocumentUrl: a.doReleasedDocumentUrl,
             doReleasedDocumentName: a.doReleasedDocumentName,
             doReleasedRemarks: a.doReleasedRemarks,
+            doRemarks: a.doRemarks,
             boePassingDate: a.boePassingDate,
             boePassingDocumentUrl: a.boePassingDocumentUrl,
             boePassingDocumentName: a.boePassingDocumentName,
             boePassingRemarks: a.boePassingRemarks,
+            customerInspectionRequired: a.customerInspectionRequired || false,
             dmBarcode: a.dmBarcode,
             dpApprovalDate: a.dpApprovalDate,
             dpApprovalDocumentUrl: a.dpApprovalDocumentUrl,
@@ -6681,6 +6688,9 @@ exports.getShipmentById = async (req, res) => {
             municipalityRemarks: a.municipalityRemarks,
             municipalityStatus: a.municipalityStatus || 'open',
             municipalityStatusComment: a.municipalityStatusComment || '',
+            municipalityReleasedDate: a.municipalityReleasedDate,
+            municipalityResponseRemarks: a.municipalityResponseRemarks,
+            municipalityComments: a.municipalityComments,
             customsClearanceRemarks: a.customsClearanceRemarks,
             customsOriginalDocuments: a.customsOriginalDocuments
               ? {
@@ -6770,6 +6780,7 @@ exports.getShipmentById = async (req, res) => {
         signedMurabaha,
         signedReleased,
         signedArrivalNotice,
+        signedArrivalDocument,
         signedAdvance,
         signedDoReleased,
         signedBoePassing,
@@ -6796,6 +6807,7 @@ exports.getShipmentById = async (req, res) => {
         toSignedDocument(row.murabahaContractSubmittedDocumentUrl, row.murabahaContractSubmittedDocumentName),
         toSignedDocument(row.documentsReleasedDocumentUrl, row.documentsReleasedDocumentName),
         toSignedDocument(row.arrivalNoticeDocumentUrl, row.arrivalNoticeDocumentName),
+        toSignedDocument(row.arrivalDocumentUrl, row.arrivalDocumentName),
         toSignedDocument(row.advanceRequestDocumentUrl, row.advanceRequestDocumentName),
         toSignedDocument(row.doReleasedDocumentUrl, row.doReleasedDocumentName),
         toSignedDocument(row.boePassingDocumentUrl, row.boePassingDocumentName),
@@ -6831,6 +6843,8 @@ exports.getShipmentById = async (req, res) => {
       row.documentsReleasedDocumentName = signedReleased.name;
       row.arrivalNoticeDocumentUrl = signedArrivalNotice.url;
       row.arrivalNoticeDocumentName = signedArrivalNotice.name;
+      row.arrivalDocumentUrl = signedArrivalDocument.url;
+      row.arrivalDocumentName = signedArrivalDocument.name;
       row.advanceRequestDocumentUrl = signedAdvance.url;
       row.advanceRequestDocumentName = signedAdvance.name;
       row.doReleasedDocumentUrl = signedDoReleased.url;
