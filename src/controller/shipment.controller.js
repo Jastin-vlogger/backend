@@ -1917,7 +1917,7 @@ exports.createShipment = async (req, res) => {
     const uniqueJoin = (values, fallback = '') => {
       const cleaned = [...new Set(values.map((value) => String(value || '').trim()).filter(Boolean))];
       if (!cleaned.length) return fallback;
-      return cleaned.length === 1 ? cleaned[0] : `Multiple (${cleaned.length})`;
+      return cleaned.join(', ');
     };
     const primaryItem = derivedLineItems[0] || null;
 
@@ -2089,7 +2089,7 @@ exports.createShipment = async (req, res) => {
       itemId: itemId || undefined,
       itemCode: uniqueJoin(derivedLineItems.map((item) => item.itemCode), itemCode || ''),
       itemDescription: derivedLineItems.length > 1
-        ? `Multiple Items (${derivedLineItems.length})`
+        ? uniqueJoin(derivedLineItems.map((item) => item.itemDescription), itemDescription || '')
         : (primaryItem?.itemDescription || itemDescription || ''),
       commodity: uniqueJoin(derivedLineItems.map((item) => item.commodity), commodity || ''),
       countryOfOrigin: uniqueJoin(derivedLineItems.map((item) => item.countryOfOrigin), countryOfOrigin || ''),
@@ -4953,6 +4953,16 @@ const buildShipmentListQuery = ({
   return query;
 };
 
+// Comma-joins the distinct values of one field across a shipment's line items — used to
+// replace the old "Multiple (N)" / "Multiple Items (N)" placeholders with the actual values,
+// derived at read time so it self-heals existing shipments too (no migration needed), since
+// the real per-item data is already sitting in shipment.lineItems.
+const joinDistinctLineItemValues = (lineItems, field) => {
+  if (!Array.isArray(lineItems) || !lineItems.length) return null;
+  const cleaned = [...new Set(lineItems.map((item) => String(item?.[field] || '').trim()).filter(Boolean))];
+  return cleaned.length ? cleaned.join(', ') : null;
+};
+
 const getCommercialInvoiceShipmentIds = async (search = '') => {
   const normalizedSearch = String(search || '').trim();
   if (!normalizedSearch) return [];
@@ -5260,7 +5270,11 @@ const fetchFlatShipmentList = async ({ page = 1, limit = 20, search = '', status
     const effectiveContainers = splitCount > 0 ? shipmentContainers.slice(0, splitCount) : shipmentContainers;
     const base = String(s.shipmentNo || '').replace(/\([^)]*\)/g, '').trim();
     const supplier = s.supplierId?.name || s.supplierName || null;
-    const description = s.itemId?.description || s.itemDescription || null;
+    const lineItems = Array.isArray(s.lineItems) ? s.lineItems : [];
+    const description = s.itemId?.description
+      || joinDistinctLineItemValues(lineItems, 'itemDescription')
+      || s.itemDescription
+      || null;
 
     const buildRow = (childIndex, container) => {
       const actual = container?.actual || {};
@@ -5310,14 +5324,14 @@ const fetchFlatShipmentList = async ({ page = 1, limit = 20, search = '', status
 
         // ===== Full-detail export columns, matching the "Final Data.xlsx" reference format =====
         // Purchase Department
-        itemCode: s.itemCode || '',
-        commodity: s.commodity || '',
-        brandName: s.brandName || '',
-        packing: s.packing || '',
-        variant: s.variant || '',
-        barcode: s.barcode || '',
-        countryOfOrigin: s.countryOfOrigin || '',
-        hsCode: s.hsCode || '',
+        itemCode: joinDistinctLineItemValues(lineItems, 'itemCode') || s.itemCode || '',
+        commodity: joinDistinctLineItemValues(lineItems, 'commodity') || s.commodity || '',
+        brandName: joinDistinctLineItemValues(lineItems, 'brandName') || s.brandName || '',
+        packing: joinDistinctLineItemValues(lineItems, 'packagingType') || s.packing || '',
+        variant: joinDistinctLineItemValues(lineItems, 'variant') || s.variant || '',
+        barcode: joinDistinctLineItemValues(lineItems, 'barcode') || s.barcode || '',
+        countryOfOrigin: joinDistinctLineItemValues(lineItems, 'countryOfOrigin') || s.countryOfOrigin || '',
+        hsCode: joinDistinctLineItemValues(lineItems, 'hsCode') || s.hsCode || '',
         bags: actual.bags ?? planned.bags ?? s.bags ?? 0,
         pallet: actual.pallet ?? planned.pallet ?? s.pallet ?? 0,
         portOfLoading: actual.portOfLoading || s.portOfLoading || '',
