@@ -15,7 +15,8 @@ const DEFAULT_ROLES = [
 
 const MENU_PERMISSION_TEMPLATES = [
   { key: 'menu.dashboard.view', resource: 'menu', screen: 'dashboard', type: 'screen', label: 'View Dashboard Menu', sortOrder: 10 },
-  { key: 'menu.shipments.view', resource: 'menu', screen: 'shipments', type: 'screen', label: 'View Shipments Menu', sortOrder: 20 },
+  { key: 'menu.shipments.view', resource: 'menu', screen: 'shipments', type: 'screen', label: 'View Order Menu', sortOrder: 20 },
+  { key: 'menu.all_shipments.view', resource: 'menu', screen: 'all_shipments', type: 'screen', label: 'View Shipments Menu', sortOrder: 21 },
   { key: 'menu.suppliers.view', resource: 'menu', screen: 'suppliers', type: 'screen', label: 'View Suppliers Menu', sortOrder: 30 },
   { key: 'menu.reports.view', resource: 'menu', screen: 'reports', type: 'screen', label: 'View Reports Menu', sortOrder: 40 },
   { key: 'menu.access_control.view', resource: 'menu', screen: 'access_control', type: 'screen', label: 'View Access Control Menu', sortOrder: 50 },
@@ -224,6 +225,7 @@ const DEFAULT_ROLE_PERMISSION_MAP = {
     'menu.dashboard.view',
     ...DASHBOARD_PERMISSION_KEYS,
     'menu.shipments.view',
+    'menu.all_shipments.view',
     'menu.suppliers.view',
     'menu.reports.view',
     ...REPORTS_PERMISSION_KEYS,
@@ -279,6 +281,7 @@ const DEFAULT_ROLE_PERMISSION_MAP = {
     ...DASHBOARD_PERMISSION_KEYS,
     'dashboard.section.logistics_chart.view',
     'menu.shipments.view',
+    'menu.all_shipments.view',
     'menu.reports.view',
     ...REPORTS_PERMISSION_KEYS,
     'menu.settings.view',
@@ -312,6 +315,7 @@ const DEFAULT_ROLE_PERMISSION_MAP = {
     ...DASHBOARD_PERMISSION_KEYS,
     'dashboard.section.fas_chart.view',
     'menu.shipments.view',
+    'menu.all_shipments.view',
     'menu.reports.view',
     ...REPORTS_PERMISSION_KEYS,
     'menu.settings.view',
@@ -357,6 +361,7 @@ const DEFAULT_ROLE_PERMISSION_MAP = {
     ...DASHBOARD_PERMISSION_KEYS,
     'dashboard.section.fas_chart.view',
     'menu.shipments.view',
+    'menu.all_shipments.view',
     'menu.reports.view',
     ...REPORTS_PERMISSION_KEYS,
     'menu.settings.view',
@@ -380,6 +385,7 @@ const DEFAULT_ROLE_PERMISSION_MAP = {
     'dashboard.section.warehouse_allocation_table.view',
     'dashboard.section.warehouse_receiving_status.view',
     'menu.shipments.view',
+    'menu.all_shipments.view',
     'menu.reports.view',
     ...REPORTS_PERMISSION_KEYS,
     'menu.settings.view',
@@ -400,6 +406,7 @@ const DEFAULT_ROLE_PERMISSION_MAP = {
     'dashboard.section.storekeeper_receiving_timeline.view',
     'dashboard.section.storekeeper_summary.view',
     'menu.shipments.view',
+    'menu.all_shipments.view',
     'menu.settings.view',
     'settings.tab.warehouses.view',
     'shipment.screen.shipment_tracker.view',
@@ -458,11 +465,14 @@ async function seedShipmentPermissionsAndDefaults() {
       : configured;
 
     for (const permissionKey of permissionKeys) {
+      // `allowed` must only be set on first insert (the default grant). Previously this used
+      // `$set: { allowed: true }`, which re-ran on every server restart and silently reverted
+      // any permission an admin had manually unchecked in Access Control back to allowed —
+      // making saved changes look like they "didn't stick" after the next restart/deploy.
       await RolePermission.updateOne(
         { roleKey, permissionKey },
         {
-          $setOnInsert: { roleKey, permissionKey },
-          $set: { allowed: true },
+          $setOnInsert: { roleKey, permissionKey, allowed: true },
         },
         { upsert: true }
       );
