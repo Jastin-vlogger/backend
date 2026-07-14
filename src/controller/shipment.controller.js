@@ -901,7 +901,7 @@ const notifyPaymentCostingRolesByEmail = async ({
 };
 
 const REPORT_STATUS_ETD_UNCONFIRMED = 'ETD yet to be confirmed';
-const REPORT_STATUS_ETD_DUE = 'ETD yet to Due';
+const REPORT_STATUS_ETD_DUE = 'ETA yet to Due';
 
 const SHIPMENT_REPORT_COLUMNS = [
   { header: 'S/N', key: 'sn', width: 8 },
@@ -1306,7 +1306,7 @@ const buildDashboardRStatusMetrics = (shipments, containerMap) => {
   const labelOrder = [
     'At The Port',
     'On Transit',
-    'ETD Yet To Due',
+    'ETA Yet To Due',
     'ETD Yet To Be Confirmed',
     'Total LPO',
     'Total Shipments',
@@ -1321,7 +1321,7 @@ const buildDashboardRStatusMetrics = (shipments, containerMap) => {
   const permissionKeys = {
     'At The Port': 'dashboard.snapshot.at_port.view',
     'On Transit': 'dashboard.snapshot.on_transit.view',
-    'ETD Yet To Due': 'dashboard.snapshot.eta_due.view',
+    'ETA Yet To Due': 'dashboard.snapshot.eta_due.view',
     'ETD Yet To Be Confirmed': 'dashboard.snapshot.etd_unconfirmed.view',
     'Total LPO': 'dashboard.snapshot.total_lpo.view',
     'Total Shipments': 'dashboard.snapshot.total_shipments.view',
@@ -1397,7 +1397,7 @@ const buildDashboardRStatusMetrics = (shipments, containerMap) => {
       if (status === 'Delivered WH') add('Delivered WH', 1, mt, fcl);
       else if (status === 'On Transit') add('On Transit', 1, mt, fcl);
       else if (status === 'At the Port') add('At The Port', 1, mt, fcl);
-      else if (status === REPORT_STATUS_ETD_DUE || status === 'ETA yet to due') add('ETD Yet To Due', 1, mt, fcl);
+      else if (status === REPORT_STATUS_ETD_DUE || status === 'ETD yet to Due' || status === 'ETA yet to due') add('ETA Yet To Due', 1, mt, fcl);
       else add('ETD Yet To Be Confirmed', 1, mt, fcl);
     });
   });
@@ -2359,7 +2359,7 @@ exports.createPlannedContainersBulk = async (req, res) => {
 };
 
 // Deletes a single scheduled ("Planned") container. Only allowed while the row is still
-// "ETD yet to due" (status === "Planned", no real BL/actual data attached) — once a row
+// "ETA yet to due" (status === "Planned", no real BL/actual data attached) — once a row
 // has been actualized it must never be deletable from here. Recomputes noOfShipments from
 // the real remaining container count so it can never drift, unlike a manual DB delete.
 exports.deletePlannedContainer = async (req, res) => {
