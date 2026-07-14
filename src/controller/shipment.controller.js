@@ -5266,8 +5266,12 @@ const fetchFlatShipmentList = async ({ page = 1, limit = 20, search = '', status
 
   shipments.forEach((s) => {
     const shipmentContainers = containerMap.get(String(s._id)) || [];
+    // Always show every container that actually exists in the DB — `noOfShipments` (via
+    // getShipmentSplitCount) is a manually-set count that can go stale (e.g. a container
+    // gets added after the last time someone clicked "Confirm"), and must never truncate
+    // real rows out of this list. Same reasoning as the Dashboard's `dashboardContainers`.
     const splitCount = getShipmentSplitCount(s, shipmentContainers);
-    const effectiveContainers = splitCount > 0 ? shipmentContainers.slice(0, splitCount) : shipmentContainers;
+    const effectiveContainers = shipmentContainers;
     const base = String(s.shipmentNo || '').replace(/\([^)]*\)/g, '').trim();
     const supplier = s.supplierId?.name || s.supplierName || null;
     const lineItems = Array.isArray(s.lineItems) ? s.lineItems : [];
