@@ -245,12 +245,12 @@ const buildStorageAllocationPendingApproval = (user, existing) => ({
   warehouseManagerApprovedBy: null,
 });
 
-const buildStorageArrivalPendingApproval = (user) => ({
+const buildStorageArrivalPendingApproval = (user, existing) => ({
   status: STORAGE_ARRIVAL_APPROVAL_STATUSES.pendingWarehouseManager,
-  submittedAt: new Date(),
-  submittedBy: user?._id || null,
-  warehouseManagerApprovedAt: null,
-  warehouseManagerApprovedBy: null,
+  submittedAt: existing?.submittedAt || new Date(),
+  submittedBy: existing?.submittedBy || user?._id || null,
+  warehouseManagerApprovedAt: existing?.warehouseManagerApprovedAt || null,
+  warehouseManagerApprovedBy: existing?.warehouseManagerApprovedBy || null,
 });
 
 const hasSavedClearingAdvanceData = (container) => {
@@ -345,17 +345,18 @@ const hasSavedStorageAllocationData = (container) => {
   return hasLegacyRows || hasSplitRows;
 };
 
+// A row counts as "recorded" once its arrival has actually been logged (received date/time or GRN).
+const isStorageArrivalRowRecorded = (row) =>
+  !!row?.receivedOnDate ||
+  String(row?.receivedOnTime || '').trim().length > 0 ||
+  String(row?.grn || '').trim().length > 0;
+
+// "Delivered WH" / warehouse-manager-approvable only once EVERY container in the split has been
+// recorded — a single recorded row must never flip the whole shipment to Delivered WH while the
+// rest are still Pending.
 const hasSavedStorageArrivalData = (container) => {
   const rows = container?.actual?.storageSplits || [];
-  return Array.isArray(rows) && rows.some((row) =>
-    !!row?.receivedOnDate ||
-    String(row?.receivedOnTime || '').trim().length > 0 ||
-    String(row?.grn || '').trim().length > 0 ||
-    String(row?.batch || '').trim().length > 0 ||
-    !!row?.productionDate ||
-    !!row?.expiryDate ||
-    String(row?.documentUrl || '').trim().length > 0
-  );
+  return Array.isArray(rows) && rows.length > 0 && rows.every(isStorageArrivalRowRecorded);
 };
 
 const hasAssignedWarehouse = (container) => {
@@ -3904,7 +3905,15 @@ exports.updateStorageDetails = async (req, res) => {
       });
     }
 
-    container.actual.storageArrivalApproval = buildStorageArrivalPendingApproval(req.user);
+    // Only promote to "Pending Warehouse Manager Approval" once EVERY container in the split
+    // has actually been recorded — a single row save must never lock out the remaining rows
+    // (the frontend hides Edit and only allows View while status !== draft).
+    if (
+      (container.actual.storageArrivalApproval?.status || STORAGE_ARRIVAL_APPROVAL_STATUSES.draft) === STORAGE_ARRIVAL_APPROVAL_STATUSES.draft &&
+      hasSavedStorageArrivalData(container)
+    ) {
+      container.actual.storageArrivalApproval = buildStorageArrivalPendingApproval(req.user, container.actual.storageArrivalApproval);
+    }
 
     await container.save();
 
@@ -3922,6 +3931,11 @@ exports.updateStorageDetails = async (req, res) => {
         approvalStage: 'Pending Warehouse Manager Approval',
       });
     }
+
+    await container.populate([
+      { path: 'actual.storageArrivalApproval.submittedBy', select: 'name email role' },
+      { path: 'actual.storageArrivalApproval.warehouseManagerApprovedBy', select: 'name email role' },
+    ]);
 
     res.status(200).json({ message: 'Storage details updated successfully', container });
   } catch (err) {
@@ -3987,7 +4001,15 @@ exports.updateStorageArrivalRow = async (req, res) => {
       });
     }
 
-    container.actual.storageArrivalApproval = buildStorageArrivalPendingApproval(req.user);
+    // Only promote to "Pending Warehouse Manager Approval" once EVERY container in the split
+    // has actually been recorded — a single row save must never lock out the remaining rows
+    // (the frontend hides Edit and only allows View while status !== draft).
+    if (
+      (container.actual.storageArrivalApproval?.status || STORAGE_ARRIVAL_APPROVAL_STATUSES.draft) === STORAGE_ARRIVAL_APPROVAL_STATUSES.draft &&
+      hasSavedStorageArrivalData(container)
+    ) {
+      container.actual.storageArrivalApproval = buildStorageArrivalPendingApproval(req.user, container.actual.storageArrivalApproval);
+    }
 
     await container.save();
     const shipmentForStorageArrival = await Shipment.findById(container.shipmentId);
@@ -4001,6 +4023,11 @@ exports.updateStorageArrivalRow = async (req, res) => {
         approvalStage: 'Pending Warehouse Manager Approval',
       });
     }
+    await container.populate([
+      { path: 'actual.storageArrivalApproval.submittedBy', select: 'name email role' },
+      { path: 'actual.storageArrivalApproval.warehouseManagerApprovedBy', select: 'name email role' },
+    ]);
+
     res.json({ message: 'Storage arrival row updated successfully', container });
   } catch (err) {
     console.error(err);
@@ -4870,6 +4897,11 @@ exports.approveStorageArrival = async (req, res) => {
       after: cloneForAudit(container.toObject()),
       remarks: 'Storage arrival approved by warehouse manager'
     });
+
+    await container.populate([
+      { path: 'actual.storageArrivalApproval.submittedBy', select: 'name email role' },
+      { path: 'actual.storageArrivalApproval.warehouseManagerApprovedBy', select: 'name email role' },
+    ]);
 
     return res.json({ message: 'Storage arrival approved successfully', container });
   } catch (err) {
@@ -6561,7 +6593,11 @@ exports.getShipmentById = async (req, res) => {
       .populate('actual.paymentAllocationApproval.submittedBy', 'name email role')
       .populate('actual.paymentAllocationApproval.fasManagerApprovedBy', 'name email role')
       .populate('actual.paymentCostingApproval.submittedBy', 'name email role')
-      .populate('actual.paymentCostingApproval.fasManagerApprovedBy', 'name email role');
+      .populate('actual.paymentCostingApproval.fasManagerApprovedBy', 'name email role')
+      .populate('actual.storageAllocationApproval.submittedBy', 'name email role')
+      .populate('actual.storageAllocationApproval.warehouseManagerApprovedBy', 'name email role')
+      .populate('actual.storageArrivalApproval.submittedBy', 'name email role')
+      .populate('actual.storageArrivalApproval.warehouseManagerApprovedBy', 'name email role');
     const containerIds = containers.map((container) => container._id);
     const scheduledHistoryLogs = await AuditLog
       .find({
