@@ -245,13 +245,28 @@ const buildStorageAllocationPendingApproval = (user, existing) => ({
   warehouseManagerApprovedBy: null,
 });
 
+// "Requested By/At" always reflects whoever most recently saved — not who first submitted it.
+// e.g. Admin saves at 12pm, then a storekeeper edits later: the storekeeper becomes the
+// attributed submitter, since they're the one who last touched the data being approved.
 const buildStorageArrivalPendingApproval = (user, existing) => ({
   status: STORAGE_ARRIVAL_APPROVAL_STATUSES.pendingWarehouseManager,
-  submittedAt: existing?.submittedAt || new Date(),
-  submittedBy: existing?.submittedBy || user?._id || null,
+  submittedAt: new Date(),
+  submittedBy: user?._id || null,
   warehouseManagerApprovedAt: existing?.warehouseManagerApprovedAt || null,
   warehouseManagerApprovedBy: existing?.warehouseManagerApprovedBy || null,
 });
+
+// Every row save re-attributes submittedAt/submittedBy to the current user — independent of
+// whether the section is complete enough to promote from draft to pending approval.
+const touchStorageArrivalLastUpdated = (container, user) => {
+  const current = container.actual.storageArrivalApproval;
+  const existing = (current?.toObject ? current.toObject() : current) || { status: STORAGE_ARRIVAL_APPROVAL_STATUSES.draft };
+  container.actual.storageArrivalApproval = {
+    ...existing,
+    submittedAt: new Date(),
+    submittedBy: user?._id || null,
+  };
+};
 
 const hasSavedClearingAdvanceData = (container) => {
   const rows = container?.actual?.costSheetBookings || [];
@@ -3905,6 +3920,8 @@ exports.updateStorageDetails = async (req, res) => {
       });
     }
 
+    touchStorageArrivalLastUpdated(container, req.user);
+
     // Only promote to "Pending Warehouse Manager Approval" once EVERY container in the split
     // has actually been recorded — a single row save must never lock out the remaining rows
     // (the frontend hides Edit and only allows View while status !== draft).
@@ -4000,6 +4017,8 @@ exports.updateStorageArrivalRow = async (req, res) => {
         };
       });
     }
+
+    touchStorageArrivalLastUpdated(container, req.user);
 
     // Only promote to "Pending Warehouse Manager Approval" once EVERY container in the split
     // has actually been recorded — a single row save must never lock out the remaining rows
