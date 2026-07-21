@@ -189,6 +189,7 @@ const actualContainerSchema = new mongoose.Schema({
   dmBarcode: { type: String },
   customsClearanceRemarks: { type: String },
   tokenReceivedDate: { type: Date },
+  municipalityApplicable: { type: Boolean, default: null },
   municipalityDate: { type: Date },
   municipalityDocumentUrl: { type: String },
   municipalityDocumentName: { type: String },

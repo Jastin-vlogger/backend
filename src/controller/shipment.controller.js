@@ -1402,7 +1402,17 @@ const buildDashboardRStatusMetrics = (shipments, containerMap) => {
     add('Total Shipments', dashboardContainers.length + missingSplitCount, containerMt + missingMt, containerFcl + missingFcl);
     add('ETD Yet To Be Confirmed', missingSplitCount, missingMt, missingFcl);
 
-    const isCompletedLpo = missingSplitCount === 0 && dashboardContainers.length > 0 && dashboardContainers.every((container) => hasSavedStorageArrivalData(container));
+    // Completed = judged at SHIPMENT level from the storage-arrival rows, not per container doc.
+    // All arrival rows for a shipment can live inside one container doc's storageSplits (other
+    // container docs may be empty), so `every(container hasSaved)` wrongly fails. Instead: the
+    // LPO is complete when it has arrival rows and every row is recorded (GRN + batch present,
+    // same "Recorded" definition the UI uses), with no planned-but-missing containers.
+    const arrivalRows = dashboardContainers.reduce(
+      (acc, container) => acc.concat(Array.isArray(container?.actual?.storageSplits) ? container.actual.storageSplits : []),
+      []
+    );
+    const isRowRecorded = (row) => !!String(row?.grn || '').trim() && !!String(row?.batch || '').trim();
+    const isCompletedLpo = missingSplitCount === 0 && arrivalRows.length > 0 && arrivalRows.every(isRowRecorded);
     if (isCompletedLpo) add('Completed LPO', 1, lpoMt, lpoFcl);
     else add('Open LPO', 1, lpoMt, lpoFcl);
 
@@ -3336,6 +3346,7 @@ exports.updateLogisticsDetails = async (req, res) => {
       customsClearanceDate,
       customsClearanceRemarks,
       tokenReceivedDate,
+      municipalityApplicable,
       municipalityDate,
       municipalityRemarks,
       municipalityStatus,
@@ -3408,6 +3419,9 @@ exports.updateLogisticsDetails = async (req, res) => {
     if (customsClearanceDate !== undefined) container.actual.customsClearanceDate = toDateOrNull(customsClearanceDate);
     if (customsClearanceRemarks !== undefined) container.actual.customsClearanceRemarks = customsClearanceRemarks || '';
     if (tokenReceivedDate !== undefined) container.actual.tokenReceivedDate = toDateOrNull(tokenReceivedDate);
+    if (municipalityApplicable !== undefined) {
+      container.actual.municipalityApplicable = municipalityApplicable === '' ? null : String(municipalityApplicable) === 'true';
+    }
     if (municipalityDate !== undefined) container.actual.municipalityDate = toDateOrNull(municipalityDate);
     if (municipalityRemarks !== undefined) container.actual.municipalityRemarks = municipalityRemarks || '';
     if (municipalityStatus !== undefined) {
@@ -5362,6 +5376,11 @@ const fetchFlatShipmentList = async ({ page = 1, limit = 20, search = '', status
       const paymentReceivedAmount = paymentAllocations.reduce((sum, row) => sum + (Number(row?.paidAmount) || 0), 0);
       const paymentRequestAmount = paymentAllocations.reduce((sum, row) => sum + (Number(row?.requestAmount) || 0), 0);
 
+      // Direct receiver: bank/murabaha submission fields are handled in Document Tracker, so
+      // they show as N/A in this export.
+      const isDirectReceiver = String(actual.receiver || '').trim().toLowerCase() === 'direct';
+      const naIfDirect = (value) => (isDirectReceiver ? 'N/A' : value);
+
       return {
         shipmentId: base ? `${base}-${childIndex + 1}` : `${String(s._id)}-${childIndex + 1}`,
         parentId: s._id,
@@ -5421,30 +5440,32 @@ const fetchFlatShipmentList = async ({ page = 1, limit = 20, search = '', status
         allocateSameWarehouse: storageDecision.allocateSameWarehouse === true ? 'Yes' : storageDecision.allocateSameWarehouse === false ? 'No' : '',
         destinationWarehouses: Array.isArray(storageDecision.warehousesSelected) ? storageDecision.warehousesSelected.join(', ') : '',
 
-        // FAS Department (Bank / Murabaha submission)
-        daSubmittedToBank: actual.daSubmittedToBank ? 'Yes' : 'No',
-        submissionDate: actual.daSubmittedToBankDate || null,
-        skipMurabaha: actual.skipMurabaha ? 'Yes' : 'No',
-        murabahaReleasedDate: actual.documentsReleasedDate || null,
-        murabahaSubmittedToBank: actual.murabahaSubmittedToBank ? 'Yes' : 'No',
-        murabahaSubmissionDate: actual.daSubmittedToBankDate || null,
-        finalContractReceivedDate: actual.documentsReleasedDate || null,
+        // FAS Department (Bank / Murabaha submission) — N/A for Direct receiver (Document Tracker owns these).
+        daSubmittedToBank: naIfDirect(actual.daSubmittedToBank ? 'Yes' : 'No'),
+        submissionDate: naIfDirect(actual.daSubmittedToBankDate || null),
+        skipMurabaha: naIfDirect(actual.skipMurabaha ? 'Yes' : 'No'),
+        murabahaReleasedDate: naIfDirect(actual.documentsReleasedDate || null),
+        murabahaSubmittedToBank: naIfDirect(actual.murabahaSubmittedToBank ? 'Yes' : 'No'),
+        murabahaSubmissionDate: naIfDirect(actual.daSubmittedToBankDate || null),
+        finalContractReceivedDate: naIfDirect(actual.documentsReleasedDate || null),
 
         // Logistics Department (Port & Clearance)
         commercialDocumentReceivedDate: actual.commercialDocumentReceivedDate || null,
-        arrivalDate: actual.shipmentArrivedOn || null,
+        arrivalDate: actual.arrivalOn || actual.shipmentArrivedOn || null,
         shippingLineFreeDetentionDays: actual.freeDetentionDays ?? '',
         portFreeStorageDays: actual.freeStorageDays ?? '',
         doDate: actual.doReleasedDate || null,
-        boeNumber: '',
+        boeNumber: actual.dmBarcode || '',
         boeDate: actual.boePassingDate || null,
         customerInspectionRequired: actual.customerInspectionRequired ? 'Yes' : 'No',
-        municipalityRefNo: '',
-        municipalityInspectionDate: actual.municipalityDate || null,
-        municipalityStatus: actual.municipalityStatus || '',
-        municipalityReleasedDate: actual.municipalityReleasedDate || null,
+        municipalityApplicable: actual.municipalityApplicable === true ? 'Yes' : actual.municipalityApplicable === false ? 'No' : '',
+        // Municipality not applicable -> related fields N/A.
+        municipalityRefNo: actual.municipalityApplicable === false ? 'N/A' : (actual.municipalityRemarks || ''),
+        municipalityInspectionDate: actual.municipalityApplicable === false ? 'N/A' : (actual.municipalityDate || null),
+        municipalityStatus: actual.municipalityApplicable === false ? 'N/A' : (actual.municipalityStatus || ''),
+        municipalityReleasedDate: actual.municipalityApplicable === false ? 'N/A' : (actual.municipalityReleasedDate || null),
         transportationArrangement: transportationBooked.length ? 'Yes' : 'No',
-        transportCompany: transportationBooked.map((t) => t.transportCompanyName).filter(Boolean).join('; '),
+        transportCompany: [...new Set(transportationBooked.map((t) => t.transportCompanyName).filter(Boolean))].join('; '),
         plannedContainers,
         notPlannedContainers,
 
@@ -6812,6 +6833,7 @@ exports.getShipmentById = async (req, res) => {
             dpApprovalDocumentName: a.dpApprovalDocumentName,
             dpApprovalRemarks: a.dpApprovalRemarks,
             tokenReceivedDate: a.tokenReceivedDate,
+            municipalityApplicable: a.municipalityApplicable ?? null,
             municipalityDate: a.municipalityDate,
             municipalityDocumentUrl: a.municipalityDocumentUrl,
             municipalityDocumentName: a.municipalityDocumentName,
