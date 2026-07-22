@@ -3618,7 +3618,7 @@ exports.updateLogisticsDetails = async (req, res) => {
     if (shouldProcessTransportation && Array.isArray(container.actual.transportationBooked)) {
       container.actual.transportationBooked = container.actual.transportationBooked.map((row) => {
         const matchingStorage = (container.actual.storageSplits || []).find(
-          (split) => split.containerSerialNo === row.containerSerialNo
+          (split) => split && split.containerSerialNo === row.containerSerialNo
         );
         const plain = toPlainObject(row);
         return {
@@ -3920,7 +3920,7 @@ exports.updateStorageDetails = async (req, res) => {
     if (Array.isArray(container.actual.transportationBooked)) {
       container.actual.transportationBooked = container.actual.transportationBooked.map((row) => {
         const matchingStorage = container.actual.storageSplits.find(
-          (split) => split.containerSerialNo === row.containerSerialNo
+          (split) => split && split.containerSerialNo === row.containerSerialNo
         );
         return {
           ...toPlainObject(row),
@@ -4018,7 +4018,7 @@ exports.updateStorageArrivalRow = async (req, res) => {
     if (Array.isArray(container.actual.transportationBooked)) {
       container.actual.transportationBooked = container.actual.transportationBooked.map((row) => {
         const matchingStorage = container.actual.storageSplits.find(
-          (split) => split.containerSerialNo === row.containerSerialNo
+          (split) => split && split.containerSerialNo === row.containerSerialNo
         );
         return {
           ...toPlainObject(row),
