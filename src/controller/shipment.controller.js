@@ -6661,6 +6661,26 @@ exports.getShipmentById = async (req, res) => {
       .populate('actual.storageArrivalApproval.submittedBy', 'name email role')
       .populate('actual.storageArrivalApproval.warehouseManagerApprovedBy', 'name email role');
     const containerIds = containers.map((container) => container._id);
+
+    // Containers sharing the same B/L No (even under a different parent Shipment/PO) are
+    // automatically treated as one group — no manual merge action needed. Look up siblings
+    // by B/L No once so each container's actualData can show the combined container count.
+    const blNosInPlay = [...new Set(
+      containers.map((c) => String(c.actual?.BLNo || '').trim()).filter(Boolean)
+    )];
+    const siblingsByBlNo = new Map();
+    if (blNosInPlay.length) {
+      const blSiblingContainers = await Container.find({
+        'actual.BLNo': { $in: blNosInPlay.map((bl) => new RegExp(`^${bl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')) },
+      }).populate('shipmentId', 'shipmentNo poNumber');
+      blNosInPlay.forEach((bl) => {
+        siblingsByBlNo.set(
+          bl.toUpperCase(),
+          blSiblingContainers.filter((sc) => String(sc.actual?.BLNo || '').trim().toUpperCase() === bl.toUpperCase())
+        );
+      });
+    }
+
     const scheduledHistoryLogs = await AuditLog
       .find({
         module: "Purchase",
@@ -6937,6 +6957,50 @@ exports.getShipmentById = async (req, res) => {
 
           if (hasValues(a.grn)) {
             actualData.grn = a.grn;
+          }
+
+          const blKey = String(a.BLNo || '').trim().toUpperCase();
+          const blSiblings = blKey
+            ? (siblingsByBlNo.get(blKey) || []).filter((sc) => String(sc._id) !== String(c._id))
+            : [];
+          if (blSiblings.length) {
+            // The B/L Details form's own "No of Containers" field is often re-entered from the
+            // shared B/L document itself (so it can read the SAME full total on every item that
+            // shares that B/L, not that item's own split) — unreliable for a per-item count.
+            // planned.FCL is the item's actual assigned split and is what sizes its own
+            // Transportation Arrangement row count, so use that as the trustworthy per-item count.
+            const ownCount = Number(c.planned?.FCL) || Number(a.noOfContainers) || 0;
+            actualData.mergedTotalContainers =
+              ownCount +
+              blSiblings.reduce((sum, sc) => sum + (Number(sc.planned?.FCL) || Number(sc.actual?.noOfContainers) || 0), 0);
+            actualData.mergedWithShipments = blSiblings.map((sc) => ({
+              containerId: sc._id,
+              shipmentNo: sc.shipmentId?.shipmentNo || sc.shipmentId?.poNumber || '',
+              blNo: sc.actual?.BLNo || '',
+              noOfContainers: Number(sc.planned?.FCL) || sc.actual?.noOfContainers || 0,
+              // Read-only container serials from the sibling shipment, so the "Manage Shipments"
+              // modal can list all containers across the merged B/L group, not just this one's own.
+              // Prefer real serials wherever they've been recorded (transportation booking,
+              // storage splits, packing list); fall back to numbered placeholders so the
+              // merged list always reflects the sibling's actual container count, even before
+              // any of its own container-level detail has been saved.
+              containerSerials: (() => {
+                const fromTransport = (Array.isArray(sc.actual?.transportationBooked) ? sc.actual.transportationBooked : [])
+                  .map((row) => row?.containerSerialNo)
+                  .filter(Boolean);
+                if (fromTransport.length) return fromTransport;
+                const fromStorage = (Array.isArray(sc.actual?.storageSplits) ? sc.actual.storageSplits : [])
+                  .map((row) => row?.containerSerialNo)
+                  .filter(Boolean);
+                if (fromStorage.length) return fromStorage;
+                const fromPacking = (sc.actual?.packagingList?.containerInfo || [])
+                  .map((row) => row?.container_number)
+                  .filter(Boolean);
+                if (fromPacking.length) return fromPacking;
+                const count = Number(sc.planned?.FCL) || Number(sc.actual?.noOfContainers) || 0;
+                return Array.from({ length: count }, (_, idx) => `Container ${idx + 1}`);
+              })(),
+            }));
           }
 
           actual.push(actualData);
