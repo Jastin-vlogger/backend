@@ -6,8 +6,12 @@ const round2 = (n) => Math.round(n * 100) / 100;
 const pct = (n, d) => (d > 0 ? round2((n / d) * 100) : 0);
 
 // A storage split counts as "received" once it has GRN / batch / received date.
-const isSplitReceived = (split = {}) =>
-  !!(String(split.grn || '').trim() || String(split.batch || '').trim() || split.receivedOnDate);
+// Guards against both `undefined` (default param only covers this) and explicit `null` —
+// Mongoose persists unset array slots (from out-of-order index writes) as real `null` entries.
+const isSplitReceived = (split) => {
+  if (!split) return false;
+  return !!(String(split.grn || '').trim() || String(split.batch || '').trim() || split.receivedOnDate);
+};
 
 // Constructs the canonical label stored in container.storageAllocations[].warehouse,
 // matching the format the UI dropdown creates: "${name} - ${code}" or just "${name}".

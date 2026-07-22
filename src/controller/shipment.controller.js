@@ -2994,11 +2994,26 @@ exports.updatePackagingBags = async (req, res) => {
 
     const beforeUpdate = cloneForAudit(container.toObject());
 
-    bags.forEach(({ index, no_of_bags }) => {
+    bags.forEach(({ index, no_of_bags, container_number }) => {
       const idx = Number(index);
-      if (Number.isInteger(idx) && idx >= 0 && idx < containerInfo.length) {
-        const parsed = no_of_bags === '' || no_of_bags == null ? 0 : Number(no_of_bags);
-        containerInfo[idx].no_of_bags = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+      if (!Number.isInteger(idx) || idx < 0) return;
+      const parsedBags = no_of_bags === '' || no_of_bags == null ? null : Number(no_of_bags);
+      const safeBags = Number.isFinite(parsedBags) && parsedBags >= 0 ? parsedBags : 0;
+
+      if (idx === containerInfo.length) {
+        // Appending a brand-new container row (e.g. "Add Container" — the actual container
+        // count can exceed what the original packing list extraction/upload produced).
+        containerInfo.push({
+          container_number: container_number || '',
+          no_of_bags: safeBags,
+        });
+        return;
+      }
+      if (idx < containerInfo.length) {
+        containerInfo[idx].no_of_bags = no_of_bags === undefined ? (containerInfo[idx].no_of_bags || 0) : safeBags;
+        if (container_number !== undefined) {
+          containerInfo[idx].container_number = container_number || '';
+        }
       }
     });
 
@@ -3988,6 +4003,13 @@ exports.updateStorageArrivalRow = async (req, res) => {
 
     const files = normalizeUploadedFiles(req.files);
     container.actual.storageSplits = Array.isArray(container.actual.storageSplits) ? container.actual.storageSplits : [];
+
+    // Saving an out-of-order row index (e.g. row 9 before rows 1-8 ever existed) must never
+    // leave real gaps — Mongoose persists unset array slots as explicit `null` entries, which
+    // then crash any later `.find()`/`.forEach()` reader that assumes every element is an object.
+    while (container.actual.storageSplits.length < rowIndex) {
+      container.actual.storageSplits.push({});
+    }
 
     const existing = container.actual.storageSplits[rowIndex] || {};
     container.actual.storageSplits[rowIndex] = {
