@@ -1412,7 +1412,20 @@ const buildDashboardRStatusMetrics = (shipments, containerMap) => {
       []
     );
     const isRowRecorded = (row) => !!String(row?.grn || '').trim() && !!String(row?.batch || '').trim();
-    const isCompletedLpo = missingSplitCount === 0 && arrivalRows.length > 0 && arrivalRows.every(isRowRecorded);
+    // `arrivalRows.every(isRowRecorded)` alone is not enough — a container with 20 expected
+    // containers but only 3 storageSplits rows saved (17 never even started) passes trivially
+    // since every EXISTING row is recorded. Also require the row count to match each container's
+    // own declared "No of Containers" (BL Details), so a partially-started arrival can't read
+    // as complete just because nobody has touched the remaining rows yet.
+    const expectedContainerCount = dashboardContainers.reduce(
+      (sum, container) => sum + (Number(container?.actual?.noOfContainers) || 0),
+      0
+    );
+    const isCompletedLpo =
+      missingSplitCount === 0 &&
+      arrivalRows.length > 0 &&
+      (expectedContainerCount === 0 || arrivalRows.length >= expectedContainerCount) &&
+      arrivalRows.every(isRowRecorded);
     if (isCompletedLpo) add('Completed LPO', 1, lpoMt, lpoFcl);
     else add('Open LPO', 1, lpoMt, lpoFcl);
 
@@ -3911,6 +3924,7 @@ exports.updateStorageDetails = async (req, res) => {
         batch: row.batch || '',
         productionDate: toDateOrNull(row.productionDate),
         expiryDate: toDateOrNull(row.expiryDate),
+        shortageBags: Number(row.shortageBags ?? existing.shortageBags ?? 0) || 0,
         remarks: row.remarks || '',
         documentUrl: rowUpload ? undefined : (row.documentUrl || existing.documentUrl || ''),
         documentName: rowUpload ? undefined : (row.documentName || existing.documentName || '')
@@ -4025,6 +4039,7 @@ exports.updateStorageArrivalRow = async (req, res) => {
       batch: req.body.batch || existing.batch || '',
       productionDate: req.body.productionDate !== undefined ? toDateOrNull(req.body.productionDate) : existing.productionDate || null,
       expiryDate: req.body.expiryDate !== undefined ? toDateOrNull(req.body.expiryDate) : existing.expiryDate || null,
+      shortageBags: req.body.shortageBags !== undefined ? (Number(req.body.shortageBags) || 0) : (existing.shortageBags || 0),
       remarks: req.body.remarks || existing.remarks || '',
       documentUrl: req.body.documentUrl || existing.documentUrl || '',
       documentName: req.body.documentName || existing.documentName || '',
@@ -5044,10 +5059,24 @@ const buildShipmentListQuery = ({
 // replace the old "Multiple (N)" / "Multiple Items (N)" placeholders with the actual values,
 // derived at read time so it self-heals existing shipments too (no migration needed), since
 // the real per-item data is already sitting in shipment.lineItems.
+// Display-only fixup for warehouse labels already saved as "NAME - NAME" (when a warehouse's
+// code happens to equal its name) — doesn't touch stored data, only how the export shows it.
+const dedupeWarehouseLabel = (label) => String(label || '').replace(/^(.*?)\s*-\s*\1$/i, '$1');
+
 const joinDistinctLineItemValues = (lineItems, field) => {
   if (!Array.isArray(lineItems) || !lineItems.length) return null;
   const cleaned = [...new Set(lineItems.map((item) => String(item?.[field] || '').trim()).filter(Boolean))];
   return cleaned.length ? cleaned.join(', ') : null;
+};
+
+// "rice" -> "Rice", "basmati rice" -> "Basmati Rice" — display-only casing for free-text fields
+// like Commodity in exports; comma-joined multi-values are each title-cased independently.
+const toTitleCase = (value) => {
+  if (!value) return value;
+  return String(value)
+    .split(', ')
+    .map((part) => part.toLowerCase().replace(/\b\w/g, (ch) => ch.toUpperCase()))
+    .join(', ');
 };
 
 const getCommercialInvoiceShipmentIds = async (search = '') => {
@@ -5394,6 +5423,7 @@ const fetchFlatShipmentList = async ({ page = 1, limit = 20, search = '', status
       // "Containers Received" = storage split rows that have actually been received at the warehouse.
       const containersReceived = storageSplits.filter((row) => !!row?.receivedOnDate).length;
       const containersRemaining = Math.max(totalContainersForRow - containersReceived, 0);
+      const shortageBags = storageSplits.reduce((sum, row) => sum + (Number(row?.shortageBags) || 0), 0);
 
       const paymentReceivedAmount = paymentAllocations.reduce((sum, row) => sum + (Number(row?.paidAmount) || 0), 0);
       const paymentRequestAmount = paymentAllocations.reduce((sum, row) => sum + (Number(row?.requestAmount) || 0), 0);
@@ -5421,7 +5451,7 @@ const fetchFlatShipmentList = async ({ page = 1, limit = 20, search = '', status
         // ===== Full-detail export columns, matching the "Final Data.xlsx" reference format =====
         // Purchase Department
         itemCode: joinDistinctLineItemValues(lineItems, 'itemCode') || s.itemCode || '',
-        commodity: joinDistinctLineItemValues(lineItems, 'commodity') || s.commodity || '',
+        commodity: toTitleCase(joinDistinctLineItemValues(lineItems, 'commodity') || s.commodity || ''),
         brandName: joinDistinctLineItemValues(lineItems, 'brandName') || s.brandName || '',
         packing: joinDistinctLineItemValues(lineItems, 'packagingType') || s.packing || '',
         variant: joinDistinctLineItemValues(lineItems, 'variant') || s.variant || '',
@@ -5460,15 +5490,20 @@ const fetchFlatShipmentList = async ({ page = 1, limit = 20, search = '', status
         // Warehouse Department (Warehouse Manager)
         storageAllocationDate: storageApproval.submittedAt || null,
         allocateSameWarehouse: storageDecision.allocateSameWarehouse === true ? 'Yes' : storageDecision.allocateSameWarehouse === false ? 'No' : '',
-        destinationWarehouses: Array.isArray(storageDecision.warehousesSelected) ? storageDecision.warehousesSelected.join(', ') : '',
+        destinationWarehouses: Array.isArray(storageDecision.warehousesSelected)
+          ? storageDecision.warehousesSelected.map(dedupeWarehouseLabel).join(', ')
+          : '',
 
-        // FAS Department (Bank / Murabaha submission) — N/A for Direct receiver (Document Tracker owns these).
+        // FAS Department (Bank / Murabaha submission) — N/A for Direct receiver (Document Tracker
+        // owns these). Submission Date is also N/A once DA Submitted To Bank is No (nothing was
+        // submitted, so there's no date). Likewise all 3 Murabaha detail fields go N/A once
+        // Skip Murabaha is Yes (murabaha isn't happening for this shipment at all).
         daSubmittedToBank: naIfDirect(actual.daSubmittedToBank ? 'Yes' : 'No'),
-        submissionDate: naIfDirect(actual.daSubmittedToBankDate || null),
+        submissionDate: naIfDirect(actual.daSubmittedToBank ? (actual.daSubmittedToBankDate || null) : 'N/A'),
         skipMurabaha: naIfDirect(actual.skipMurabaha ? 'Yes' : 'No'),
-        murabahaReleasedDate: naIfDirect(actual.documentsReleasedDate || null),
-        murabahaSubmittedToBank: naIfDirect(actual.murabahaSubmittedToBank ? 'Yes' : 'No'),
-        murabahaSubmissionDate: naIfDirect(actual.daSubmittedToBankDate || null),
+        murabahaReleasedDate: naIfDirect(actual.skipMurabaha ? 'N/A' : (actual.documentsReleasedDate || null)),
+        murabahaSubmittedToBank: naIfDirect(actual.skipMurabaha ? 'N/A' : (actual.murabahaSubmittedToBank ? 'Yes' : 'No')),
+        murabahaSubmissionDate: naIfDirect(actual.skipMurabaha ? 'N/A' : (actual.daSubmittedToBankDate || null)),
         finalContractReceivedDate: naIfDirect(actual.documentsReleasedDate || null),
 
         // Logistics Department (Port & Clearance)
@@ -5479,7 +5514,7 @@ const fetchFlatShipmentList = async ({ page = 1, limit = 20, search = '', status
         doDate: actual.doReleasedDate || null,
         boeNumber: actual.dmBarcode || '',
         boeDate: actual.boePassingDate || null,
-        customerInspectionRequired: actual.customerInspectionRequired ? 'Yes' : 'No',
+        customsInspectionRequired: actual.customerInspectionRequired ? 'Yes' : 'No',
         municipalityApplicable: actual.municipalityApplicable === true ? 'Yes' : actual.municipalityApplicable === false ? 'No' : '',
         // Municipality not applicable -> related fields N/A.
         municipalityRefNo: actual.municipalityApplicable === false ? 'N/A' : (actual.municipalityRemarks || ''),
@@ -5488,6 +5523,7 @@ const fetchFlatShipmentList = async ({ page = 1, limit = 20, search = '', status
         municipalityReleasedDate: actual.municipalityApplicable === false ? 'N/A' : (actual.municipalityReleasedDate || null),
         transportationArrangement: transportationBooked.length ? 'Yes' : 'No',
         transportCompany: [...new Set(transportationBooked.map((t) => t.transportCompanyName).filter(Boolean))].join('; '),
+        selectedCompaniesCount: new Set(transportationBooked.map((t) => t.transportCompanyName).filter(Boolean)).size,
         plannedContainers,
         notPlannedContainers,
 
@@ -5498,6 +5534,7 @@ const fetchFlatShipmentList = async ({ page = 1, limit = 20, search = '', status
         differenceAmount: paymentRequestAmount - paymentReceivedAmount,
         containersReceived,
         containersRemaining,
+        shortageBags,
       };
     };
 

@@ -409,6 +409,7 @@ const actualContainerSchema = new mongoose.Schema({
     hsCode: { type: String },
     grossWeight: { type: String },
     netWeight: { type: String },
+    shortageBags: { type: Number, default: 0 },
     remarks: { type: String },
     documentUrl: { type: String },
     documentName: { type: String }

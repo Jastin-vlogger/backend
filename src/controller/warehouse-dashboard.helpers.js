@@ -15,10 +15,13 @@ const isSplitReceived = (split) => {
 
 // Constructs the canonical label stored in container.storageAllocations[].warehouse,
 // matching the format the UI dropdown creates: "${name} - ${code}" or just "${name}".
+// When the code is identical to the name (e.g. warehouse "SAJAH" with code "SAJAH"), the
+// suffix is dropped instead of producing a redundant "SAJAH - SAJAH".
 const warehouseLabel = (wh) => {
   const name = String(wh.name || '').trim();
   const code = String(wh.code || '').trim();
-  return code ? `${name} - ${code}` : name;
+  if (!code || code.toLowerCase() === name.toLowerCase()) return name;
+  return `${name} - ${code}`;
 };
 
 /**
