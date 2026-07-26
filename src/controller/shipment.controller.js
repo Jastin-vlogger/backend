@@ -7780,12 +7780,16 @@ exports.extractBillNo = async (req, res) => {
       return res.status(400).json({ message: 'Bill of Lading file is required' });
     }
 
-    const baseUrl = (process.env.PYTHON_EXTRACTION_API_URL || 'http://localhost:8096').replace(/\/$/, '');
-    const endpoint = `${baseUrl}/purchase-tracker/fetch-details`;
+    // Bill-no/packaging-list extraction is its OWN Python service, separate from the LPO/quality
+    // report extraction used by extractFromDocuments — must use its own dedicated env vars, not
+    // silently fall back to PYTHON_EXTRACTION_API_URL (a different service on a different port).
+    const baseUrl = (process.env.PYTHON_BILLNO_API_URL || process.env.PYTHON_EXTRACTION_API_URL || 'http://localhost:8096').replace(/\/$/, '');
+    const path = process.env.PYTHON_BILLNO_PATH || '/purchase-tracker/fetch-details';
+    const endpoint = `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
 
     const FormData = globalThis.FormData;
     const form = new FormData();
-    
+
     // Append BL file
     const blBlob = new Blob([blFile.buffer], { type: blFile.mimetype || 'application/octet-stream' });
     form.append('file', blBlob, blFile.originalname || 'document');

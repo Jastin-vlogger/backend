@@ -140,7 +140,12 @@ exports.getAssignableStorekeepers = async (_req, res) => {
       .sort({ name: 1 })
       .lean();
 
-    const storekeepers = users.filter((user) => normalizeRole(user.role) === 'storekeeper');
+    // Both StoreKeeper and Warehouse Manager roles are scoped to their assigned warehouse(s) via
+    // this same list on the frontend (see isContainerVisibleForUser) — a Warehouse Manager left
+    // out of this picker can never be assigned a warehouse, so they see zero container data
+    // regardless of what Access Control permissions/menu access they're granted.
+    const assignableRoles = new Set(['storekeeper', 'warehouse']);
+    const storekeepers = users.filter((user) => assignableRoles.has(normalizeRole(user.role)));
     res.json({
       users: storekeepers.map((user) => ({
         _id: user._id,
