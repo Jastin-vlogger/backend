@@ -50,6 +50,7 @@ const DASHBOARD_DEPARTMENT_CHART_TEMPLATES = [
   { key: 'dashboard.section.storekeeper_receiving_status.view', resource: 'dashboard', screen: 'dashboard', tab: 'dashboard', type: 'action', action: 'storekeeper_receiving_status_view', label: 'View Storekeeper Allocation & Receiving Status', sortOrder: 21 },
   { key: 'dashboard.section.storekeeper_receiving_timeline.view', resource: 'dashboard', screen: 'dashboard', tab: 'dashboard', type: 'action', action: 'storekeeper_receiving_timeline_view', label: 'View Storekeeper Receiving Progress Over Time', sortOrder: 22 },
   { key: 'dashboard.section.storekeeper_summary.view', resource: 'dashboard', screen: 'dashboard', tab: 'dashboard', type: 'action', action: 'storekeeper_summary_view', label: 'View Storekeeper Warehouse Summary', sortOrder: 23 },
+  { key: 'dashboard.section.department_job_pending.view', resource: 'dashboard', screen: 'dashboard', tab: 'dashboard', type: 'action', action: 'department_job_pending_view', label: 'View Department Wise Job Pending Report', sortOrder: 24 },
 ];
 
 const DASHBOARD_PERMISSION_KEYS = DASHBOARD_PERMISSION_TEMPLATES.map((permission) => permission.key);

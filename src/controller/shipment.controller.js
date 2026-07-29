@@ -3020,6 +3020,18 @@ exports.updatePackagingBags = async (req, res) => {
           container_number: container_number || '',
           no_of_bags: safeBags,
         });
+        // Bulk Update Transportation reads from actual.transportationBooked, which is only
+        // ever sized off the original BL extraction — without this it silently never grows
+        // when a container is added here later, and the new container can't be booked.
+        if (Array.isArray(container.actual.transportationBooked)) {
+          container.actual.transportationBooked.push({
+            sn: container.actual.transportationBooked.length + 1,
+            transactionId: '',
+            containerSerialNo: container_number || '',
+            transportCompanyName: '',
+            warehouse: '',
+          });
+        }
         return;
       }
       if (idx < containerInfo.length) {
@@ -3036,6 +3048,7 @@ exports.updatePackagingBags = async (req, res) => {
       0
     );
     container.markModified('actual.packagingList');
+    container.markModified('actual.transportationBooked');
     await container.save();
 
     await writeAuditLog({
@@ -6618,6 +6631,38 @@ exports.getShipmentSummary = async (req, res) => {
       };
     })();
 
+    // ── Department Wise Job Pending Report ──────────────────────────────────
+    // Counts containers with an unresolved action per department, reusing the same
+    // status fields each department's own workflow screens already gate on.
+    const departmentJobPending = (() => {
+      let warehousePending = 0;
+      let fasPending = 0;
+
+      containers.forEach((container) => {
+        const actual = container.actual || {};
+
+        const allocationPending = actual.storageAllocationApproval?.status === 'pending_warehouse_manager';
+        const arrivalPending = actual.storageArrivalApproval?.status === 'pending_warehouse_manager';
+        if (allocationPending || arrivalPending) warehousePending++;
+
+        const caStatus = actual.clearingAdvanceApproval?.status || null;
+        const clearingAdvancePending =
+          caStatus === CLEARING_ADVANCE_APPROVAL_STATUSES.pendingFas ||
+          caStatus === CLEARING_ADVANCE_APPROVAL_STATUSES.pendingFasManager;
+        const additionalClearingAdvancePending = (actual.additionalClearingAdvanceRequests || []).some(
+          (req) => req?.status === CLEARING_ADVANCE_APPROVAL_STATUSES.pendingFas
+        );
+        const paymentAllocationPendingRow = actual.paymentAllocationApproval?.status === 'pending_fas_manager';
+        if (clearingAdvancePending || additionalClearingAdvancePending || paymentAllocationPendingRow) fasPending++;
+      });
+
+      return [
+        { department: 'Logistics', label: 'Logistics Department', pendingCount: logisticsPendingCount },
+        { department: 'Warehouse', label: 'Warehouse Department (Storekeepers)', pendingCount: warehousePending },
+        { department: 'FAS', label: 'FAS Department', pendingCount: fasPending },
+      ];
+    })();
+
     res.status(200).json({
       kpis: {
         totalShipments: total,
@@ -6627,6 +6672,7 @@ exports.getShipmentSummary = async (req, res) => {
         totalPaymentExposure: paymentSummary.balanceAmount
       },
       departmentCharts,
+      departmentJobPending,
       fasDashboard,
       warehouseDashboard,
       storekeeperDashboard,
