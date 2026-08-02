@@ -6716,14 +6716,30 @@ exports.getShipmentSummary = async (req, res) => {
       ];
     })();
 
+    // shipmentId -> { shipmentNo, supplier } lookup, reused by both drill-down dashboards below
+    // so each tile can list which real shipments make up its pending count.
+    const shipmentLookupById = new Map(
+      shipments.map((s) => [
+        String(s._id),
+        { _id: s._id, shipmentNo: s.shipmentNo, supplier: s.supplierId?.name || s.supplierName || null },
+      ])
+    );
+    const addPendingShipment = (tile, container) => {
+      const info = shipmentLookupById.get(String(container.shipmentId));
+      if (!info) return;
+      if (!tile.pendingShipments.some((s) => String(s._id) === String(info._id))) {
+        tile.pendingShipments.push(info);
+      }
+    };
+
     // ── FAS Dashboard: Pending vs Completed per sub-process ─────────────────
     const fasPendingCompletedDashboard = (() => {
       const tiles = {
-        clearingAdvanceFas: { key: 'clearingAdvanceFas', label: 'Clearance Advance — FAS Review', pending: 0, completed: 0 },
-        clearingAdvanceFasManager: { key: 'clearingAdvanceFasManager', label: 'Clearance Advance — FAS Manager Review', pending: 0, completed: 0 },
-        murabaha: { key: 'murabaha', label: 'Murabaha', pending: 0, completed: 0 },
-        finalContractReceived: { key: 'finalContractReceived', label: 'Final Contract Received Date', pending: 0, completed: 0 },
-        paymentAllocation: { key: 'paymentAllocation', label: 'Payment Allocation', pending: 0, completed: 0 },
+        clearingAdvanceFas: { key: 'clearingAdvanceFas', label: 'Clearance Advance — FAS Review', pending: 0, completed: 0, pendingShipments: [] },
+        clearingAdvanceFasManager: { key: 'clearingAdvanceFasManager', label: 'Clearance Advance — FAS Manager Review', pending: 0, completed: 0, pendingShipments: [] },
+        murabaha: { key: 'murabaha', label: 'Murabaha', pending: 0, completed: 0, pendingShipments: [] },
+        finalContractReceived: { key: 'finalContractReceived', label: 'Final Contract Received Date', pending: 0, completed: 0, pendingShipments: [] },
+        paymentAllocation: { key: 'paymentAllocation', label: 'Payment Allocation', pending: 0, completed: 0, pendingShipments: [] },
       };
 
       containers.forEach((container) => {
@@ -6734,9 +6750,15 @@ exports.getShipmentSummary = async (req, res) => {
         const hasClearingAdvance = !!caStatus || hasSavedClearingAdvanceData(container);
         if (hasClearingAdvance) {
           const isApproved = caStatus === CLEARING_ADVANCE_APPROVAL_STATUSES.approved;
-          if (caStatus === CLEARING_ADVANCE_APPROVAL_STATUSES.pendingFas) tiles.clearingAdvanceFas.pending++;
+          if (caStatus === CLEARING_ADVANCE_APPROVAL_STATUSES.pendingFas) {
+            tiles.clearingAdvanceFas.pending++;
+            addPendingShipment(tiles.clearingAdvanceFas, container);
+          }
           if (isApproved) tiles.clearingAdvanceFas.completed++;
-          if (caStatus === CLEARING_ADVANCE_APPROVAL_STATUSES.pendingFasManager) tiles.clearingAdvanceFasManager.pending++;
+          if (caStatus === CLEARING_ADVANCE_APPROVAL_STATUSES.pendingFasManager) {
+            tiles.clearingAdvanceFasManager.pending++;
+            addPendingShipment(tiles.clearingAdvanceFasManager, container);
+          }
           if (isApproved) tiles.clearingAdvanceFasManager.completed++;
         }
 
@@ -6744,19 +6766,28 @@ exports.getShipmentSummary = async (req, res) => {
         if (actual.skipMurabaha !== true) {
           const murabahaSubmitted = !!(actual.murabahaSubmittedToBank || actual.daSubmittedToBank);
           if (murabahaSubmitted) tiles.murabaha.completed++;
-          else tiles.murabaha.pending++;
+          else {
+            tiles.murabaha.pending++;
+            addPendingShipment(tiles.murabaha, container);
+          }
         }
 
         // 4: Final Contract Received Date, gated to Bank-receiver containers.
         if (classifyFasReceiver(actual) === 'bank') {
           const finalContractReceived = !!(actual.documentsReleasedDate || actual.documentsReleasedDocumentUrl);
           if (finalContractReceived) tiles.finalContractReceived.completed++;
-          else tiles.finalContractReceived.pending++;
+          else {
+            tiles.finalContractReceived.pending++;
+            addPendingShipment(tiles.finalContractReceived, container);
+          }
         }
 
         // 5: Payment Allocation.
         const paStatus = actual.paymentAllocationApproval?.status || null;
-        if (paStatus === 'pending_fas_manager') tiles.paymentAllocation.pending++;
+        if (paStatus === 'pending_fas_manager') {
+          tiles.paymentAllocation.pending++;
+          addPendingShipment(tiles.paymentAllocation, container);
+        }
         if (paStatus === 'approved') tiles.paymentAllocation.completed++;
       });
 
@@ -6766,10 +6797,10 @@ exports.getShipmentSummary = async (req, res) => {
     // ── Logistics Dashboard: Pending vs Completed per sub-process ───────────
     const logisticsPendingCompletedDashboard = (() => {
       const tiles = {
-        clearingAdvance: { key: 'clearingAdvance', label: 'Clearance Advance', pending: 0, completed: 0 },
-        clearanceProcess: { key: 'clearanceProcess', label: 'Clearance Process', pending: 0, completed: 0 },
-        transportationArrangement: { key: 'transportationArrangement', label: 'Transportation Arrangement', pending: 0, completed: 0 },
-        documentation: { key: 'documentation', label: 'Documentation', pending: 0, completed: 0 },
+        clearingAdvance: { key: 'clearingAdvance', label: 'Clearance Advance', pending: 0, completed: 0, pendingShipments: [] },
+        clearanceProcess: { key: 'clearanceProcess', label: 'Clearance Process', pending: 0, completed: 0, pendingShipments: [] },
+        transportationArrangement: { key: 'transportationArrangement', label: 'Transportation Arrangement', pending: 0, completed: 0, pendingShipments: [] },
+        documentation: { key: 'documentation', label: 'Documentation', pending: 0, completed: 0, pendingShipments: [] },
       };
 
       containers.forEach((container) => {
@@ -6780,17 +6811,26 @@ exports.getShipmentSummary = async (req, res) => {
         const hasClearingAdvance = !!caStatus || hasSavedClearingAdvanceData(container);
         if (hasClearingAdvance) {
           if (caStatus === CLEARING_ADVANCE_APPROVAL_STATUSES.approved) tiles.clearingAdvance.completed++;
-          else tiles.clearingAdvance.pending++;
+          else {
+            tiles.clearingAdvance.pending++;
+            addPendingShipment(tiles.clearingAdvance, container);
+          }
         }
 
         // Clearance Process — BOE (Bill of Entry) passed customs.
         if (actual.boePassingDate) tiles.clearanceProcess.completed++;
-        else tiles.clearanceProcess.pending++;
+        else {
+          tiles.clearanceProcess.pending++;
+          addPendingShipment(tiles.clearanceProcess, container);
+        }
 
         // Transportation Arrangement — at least one transport booking on file.
         const transportationBooked = Array.isArray(actual.transportationBooked) ? actual.transportationBooked : [];
         if (transportationBooked.length > 0) tiles.transportationArrangement.completed++;
-        else tiles.transportationArrangement.pending++;
+        else {
+          tiles.transportationArrangement.pending++;
+          addPendingShipment(tiles.transportationArrangement, container);
+        }
 
         // Documentation — all customs original documents submitted.
         const docs = actual.customsOriginalDocuments || {};
@@ -6799,7 +6839,10 @@ exports.getShipmentSummary = async (req, res) => {
           'invoiceSubmissionDate', 'packingListSubmissionDate', 'cooSubmissionDate',
         ].every((field) => !!docs[field]);
         if (allDocsSubmitted) tiles.documentation.completed++;
-        else tiles.documentation.pending++;
+        else {
+          tiles.documentation.pending++;
+          addPendingShipment(tiles.documentation, container);
+        }
       });
 
       return Object.values(tiles);
