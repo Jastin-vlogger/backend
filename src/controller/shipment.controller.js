@@ -1657,7 +1657,7 @@ const buildShipmentReportRows = async (filters = {}, user = null) => {
       const name = String(w.name || '').trim();
       return code ? `${name} - ${code}` : name;
     });
-    labelSet = new Set(labels);
+    labelSet = new Set(labels.map(normalizeWarehouseLabelForMatch));
     matchedShipmentIds = new Set(await getStorekeeperShipmentIds(labels));
   }
 
@@ -1706,12 +1706,14 @@ const buildShipmentReportRows = async (filters = {}, user = null) => {
         const splits = Array.isArray(actual.storageSplits) ? actual.storageSplits : [];
         const decision = actual.storageAllocationDecision || {};
         const itemAllocs = Array.isArray(decision.itemAllocations) ? decision.itemAllocations : [];
+        const booked = Array.isArray(actual.transportationBooked) ? actual.transportationBooked : [];
 
-        return allocs.some((a) => labelSet.has(String(a.warehouse || '').trim())) ||
-               splits.some((s) => labelSet.has(String(s.warehouse || '').trim())) ||
+        return allocs.some((a) => labelSet.has(normalizeWarehouseLabelForMatch(a.warehouse))) ||
+               splits.some((s) => labelSet.has(normalizeWarehouseLabelForMatch(s.warehouse))) ||
+               booked.some((b) => labelSet.has(normalizeWarehouseLabelForMatch(b.warehouse))) ||
                itemAllocs.some((item) =>
                  (Array.isArray(item.allocations) ? item.allocations : []).some((a) =>
-                   labelSet.has(String(a.warehouse || '').trim())
+                   labelSet.has(normalizeWarehouseLabelForMatch(a.warehouse))
                  )
                );
       })
@@ -5198,10 +5200,17 @@ const shouldRestrictShipmentListToAtPort = (user) =>
 const isStorekeeper = (user) =>
   normalizeRole(user?.role || '') === 'storekeeper';
 
+// Warehouse labels have been saved under two forms historically ("SAJAH - SAJAH" and bare
+// "SAJAH" when a warehouse's code equals its name) depending on which save path wrote them.
+// Normalize both sides before comparing so storekeeper scoping doesn't silently miss rows
+// saved under the form the current label-building code doesn't happen to produce.
+const normalizeWarehouseLabelForMatch = (label) =>
+  dedupeWarehouseLabel(String(label || '').trim()).toLowerCase();
+
 // Returns shipment IDs for containers allocated to any of the given warehouse labels.
 const getStorekeeperShipmentIds = async (warehouseLabels) => {
   if (!warehouseLabels.length) return [];
-  const labelSet = new Set(warehouseLabels);
+  const labelSet = new Set(warehouseLabels.map(normalizeWarehouseLabelForMatch));
   const containers = await Container.find({}).select('shipmentId actual').lean();
   const matchedShipmentIds = new Set();
   containers.forEach((c) => {
@@ -5214,12 +5223,17 @@ const getStorekeeperShipmentIds = async (warehouseLabels) => {
     const splits = Array.isArray(actual.storageSplits) ? actual.storageSplits : [];
     const decision = actual.storageAllocationDecision || {};
     const itemAllocs = Array.isArray(decision.itemAllocations) ? decision.itemAllocations : [];
+    // transportationBooked reflects the actual arrival warehouse and can differ from the
+    // original storage allocation decision (e.g. re-routed after booking) — a storekeeper
+    // should see the shipment based on where containers are really headed.
+    const booked = Array.isArray(actual.transportationBooked) ? actual.transportationBooked : [];
     const hasMatch =
-      allocs.some((a) => labelSet.has(String(a.warehouse || '').trim())) ||
-      splits.some((s) => labelSet.has(String(s.warehouse || '').trim())) ||
+      allocs.some((a) => labelSet.has(normalizeWarehouseLabelForMatch(a.warehouse))) ||
+      splits.some((s) => labelSet.has(normalizeWarehouseLabelForMatch(s.warehouse))) ||
+      booked.some((b) => labelSet.has(normalizeWarehouseLabelForMatch(b.warehouse))) ||
       itemAllocs.some((item) =>
         (Array.isArray(item.allocations) ? item.allocations : []).some((a) =>
-          labelSet.has(String(a.warehouse || '').trim())
+          labelSet.has(normalizeWarehouseLabelForMatch(a.warehouse))
         )
       );
     if (hasMatch) matchedShipmentIds.add(String(c.shipmentId));
@@ -5279,7 +5293,12 @@ const fetchShipmentList = async ({ page = 1, limit = 20, search = '', status = '
       const name = String(w.name || '').trim();
       return code ? `${name} - ${code}` : name;
     });
-    restrictedShipmentIds = await getStorekeeperShipmentIds(labels);
+    // A storekeeper shouldn't see a shipment until transportation is complete — same
+    // "at port or later" gate the warehouse-manager role already gets, so a warehouse match
+    // alone (which can occur while a shipment is still On Transit) isn't enough on its own.
+    const warehouseMatchedIds = await getStorekeeperShipmentIds(labels);
+    const atPortOrLaterIds = new Set(await getAtPortOrLaterShipmentIds());
+    restrictedShipmentIds = warehouseMatchedIds.filter((id) => atPortOrLaterIds.has(id));
   }
   const commercialInvoiceShipmentIds = await getCommercialInvoiceShipmentIds(search);
   const blNoShipmentIds = await getBlNoShipmentIds(search);
@@ -5365,7 +5384,12 @@ const fetchFlatShipmentList = async ({ page = 1, limit = 20, search = '', status
       const name = String(w.name || '').trim();
       return code ? `${name} - ${code}` : name;
     });
-    restrictedShipmentIds = await getStorekeeperShipmentIds(labels);
+    // A storekeeper shouldn't see a shipment until transportation is complete — same
+    // "at port or later" gate the warehouse-manager role already gets, so a warehouse match
+    // alone (which can occur while a shipment is still On Transit) isn't enough on its own.
+    const warehouseMatchedIds = await getStorekeeperShipmentIds(labels);
+    const atPortOrLaterIds = new Set(await getAtPortOrLaterShipmentIds());
+    restrictedShipmentIds = warehouseMatchedIds.filter((id) => atPortOrLaterIds.has(id));
   }
 
   const commercialInvoiceShipmentIds = await getCommercialInvoiceShipmentIds(search);
@@ -5558,9 +5582,18 @@ const fetchFlatShipmentList = async ({ page = 1, limit = 20, search = '', status
     effectiveContainers.forEach((container, idx) => rows.push(buildRow(idx, container)));
   });
 
-  const filtered = statusFilterSet
-    ? rows.filter((row) => statusFilterSet.has(String(row.status || '').trim().toLowerCase()))
+  // The shipment-level "at port or later" gate above (restrictedShipmentIds) only decides
+  // whether the PARENT shipment qualifies — a shipment with one container already at port
+  // can have OTHER sibling containers still On Transit, and those rows would otherwise leak
+  // through since this list is flattened to one row per container. Re-check each row's own
+  // status for storekeepers specifically.
+  const storekeeperFiltered = isStorekeeper(user)
+    ? rows.filter((row) => isAtPortOrLaterStatus(row.status))
     : rows;
+
+  const filtered = statusFilterSet
+    ? storekeeperFiltered.filter((row) => statusFilterSet.has(String(row.status || '').trim().toLowerCase()))
+    : storekeeperFiltered;
 
   const total = filtered.length;
   const start = (page - 1) * limit;
@@ -6507,7 +6540,7 @@ exports.getShipmentSummary = async (req, res) => {
         const name = String(w.name || '').trim();
         return code ? `${name} - ${code}` : name;
       });
-      const labelSet = new Set(myLabels);
+      const labelSet = new Set(myLabels.map(normalizeWarehouseLabelForMatch));
 
       const storekeeperContainers = containers.filter((container) => {
         const actual = container?.actual || {};
@@ -6534,19 +6567,19 @@ exports.getShipmentSummary = async (req, res) => {
         if (itemAllocs.length) {
           itemAllocs.forEach((item) => {
             (Array.isArray(item.allocations) ? item.allocations : []).forEach((a) => {
-              if (labelSet.has(String(a.warehouse || '').trim())) {
+              if (labelSet.has(normalizeWarehouseLabelForMatch(a.warehouse))) {
                 totalAllocated += Number(a.containersAssigned) || 0;
               }
             });
           });
         } else {
           allocationRows.forEach((row) => {
-            if (labelSet.has(String(row.warehouse || '').trim())) totalAllocated += 1;
+            if (labelSet.has(normalizeWarehouseLabelForMatch(row.warehouse))) totalAllocated += 1;
           });
         }
 
         splits.forEach((split) => {
-          if (!labelSet.has(String(split.warehouse || '').trim())) return;
+          if (!labelSet.has(normalizeWarehouseLabelForMatch(split.warehouse))) return;
           const isReceived = !!(
             String(split.grn || '').trim() ||
             String(split.batch || '').trim() ||
@@ -6595,10 +6628,11 @@ exports.getShipmentSummary = async (req, res) => {
         },
         receivingTimeline,
         byWarehouse: myLabels.map((label) => {
+          const normalizedLabel = normalizeWarehouseLabelForMatch(label);
           const whContainers = storekeeperContainers.filter((c) => {
             const actual = c?.actual || {};
             const splits = Array.isArray(actual.storageSplits) ? actual.storageSplits : [];
-            return splits.some((s) => String(s.warehouse || '').trim() === label);
+            return splits.some((s) => normalizeWarehouseLabelForMatch(s.warehouse) === normalizedLabel);
           });
           let alloc = 0;
           let recv = 0;
@@ -6610,17 +6644,17 @@ exports.getShipmentSummary = async (req, res) => {
             if (itemAllocs.length) {
               itemAllocs.forEach((item) => {
                 (Array.isArray(item.allocations) ? item.allocations : []).forEach((a) => {
-                  if (String(a.warehouse || '').trim() === label)
+                  if (normalizeWarehouseLabelForMatch(a.warehouse) === normalizedLabel)
                     alloc += Number(a.containersAssigned) || 0;
                 });
               });
             } else {
               allocationRows.forEach((row) => {
-                if (String(row.warehouse || '').trim() === label) alloc += 1;
+                if (normalizeWarehouseLabelForMatch(row.warehouse) === normalizedLabel) alloc += 1;
               });
             }
             (Array.isArray(actual.storageSplits) ? actual.storageSplits : []).forEach((s) => {
-              if (String(s.warehouse || '').trim() !== label) return;
+              if (normalizeWarehouseLabelForMatch(s.warehouse) !== normalizedLabel) return;
               if (String(s.grn || '').trim() || String(s.batch || '').trim() || s.receivedOnDate) recv += 1;
             });
           });
@@ -6663,6 +6697,95 @@ exports.getShipmentSummary = async (req, res) => {
       ];
     })();
 
+    // ── FAS Dashboard: Pending vs Completed per sub-process ─────────────────
+    const fasPendingCompletedDashboard = (() => {
+      const tiles = {
+        clearingAdvanceFas: { key: 'clearingAdvanceFas', label: 'Clearance Advance — FAS Review', pending: 0, completed: 0 },
+        clearingAdvanceFasManager: { key: 'clearingAdvanceFasManager', label: 'Clearance Advance — FAS Manager Review', pending: 0, completed: 0 },
+        murabaha: { key: 'murabaha', label: 'Murabaha', pending: 0, completed: 0 },
+        finalContractReceived: { key: 'finalContractReceived', label: 'Final Contract Received Date', pending: 0, completed: 0 },
+        paymentAllocation: { key: 'paymentAllocation', label: 'Payment Allocation', pending: 0, completed: 0 },
+      };
+
+      containers.forEach((container) => {
+        const actual = container.actual || {};
+
+        // 1 & 2: Clearance Advance, gated to containers with an actual request on file.
+        const caStatus = actual.clearingAdvanceApproval?.status || null;
+        const hasClearingAdvance = !!caStatus || hasSavedClearingAdvanceData(container);
+        if (hasClearingAdvance) {
+          const isApproved = caStatus === CLEARING_ADVANCE_APPROVAL_STATUSES.approved;
+          if (caStatus === CLEARING_ADVANCE_APPROVAL_STATUSES.pendingFas) tiles.clearingAdvanceFas.pending++;
+          if (isApproved) tiles.clearingAdvanceFas.completed++;
+          if (caStatus === CLEARING_ADVANCE_APPROVAL_STATUSES.pendingFasManager) tiles.clearingAdvanceFasManager.pending++;
+          if (isApproved) tiles.clearingAdvanceFasManager.completed++;
+        }
+
+        // 3: Murabaha, gated to containers where Murabaha was not skipped.
+        if (actual.skipMurabaha !== true) {
+          const murabahaSubmitted = !!(actual.murabahaSubmittedToBank || actual.daSubmittedToBank);
+          if (murabahaSubmitted) tiles.murabaha.completed++;
+          else tiles.murabaha.pending++;
+        }
+
+        // 4: Final Contract Received Date, gated to Bank-receiver containers.
+        if (classifyFasReceiver(actual) === 'bank') {
+          const finalContractReceived = !!(actual.documentsReleasedDate || actual.documentsReleasedDocumentUrl);
+          if (finalContractReceived) tiles.finalContractReceived.completed++;
+          else tiles.finalContractReceived.pending++;
+        }
+
+        // 5: Payment Allocation.
+        const paStatus = actual.paymentAllocationApproval?.status || null;
+        if (paStatus === 'pending_fas_manager') tiles.paymentAllocation.pending++;
+        if (paStatus === 'approved') tiles.paymentAllocation.completed++;
+      });
+
+      return Object.values(tiles);
+    })();
+
+    // ── Logistics Dashboard: Pending vs Completed per sub-process ───────────
+    const logisticsPendingCompletedDashboard = (() => {
+      const tiles = {
+        clearingAdvance: { key: 'clearingAdvance', label: 'Clearance Advance', pending: 0, completed: 0 },
+        clearanceProcess: { key: 'clearanceProcess', label: 'Clearance Process', pending: 0, completed: 0 },
+        transportationArrangement: { key: 'transportationArrangement', label: 'Transportation Arrangement', pending: 0, completed: 0 },
+        documentation: { key: 'documentation', label: 'Documentation', pending: 0, completed: 0 },
+      };
+
+      containers.forEach((container) => {
+        const actual = container.actual || {};
+
+        // Clearance Advance — same gate/status as departmentCharts.logistics (cleared/notCleared).
+        const caStatus = actual.clearingAdvanceApproval?.status || null;
+        const hasClearingAdvance = !!caStatus || hasSavedClearingAdvanceData(container);
+        if (hasClearingAdvance) {
+          if (caStatus === CLEARING_ADVANCE_APPROVAL_STATUSES.approved) tiles.clearingAdvance.completed++;
+          else tiles.clearingAdvance.pending++;
+        }
+
+        // Clearance Process — BOE (Bill of Entry) passed customs.
+        if (actual.boePassingDate) tiles.clearanceProcess.completed++;
+        else tiles.clearanceProcess.pending++;
+
+        // Transportation Arrangement — at least one transport booking on file.
+        const transportationBooked = Array.isArray(actual.transportationBooked) ? actual.transportationBooked : [];
+        if (transportationBooked.length > 0) tiles.transportationArrangement.completed++;
+        else tiles.transportationArrangement.pending++;
+
+        // Documentation — all customs original documents submitted.
+        const docs = actual.customsOriginalDocuments || {};
+        const allDocsSubmitted = [
+          'boeSubmissionDate', 'doSubmissionDate', 'blOriginalSubmissionDate',
+          'invoiceSubmissionDate', 'packingListSubmissionDate', 'cooSubmissionDate',
+        ].every((field) => !!docs[field]);
+        if (allDocsSubmitted) tiles.documentation.completed++;
+        else tiles.documentation.pending++;
+      });
+
+      return Object.values(tiles);
+    })();
+
     res.status(200).json({
       kpis: {
         totalShipments: total,
@@ -6673,6 +6796,8 @@ exports.getShipmentSummary = async (req, res) => {
       },
       departmentCharts,
       departmentJobPending,
+      fasPendingCompletedDashboard,
+      logisticsPendingCompletedDashboard,
       fasDashboard,
       warehouseDashboard,
       storekeeperDashboard,
@@ -8116,6 +8241,79 @@ exports.updateBankName = async (req, res) => {
     res.json({ message: 'Bank name updated', bankName });
   } catch (err) {
     console.error('updateBankName error:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// Refresh a single line item's Brand/Barcode/DM Barcode/Variant/H.S Code/Country of
+// Origin/Packing from the Item Master catalog, filling only fields still blank on the
+// shipment — same mapping as enrichExtractionItemsFromCatalog, but on-demand for line
+// items whose catalog record didn't exist yet at LPO-extraction time.
+exports.refreshLineItemFromCatalog = async (req, res) => {
+  try {
+    const { id, index } = req.params;
+    const idx = Number(index);
+
+    const shipment = await Shipment.findById(id);
+    if (!shipment) return res.status(404).json({ message: 'Shipment not found' });
+
+    if (!Number.isInteger(idx) || idx < 0 || idx >= shipment.lineItems.length) {
+      return res.status(400).json({ message: 'Invalid line item index' });
+    }
+
+    const lineItem = shipment.lineItems[idx];
+    const itemCode = String(lineItem.itemCode || '').trim();
+    if (!itemCode) {
+      return res.status(400).json({ message: 'This line item has no item code to look up' });
+    }
+
+    const catalogItem = await Item.findOne({ itemCode }).lean();
+    if (!catalogItem) {
+      return res.status(404).json({ message: `No matching item found in Item Master for code ${itemCode}` });
+    }
+
+    const fieldMap = {
+      brandName: catalogItem.brand || catalogItem.riceName || '',
+      barcode: catalogItem.barcode || '',
+      dmBarcode: catalogItem.dmBarcode || '',
+      variant: catalogItem.variant || '',
+      hsCode: catalogItem.hsCode || '',
+      countryOfOrigin: catalogItem.countryOfOrigin || '',
+      packagingType: catalogItem.packing || '',
+    };
+
+    const changedFields = [];
+    Object.entries(fieldMap).forEach(([field, catalogValue]) => {
+      if (!lineItem[field] && catalogValue) {
+        lineItem[field] = catalogValue;
+        changedFields.push(field);
+      }
+    });
+
+    if (!changedFields.length) {
+      return res.json({ message: 'Item Master has no additional data to add', changedFields: [] });
+    }
+
+    shipment.markModified('lineItems');
+    await shipment.save();
+
+    await writeAuditLog({
+      userId: req.user._id,
+      module: 'Shipment',
+      entity: 'Shipment',
+      entityId: shipment._id,
+      action: 'Updated',
+      after: { lineItemIndex: idx, changedFields },
+      remarks: 'Line item refreshed from Item Master',
+    });
+
+    res.json({
+      message: `Backfilled ${changedFields.length} field(s) from Item Master`,
+      changedFields,
+      lineItem,
+    });
+  } catch (err) {
+    console.error('refreshLineItemFromCatalog error:', err);
     res.status(500).json({ message: 'Server error' });
   }
 };

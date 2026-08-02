@@ -51,6 +51,8 @@ const DASHBOARD_DEPARTMENT_CHART_TEMPLATES = [
   { key: 'dashboard.section.storekeeper_receiving_timeline.view', resource: 'dashboard', screen: 'dashboard', tab: 'dashboard', type: 'action', action: 'storekeeper_receiving_timeline_view', label: 'View Storekeeper Receiving Progress Over Time', sortOrder: 22 },
   { key: 'dashboard.section.storekeeper_summary.view', resource: 'dashboard', screen: 'dashboard', tab: 'dashboard', type: 'action', action: 'storekeeper_summary_view', label: 'View Storekeeper Warehouse Summary', sortOrder: 23 },
   { key: 'dashboard.section.department_job_pending.view', resource: 'dashboard', screen: 'dashboard', tab: 'dashboard', type: 'action', action: 'department_job_pending_view', label: 'View Department Wise Job Pending Report', sortOrder: 24 },
+  { key: 'dashboard.section.fas_pending_completed.view', resource: 'dashboard', screen: 'dashboard', tab: 'dashboard', type: 'action', action: 'fas_pending_completed_view', label: 'View FAS Pending/Completed Dashboard', sortOrder: 25 },
+  { key: 'dashboard.section.logistics_pending_completed.view', resource: 'dashboard', screen: 'dashboard', tab: 'dashboard', type: 'action', action: 'logistics_pending_completed_view', label: 'View Logistics Pending/Completed Dashboard', sortOrder: 26 },
 ];
 
 const DASHBOARD_PERMISSION_KEYS = DASHBOARD_PERMISSION_TEMPLATES.map((permission) => permission.key);
@@ -82,6 +84,7 @@ const SHIPMENT_PERMISSION_TEMPLATES = [
   { key: 'shipment.field.shipment_entry.quantityFinancialSummary.view', resource: 'shipment', screen: 'shipment_tracker', tab: 'shipment_entry', field: 'quantityFinancialSummary', type: 'field', action: 'view', label: 'View Quantity & Financial Summary', sortOrder: 103 },
   { key: 'shipment.field.shipment_entry.bankName.view', resource: 'shipment', screen: 'shipment_tracker', tab: 'shipment_entry', field: 'bankName', type: 'field', action: 'view', label: 'View Bank Name', sortOrder: 104 },
   { key: 'shipment.field.shipment_entry.bankName.edit', resource: 'shipment', screen: 'shipment_tracker', tab: 'shipment_entry', field: 'bankName', type: 'field', action: 'edit', label: 'Edit Bank Name', sortOrder: 105 },
+  { key: 'shipment.field.shipment_entry.lineItems.refresh', resource: 'shipment', screen: 'shipment_tracker', tab: 'shipment_entry', field: 'lineItems', type: 'field', action: 'refresh', label: 'Refresh Line Item from Item Master', sortOrder: 106 },
 
   // ─── Shipment Tracker Split Tab ───────────────────────────────────────────
   { key: 'shipment.tab.shipment_tracker_split.view',          resource: 'shipment', screen: 'shipment_tracker', tab: 'shipment_tracker_split', type: 'tab',    label: 'View Shipment Tracker Split', sortOrder: 110 },
@@ -281,6 +284,7 @@ const DEFAULT_ROLE_PERMISSION_MAP = {
     'menu.dashboard.view',
     ...DASHBOARD_PERMISSION_KEYS,
     'dashboard.section.logistics_chart.view',
+    'dashboard.section.logistics_pending_completed.view',
     'menu.shipments.view',
     'menu.all_shipments.view',
     'menu.reports.view',
@@ -315,6 +319,7 @@ const DEFAULT_ROLE_PERMISSION_MAP = {
     'menu.dashboard.view',
     ...DASHBOARD_PERMISSION_KEYS,
     'dashboard.section.fas_chart.view',
+    'dashboard.section.fas_pending_completed.view',
     'menu.shipments.view',
     'menu.all_shipments.view',
     'menu.reports.view',
@@ -361,6 +366,7 @@ const DEFAULT_ROLE_PERMISSION_MAP = {
     'menu.dashboard.view',
     ...DASHBOARD_PERMISSION_KEYS,
     'dashboard.section.fas_chart.view',
+    'dashboard.section.fas_pending_completed.view',
     'menu.shipments.view',
     'menu.all_shipments.view',
     'menu.reports.view',
