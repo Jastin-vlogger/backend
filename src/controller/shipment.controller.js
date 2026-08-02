@@ -1706,16 +1706,19 @@ const buildShipmentReportRows = async (filters = {}, user = null) => {
         const splits = Array.isArray(actual.storageSplits) ? actual.storageSplits : [];
         const decision = actual.storageAllocationDecision || {};
         const itemAllocs = Array.isArray(decision.itemAllocations) ? decision.itemAllocations : [];
+        // Once transport is booked, that's the real/current destination and takes priority
+        // over the (possibly stale/superseded) allocation plan — see getStorekeeperShipmentIds.
         const booked = Array.isArray(actual.transportationBooked) ? actual.transportationBooked : [];
 
-        return allocs.some((a) => labelSet.has(normalizeWarehouseLabelForMatch(a.warehouse))) ||
-               splits.some((s) => labelSet.has(normalizeWarehouseLabelForMatch(s.warehouse))) ||
-               booked.some((b) => labelSet.has(normalizeWarehouseLabelForMatch(b.warehouse))) ||
-               itemAllocs.some((item) =>
-                 (Array.isArray(item.allocations) ? item.allocations : []).some((a) =>
-                   labelSet.has(normalizeWarehouseLabelForMatch(a.warehouse))
-                 )
-               );
+        return booked.length
+          ? booked.some((b) => labelSet.has(normalizeWarehouseLabelForMatch(b.warehouse)))
+          : allocs.some((a) => labelSet.has(normalizeWarehouseLabelForMatch(a.warehouse))) ||
+            splits.some((s) => labelSet.has(normalizeWarehouseLabelForMatch(s.warehouse))) ||
+            itemAllocs.some((item) =>
+              (Array.isArray(item.allocations) ? item.allocations : []).some((a) =>
+                labelSet.has(normalizeWarehouseLabelForMatch(a.warehouse))
+              )
+            );
       })
       .map((container, childIndex) => {
       const childActual = container?.actual || {};
@@ -5207,6 +5210,38 @@ const isStorekeeper = (user) =>
 const normalizeWarehouseLabelForMatch = (label) =>
   dedupeWarehouseLabel(String(label || '').trim()).toLowerCase();
 
+// True when a single container's OWN warehouse data (not any sibling container's) matches
+// one of the given normalized warehouse labels. Shared by shipment-level admission
+// (getStorekeeperShipmentIds) and per-row filtering (a shipment can have one container that
+// matches and another — e.g. still DRAFT/unallocated — that doesn't; only the matching
+// container's row should ever be shown to a storekeeper).
+const containerMatchesWarehouseLabelSet = (container, labelSet) => {
+  const actual = container?.actual || {};
+  const approval = actual.storageAllocationApproval;
+  const approvalStatus = approval ? (approval.status || 'draft') : null;
+  if (approvalStatus !== null && approvalStatus !== 'pending_warehouse_manager' && approvalStatus !== 'approved') return false;
+
+  const allocs = Array.isArray(actual.storageAllocations) ? actual.storageAllocations : [];
+  const splits = Array.isArray(actual.storageSplits) ? actual.storageSplits : [];
+  const decision = actual.storageAllocationDecision || {};
+  const itemAllocs = Array.isArray(decision.itemAllocations) ? decision.itemAllocations : [];
+  // transportationBooked reflects the actual/current arrival warehouse and can be
+  // RE-ROUTED away from the original storage allocation decision after booking (e.g.
+  // planned for DIC, later booked to SAJAH) — once transport has been booked, that's
+  // the real destination and the stale allocation plan must not also count as a match.
+  // Only fall back to the allocation-plan fields when nothing has been booked yet.
+  const booked = Array.isArray(actual.transportationBooked) ? actual.transportationBooked : [];
+  return booked.length
+    ? booked.some((b) => labelSet.has(normalizeWarehouseLabelForMatch(b.warehouse)))
+    : allocs.some((a) => labelSet.has(normalizeWarehouseLabelForMatch(a.warehouse))) ||
+      splits.some((s) => labelSet.has(normalizeWarehouseLabelForMatch(s.warehouse))) ||
+      itemAllocs.some((item) =>
+        (Array.isArray(item.allocations) ? item.allocations : []).some((a) =>
+          labelSet.has(normalizeWarehouseLabelForMatch(a.warehouse))
+        )
+      );
+};
+
 // Returns shipment IDs for containers allocated to any of the given warehouse labels.
 const getStorekeeperShipmentIds = async (warehouseLabels) => {
   if (!warehouseLabels.length) return [];
@@ -5214,29 +5249,7 @@ const getStorekeeperShipmentIds = async (warehouseLabels) => {
   const containers = await Container.find({}).select('shipmentId actual').lean();
   const matchedShipmentIds = new Set();
   containers.forEach((c) => {
-    const actual = c.actual || {};
-    const approval = actual.storageAllocationApproval;
-    const approvalStatus = approval ? (approval.status || 'draft') : null;
-    if (approvalStatus !== null && approvalStatus !== 'pending_warehouse_manager' && approvalStatus !== 'approved') return;
-
-    const allocs = Array.isArray(actual.storageAllocations) ? actual.storageAllocations : [];
-    const splits = Array.isArray(actual.storageSplits) ? actual.storageSplits : [];
-    const decision = actual.storageAllocationDecision || {};
-    const itemAllocs = Array.isArray(decision.itemAllocations) ? decision.itemAllocations : [];
-    // transportationBooked reflects the actual arrival warehouse and can differ from the
-    // original storage allocation decision (e.g. re-routed after booking) — a storekeeper
-    // should see the shipment based on where containers are really headed.
-    const booked = Array.isArray(actual.transportationBooked) ? actual.transportationBooked : [];
-    const hasMatch =
-      allocs.some((a) => labelSet.has(normalizeWarehouseLabelForMatch(a.warehouse))) ||
-      splits.some((s) => labelSet.has(normalizeWarehouseLabelForMatch(s.warehouse))) ||
-      booked.some((b) => labelSet.has(normalizeWarehouseLabelForMatch(b.warehouse))) ||
-      itemAllocs.some((item) =>
-        (Array.isArray(item.allocations) ? item.allocations : []).some((a) =>
-          labelSet.has(normalizeWarehouseLabelForMatch(a.warehouse))
-        )
-      );
-    if (hasMatch) matchedShipmentIds.add(String(c.shipmentId));
+    if (containerMatchesWarehouseLabelSet(c, labelSet)) matchedShipmentIds.add(String(c.shipmentId));
   });
   return [...matchedShipmentIds];
 };
@@ -5370,6 +5383,7 @@ const fetchShipmentList = async ({ page = 1, limit = 20, search = '', status = '
 // LPOs. Reuses the same role restrictions, search and status computation as the Order list.
 const fetchFlatShipmentList = async ({ page = 1, limit = 20, search = '', statuses = null, user = null }) => {
   let restrictedShipmentIds = null;
+  let storekeeperLabelSet = null;
   if (shouldRestrictShipmentListForPendingBlRoles(user)) {
     restrictedShipmentIds = await getActualWorkflowShipmentIds();
   } else if (shouldRestrictShipmentListToOnTransit(user)) {
@@ -5384,6 +5398,7 @@ const fetchFlatShipmentList = async ({ page = 1, limit = 20, search = '', status
       const name = String(w.name || '').trim();
       return code ? `${name} - ${code}` : name;
     });
+    storekeeperLabelSet = new Set(labels.map(normalizeWarehouseLabelForMatch));
     // A storekeeper shouldn't see a shipment until transportation is complete — same
     // "at port or later" gate the warehouse-manager role already gets, so a warehouse match
     // alone (which can occur while a shipment is still On Transit) isn't enough on its own.
@@ -5576,20 +5591,24 @@ const fetchFlatShipmentList = async ({ page = 1, limit = 20, search = '', status
     };
 
     if (!effectiveContainers.length) {
-      rows.push(buildRow(0, null));
+      rows.push({ row: buildRow(0, null), container: null });
       return;
     }
-    effectiveContainers.forEach((container, idx) => rows.push(buildRow(idx, container)));
+    effectiveContainers.forEach((container, idx) => rows.push({ row: buildRow(idx, container), container }));
   });
 
-  // The shipment-level "at port or later" gate above (restrictedShipmentIds) only decides
-  // whether the PARENT shipment qualifies — a shipment with one container already at port
-  // can have OTHER sibling containers still On Transit, and those rows would otherwise leak
-  // through since this list is flattened to one row per container. Re-check each row's own
-  // status for storekeepers specifically.
+  // The shipment-level "at port or later" / warehouse-match gates above (restrictedShipmentIds)
+  // only decide whether the PARENT shipment qualifies — a shipment with one container already
+  // matching (right warehouse, at port or later) can have OTHER sibling containers still On
+  // Transit or not yet allocated at all, and those rows would otherwise leak through since this
+  // list is flattened to one row per container. Re-check each row's OWN status and warehouse
+  // for storekeepers specifically — never admit a row just because a sibling matched.
   const storekeeperFiltered = isStorekeeper(user)
-    ? rows.filter((row) => isAtPortOrLaterStatus(row.status))
-    : rows;
+    ? rows.filter(({ row, container }) =>
+        isAtPortOrLaterStatus(row.status) &&
+        (!storekeeperLabelSet || containerMatchesWarehouseLabelSet(container, storekeeperLabelSet))
+      ).map(({ row }) => row)
+    : rows.map(({ row }) => row);
 
   const filtered = statusFilterSet
     ? storekeeperFiltered.filter((row) => statusFilterSet.has(String(row.status || '').trim().toLowerCase()))
