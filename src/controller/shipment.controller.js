@@ -4036,15 +4036,29 @@ exports.updateStorageArrivalRow = async (req, res) => {
     const files = normalizeUploadedFiles(req.files);
     container.actual.storageSplits = Array.isArray(container.actual.storageSplits) ? container.actual.storageSplits : [];
 
-    // Saving an out-of-order row index (e.g. row 9 before rows 1-8 ever existed) must never
-    // leave real gaps — Mongoose persists unset array slots as explicit `null` entries, which
-    // then crash any later `.find()`/`.forEach()` reader that assumes every element is an object.
-    while (container.actual.storageSplits.length < rowIndex) {
+    // `rowIndex` is the row's position in the FRONTEND'S canonical display order (derived from
+    // transportationBooked), which can drift from this array's own storage order once containers
+    // are added/reordered over the shipment's life — writing at raw `storageSplits[rowIndex]`
+    // then silently overwrites an unrelated row's data. Identify the target row by container
+    // serial instead, which stays correct regardless of either array's order/length.
+    const submittedSerial = String(req.body.containerSerialNo || '').trim().toUpperCase();
+    let targetIndex = submittedSerial
+      ? container.actual.storageSplits.findIndex(
+          (split) => String(split?.containerSerialNo || '').trim().toUpperCase() === submittedSerial
+        )
+      : -1;
+    if (targetIndex === -1) {
+      targetIndex = container.actual.storageSplits.length;
+    }
+
+    // Mongoose persists unset array slots as explicit `null` entries, which then crash any
+    // later `.find()`/`.forEach()` reader that assumes every element is an object.
+    while (container.actual.storageSplits.length <= targetIndex) {
       container.actual.storageSplits.push({});
     }
 
-    const existing = container.actual.storageSplits[rowIndex] || {};
-    container.actual.storageSplits[rowIndex] = {
+    const existing = container.actual.storageSplits[targetIndex] || {};
+    container.actual.storageSplits[targetIndex] = {
       containerSerialNo: req.body.containerSerialNo || existing.containerSerialNo || '',
       bags: Number(req.body.bags ?? existing.bags ?? 0) || 0,
       warehouse: req.body.warehouse || existing.warehouse || '',
@@ -4065,9 +4079,9 @@ exports.updateStorageArrivalRow = async (req, res) => {
 
     const rowUpload = files?.storageRowDocument?.[0];
     if (rowUpload) {
-      const uploaded = await uploadBufferToS3(rowUpload, `shipments/storage/row-${rowIndex + 1}`);
-      container.actual.storageSplits[rowIndex].documentUrl = uploaded.url;
-      container.actual.storageSplits[rowIndex].documentName = uploaded.fileName;
+      const uploaded = await uploadBufferToS3(rowUpload, `shipments/storage/row-${targetIndex + 1}`);
+      container.actual.storageSplits[targetIndex].documentUrl = uploaded.url;
+      container.actual.storageSplits[targetIndex].documentName = uploaded.fileName;
     }
 
     if (Array.isArray(container.actual.transportationBooked)) {
