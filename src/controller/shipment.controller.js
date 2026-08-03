@@ -1193,6 +1193,7 @@ const getComputedShipmentStatus = (shipment, shipmentContainers = []) => {
 };
 
 const DASHBOARD_STATUS_COLUMNS = [
+  'Delivered WH',
   'At the Port',
   'On Transit',
   REPORT_STATUS_ETD_DUE,
@@ -1224,7 +1225,15 @@ const getDashboardChildFcl = (shipment, container, splitCount) => {
 
 const getDashboardPivotLabel = (shipment, groupBy) => {
   if (groupBy === 'item') {
-    return shipment?.itemId?.description || shipment?.itemDescription || shipment?.item || 'Unknown Item';
+    // itemDescription is literally stored as "Multiple Items (N)" for multi-item shipments
+    // (see shipment.action.controller.js) — join the real per-item names from lineItems
+    // instead, same fallback chain used for report exports (joinDistinctLineItemValues, below).
+    const lineItems = Array.isArray(shipment?.lineItems) ? shipment.lineItems : [];
+    return shipment?.itemId?.description
+      || joinDistinctLineItemValues(lineItems, 'itemDescription')
+      || shipment?.itemDescription
+      || shipment?.item
+      || 'Unknown Item';
   }
   return shipment?.supplierId?.name || shipment?.supplierName || 'Unknown Supplier';
 };
@@ -6328,7 +6337,11 @@ exports.getShipmentSummary = async (req, res) => {
     const supplierYearlyQtyMap = new Map();
 
     shipments.forEach(s => {
-      const itemDesc = s.itemId?.description || s.itemDescription || 'Unknown Item';
+      const sLineItems = Array.isArray(s.lineItems) ? s.lineItems : [];
+      const itemDesc = s.itemId?.description
+        || joinDistinctLineItemValues(sLineItems, 'itemDescription')
+        || s.itemDescription
+        || 'Unknown Item';
       const supplierName = s.supplierId?.name || s.supplierName || 'Unknown Supplier';
       const shipmentContainers = containerMap.get(String(s._id)) || [];
       const fc = Number(s.totalFC || 0);
@@ -6444,14 +6457,14 @@ exports.getShipmentSummary = async (req, res) => {
       let statusPending = 0;
       let statusOverdue = 0;
 
-      let stageDaReceived = 0;
-      let stageSubmittedToBank = 0;
       let stageDaSigned = 0;
-      let stageMurabahaRequired = 0;
-      let stageMurabahaSubmitted = 0;
+      let stageMurabahaSkipped = 0;
+      let stageMurabahaReceived = 0;
       let stageFinalContract = 0;
 
-      const providers = { DHL: 0, Aramex: 0, UPS: 0, TNT: 0, Other: 0 };
+      // Provider Wise is grouped dynamically by the real free-text courierServiceProvider
+      // value (not a fixed DHL/Aramex/UPS/TNT set) — see below, "4. Provider Wise".
+      const providerCounts = new Map();
 
       let pendingPaymentRequested = 0;
       let paymentAllocationPending = 0;
@@ -6487,33 +6500,31 @@ exports.getShipmentSummary = async (req, res) => {
 
         // 3. Document Stage (Bank Receiver Only)
         if (isBank) {
-          if (actual.inwardCollectionAdviceDocumentUrl || actual.inwardCollectionAdviceReceivedAt) {
-            stageDaReceived++;
-          }
-          if (actual.bankSubmittedToBank) {
-            stageSubmittedToBank++;
-          }
           if (actual.daSignedDocumentUrl) {
             stageDaSigned++;
           }
-          if (actual.skipMurabaha === false || actual.skipMurabaha === 'false') {
-            stageMurabahaRequired++;
-          }
-          if (actual.murabahaSubmittedToBank || actual.daSubmittedToBank) {
-            stageMurabahaSubmitted++;
+          const murabahaSkipped = actual.skipMurabaha === true || actual.skipMurabaha === 'true';
+          if (murabahaSkipped) {
+            stageMurabahaSkipped++;
+          } else if (actual.murabahaSubmittedToBank || actual.daSubmittedToBank) {
+            stageMurabahaReceived++;
           }
           if (actual.documentsReleasedDocumentUrl || actual.documentsReleasedDate) {
             stageFinalContract++;
           }
         }
 
-        // 4. Provider Wise
-        const provider = String(actual.courierServiceProvider || '').trim().toLowerCase();
-        if (provider.includes('dhl')) providers.DHL++;
-        else if (provider.includes('aramex')) providers.Aramex++;
-        else if (provider.includes('ups')) providers.UPS++;
-        else if (provider.includes('tnt')) providers.TNT++;
-        else if (provider) providers.Other++;
+        // 4. Provider Wise — grouped by the real free-text courierServiceProvider value.
+        const providerRaw = String(actual.courierServiceProvider || '').trim();
+        if (providerRaw) {
+          const providerKey = providerRaw.toLowerCase();
+          const existing = providerCounts.get(providerKey);
+          if (existing) {
+            existing.value++;
+          } else {
+            providerCounts.set(providerKey, { label: providerRaw, value: 1 });
+          }
+        }
 
         // 5. Approvals
         const caStatus = actual.clearingAdvanceApproval?.status || null;
@@ -6531,14 +6542,12 @@ exports.getShipmentSummary = async (req, res) => {
         statusBreakdown: { completed: statusCompleted, inProgress: statusInProgress, pending: statusPending, overdue: statusOverdue, total: statusCompleted + statusInProgress + statusPending + statusOverdue },
         stageOverview: {
           totalBank: bankReceiver,
-          daReceived: stageDaReceived,
-          submittedToBank: stageSubmittedToBank,
           daSigned: stageDaSigned,
-          murabahaRequired: stageMurabahaRequired,
-          murabahaSubmitted: stageMurabahaSubmitted,
+          murabahaSkipped: stageMurabahaSkipped,
+          murabahaReceived: stageMurabahaReceived,
           finalContract: stageFinalContract
         },
-        providerWise: providers,
+        providerWise: Array.from(providerCounts.values()).sort((a, b) => b.value - a.value),
         pendingPaymentRequested,
         paymentAllocationPending
       };
@@ -6589,15 +6598,36 @@ exports.getShipmentSummary = async (req, res) => {
       let totalAllocated = 0;
       let totalReceived = 0;
       const receivedByDate = new Map(); // "DD-Mon" -> { received, pending }
+      // A container's storageSplits can hold more than one row for the same physical
+      // container — dedupe by serial so "received" counts distinct containers, not raw rows
+      // (this is what let Received exceed Allocated).
+      const normalizeSerialForDashboard = (v) => String(v || '').trim().toUpperCase().replace(/\s+/g, ' ');
+      const receivedKeysSeen = new Set();
+      const allocatedKeysSeen = new Set();
 
       storekeeperContainers.forEach((container) => {
         const actual = container?.actual || {};
         const decision = actual.storageAllocationDecision || {};
         const itemAllocs = Array.isArray(decision.itemAllocations) ? decision.itemAllocations : [];
         const allocationRows = Array.isArray(actual.storageAllocations) ? actual.storageAllocations : [];
+        const transportationBooked = Array.isArray(actual.transportationBooked) ? actual.transportationBooked : [];
         const splits = Array.isArray(actual.storageSplits) ? actual.storageSplits : [];
 
-        if (itemAllocs.length) {
+        // Allocated is recalculated from transportationBooked — each container's CURRENT
+        // warehouse (accounts for reroutes after transport is arranged) — falling back to the
+        // frozen allocation plan only for containers that haven't reached that stage yet.
+        if (transportationBooked.length) {
+          transportationBooked.forEach((row) => {
+            const warehouse = String(row?.warehouse || '').trim();
+            if (!warehouse || !labelSet.has(normalizeWarehouseLabelForMatch(warehouse))) return;
+            const serialKey = normalizeSerialForDashboard(row.containerSerialNo);
+            if (serialKey) {
+              if (allocatedKeysSeen.has(serialKey)) return;
+              allocatedKeysSeen.add(serialKey);
+            }
+            totalAllocated += 1;
+          });
+        } else if (itemAllocs.length) {
           itemAllocs.forEach((item) => {
             (Array.isArray(item.allocations) ? item.allocations : []).forEach((a) => {
               if (labelSet.has(normalizeWarehouseLabelForMatch(a.warehouse))) {
@@ -6619,6 +6649,11 @@ exports.getShipmentSummary = async (req, res) => {
             split.receivedOnDate
           );
           if (!isReceived) return;
+          const serialKey = normalizeSerialForDashboard(split.containerSerialNo);
+          if (serialKey) {
+            if (receivedKeysSeen.has(serialKey)) return;
+            receivedKeysSeen.add(serialKey);
+          }
           totalReceived += 1;
           if (split.receivedOnDate) {
             const d = new Date(split.receivedOnDate);
@@ -6669,12 +6704,26 @@ exports.getShipmentSummary = async (req, res) => {
           });
           let alloc = 0;
           let recv = 0;
+          const whReceivedKeysSeen = new Set();
+          const whAllocatedKeysSeen = new Set();
           storekeeperContainers.forEach((c) => {
             const actual = c?.actual || {};
             const decision = actual.storageAllocationDecision || {};
             const itemAllocs = Array.isArray(decision.itemAllocations) ? decision.itemAllocations : [];
             const allocationRows = Array.isArray(actual.storageAllocations) ? actual.storageAllocations : [];
-            if (itemAllocs.length) {
+            const transportationBooked = Array.isArray(actual.transportationBooked) ? actual.transportationBooked : [];
+            if (transportationBooked.length) {
+              transportationBooked.forEach((row) => {
+                const warehouse = String(row?.warehouse || '').trim();
+                if (!warehouse || normalizeWarehouseLabelForMatch(warehouse) !== normalizedLabel) return;
+                const serialKey = normalizeSerialForDashboard(row.containerSerialNo);
+                if (serialKey) {
+                  if (whAllocatedKeysSeen.has(serialKey)) return;
+                  whAllocatedKeysSeen.add(serialKey);
+                }
+                alloc += 1;
+              });
+            } else if (itemAllocs.length) {
               itemAllocs.forEach((item) => {
                 (Array.isArray(item.allocations) ? item.allocations : []).forEach((a) => {
                   if (normalizeWarehouseLabelForMatch(a.warehouse) === normalizedLabel)
@@ -6688,7 +6737,13 @@ exports.getShipmentSummary = async (req, res) => {
             }
             (Array.isArray(actual.storageSplits) ? actual.storageSplits : []).forEach((s) => {
               if (normalizeWarehouseLabelForMatch(s.warehouse) !== normalizedLabel) return;
-              if (String(s.grn || '').trim() || String(s.batch || '').trim() || s.receivedOnDate) recv += 1;
+              if (!(String(s.grn || '').trim() || String(s.batch || '').trim() || s.receivedOnDate)) return;
+              const serialKey = normalizeSerialForDashboard(s.containerSerialNo);
+              if (serialKey) {
+                if (whReceivedKeysSeen.has(serialKey)) return;
+                whReceivedKeysSeen.add(serialKey);
+              }
+              recv += 1;
             });
           });
           const pending = Math.max(alloc - recv, 0);
@@ -6749,60 +6804,55 @@ exports.getShipmentSummary = async (req, res) => {
     // ── FAS Dashboard: Pending vs Completed per sub-process ─────────────────
     const fasPendingCompletedDashboard = (() => {
       const tiles = {
-        clearingAdvanceFas: { key: 'clearingAdvanceFas', label: 'Clearance Advance — FAS Review', pending: 0, completed: 0, pendingShipments: [] },
-        clearingAdvanceFasManager: { key: 'clearingAdvanceFasManager', label: 'Clearance Advance — FAS Manager Review', pending: 0, completed: 0, pendingShipments: [] },
-        murabaha: { key: 'murabaha', label: 'Murabaha', pending: 0, completed: 0, pendingShipments: [] },
-        finalContractReceived: { key: 'finalContractReceived', label: 'Final Contract Received Date', pending: 0, completed: 0, pendingShipments: [] },
-        paymentAllocation: { key: 'paymentAllocation', label: 'Payment Allocation', pending: 0, completed: 0, pendingShipments: [] },
+        pendingDocuments: { key: 'pendingDocuments', label: 'Pending Documents', pending: 0, completed: 0, pendingShipments: [] },
+        pendingAdvanceRequestApproval: { key: 'pendingAdvanceRequestApproval', label: 'Pending Advance Request Approval', pending: 0, completed: 0, pendingShipments: [] },
+        pendingClearingAdvanceProcessApproval: { key: 'pendingClearingAdvanceProcessApproval', label: 'Pending Clearing Advance Process Approval', pending: 0, completed: 0, pendingShipments: [] },
+        pendingPaymentCosting: { key: 'pendingPaymentCosting', label: 'Pending Payment Costing', pending: 0, completed: 0, pendingShipments: [] },
       };
 
       containers.forEach((container) => {
         const actual = container.actual || {};
 
-        // 1 & 2: Clearance Advance, gated to containers with an actual request on file.
+        // Pending Documents: receiver is bank AND final contract not yet received.
+        if (classifyFasReceiver(actual) === 'bank') {
+          const finalContractReceived = !!(actual.documentsReleasedDate || actual.documentsReleasedDocumentUrl);
+          if (finalContractReceived) tiles.pendingDocuments.completed++;
+          else {
+            tiles.pendingDocuments.pending++;
+            addPendingShipment(tiles.pendingDocuments, container);
+          }
+        }
+
+        // Clearance Advance, gated to containers with an actual request on file.
         const caStatus = actual.clearingAdvanceApproval?.status || null;
         const hasClearingAdvance = !!caStatus || hasSavedClearingAdvanceData(container);
         if (hasClearingAdvance) {
           const isApproved = caStatus === CLEARING_ADVANCE_APPROVAL_STATUSES.approved;
+
+          // Pending Advance Request Approval: request submitted, FAS review not yet done (first stage).
           if (caStatus === CLEARING_ADVANCE_APPROVAL_STATUSES.pendingFas) {
-            tiles.clearingAdvanceFas.pending++;
-            addPendingShipment(tiles.clearingAdvanceFas, container);
+            tiles.pendingAdvanceRequestApproval.pending++;
+            addPendingShipment(tiles.pendingAdvanceRequestApproval, container);
           }
-          if (isApproved) tiles.clearingAdvanceFas.completed++;
-          if (caStatus === CLEARING_ADVANCE_APPROVAL_STATUSES.pendingFasManager) {
-            tiles.clearingAdvanceFasManager.pending++;
-            addPendingShipment(tiles.clearingAdvanceFasManager, container);
-          }
-          if (isApproved) tiles.clearingAdvanceFasManager.completed++;
-        }
+          if (isApproved) tiles.pendingAdvanceRequestApproval.completed++;
 
-        // 3: Murabaha, gated to containers where Murabaha was not skipped.
-        if (actual.skipMurabaha !== true) {
-          const murabahaSubmitted = !!(actual.murabahaSubmittedToBank || actual.daSubmittedToBank);
-          if (murabahaSubmitted) tiles.murabaha.completed++;
-          else {
-            tiles.murabaha.pending++;
-            addPendingShipment(tiles.murabaha, container);
+          // Pending Clearing Advance Process Approval: request submitted, FAS Manager hasn't
+          // given final approval yet — spans the whole pipeline (both review stages).
+          if (!isApproved) {
+            tiles.pendingClearingAdvanceProcessApproval.pending++;
+            addPendingShipment(tiles.pendingClearingAdvanceProcessApproval, container);
+          } else {
+            tiles.pendingClearingAdvanceProcessApproval.completed++;
           }
         }
 
-        // 4: Final Contract Received Date, gated to Bank-receiver containers.
-        if (classifyFasReceiver(actual) === 'bank') {
-          const finalContractReceived = !!(actual.documentsReleasedDate || actual.documentsReleasedDocumentUrl);
-          if (finalContractReceived) tiles.finalContractReceived.completed++;
-          else {
-            tiles.finalContractReceived.pending++;
-            addPendingShipment(tiles.finalContractReceived, container);
-          }
-        }
-
-        // 5: Payment Allocation.
+        // Pending Payment Costing: payment allocation submitted, FAS Manager hasn't approved yet.
         const paStatus = actual.paymentAllocationApproval?.status || null;
         if (paStatus === 'pending_fas_manager') {
-          tiles.paymentAllocation.pending++;
-          addPendingShipment(tiles.paymentAllocation, container);
+          tiles.pendingPaymentCosting.pending++;
+          addPendingShipment(tiles.pendingPaymentCosting, container);
         }
-        if (paStatus === 'approved') tiles.paymentAllocation.completed++;
+        if (paStatus === 'approved') tiles.pendingPaymentCosting.completed++;
       });
 
       return Object.values(tiles);
@@ -6811,51 +6861,53 @@ exports.getShipmentSummary = async (req, res) => {
     // ── Logistics Dashboard: Pending vs Completed per sub-process ───────────
     const logisticsPendingCompletedDashboard = (() => {
       const tiles = {
-        clearingAdvance: { key: 'clearingAdvance', label: 'Clearance Advance', pending: 0, completed: 0, pendingShipments: [] },
-        clearanceProcess: { key: 'clearanceProcess', label: 'Clearance Process', pending: 0, completed: 0, pendingShipments: [] },
-        transportationArrangement: { key: 'transportationArrangement', label: 'Transportation Arrangement', pending: 0, completed: 0, pendingShipments: [] },
-        documentation: { key: 'documentation', label: 'Documentation', pending: 0, completed: 0, pendingShipments: [] },
+        documentWaiting: { key: 'documentWaiting', label: 'Document Waiting', pending: 0, completed: 0, pendingShipments: [] },
+        pendingAdvanceClearance: { key: 'pendingAdvanceClearance', label: 'Pending Advance Clearance', pending: 0, completed: 0, pendingShipments: [] },
+        pendingClearanceAdvanceProcess: { key: 'pendingClearanceAdvanceProcess', label: 'Pending Clearance Advance Process', pending: 0, completed: 0, pendingShipments: [] },
+        pendingTransportationArrangement: { key: 'pendingTransportationArrangement', label: 'Pending Transportation Arrangement', pending: 0, completed: 0, pendingShipments: [] },
       };
 
       containers.forEach((container) => {
         const actual = container.actual || {};
 
-        // Clearance Advance — same gate/status as departmentCharts.logistics (cleared/notCleared).
-        const caStatus = actual.clearingAdvanceApproval?.status || null;
-        const hasClearingAdvance = !!caStatus || hasSavedClearingAdvanceData(container);
-        if (hasClearingAdvance) {
-          if (caStatus === CLEARING_ADVANCE_APPROVAL_STATUSES.approved) tiles.clearingAdvance.completed++;
+        // Document Waiting — same condition as FAS "Pending Documents": receiver is bank AND
+        // final contract not yet received.
+        if (classifyFasReceiver(actual) === 'bank') {
+          const finalContractReceived = !!(actual.documentsReleasedDate || actual.documentsReleasedDocumentUrl);
+          if (finalContractReceived) tiles.documentWaiting.completed++;
           else {
-            tiles.clearingAdvance.pending++;
-            addPendingShipment(tiles.clearingAdvance, container);
+            tiles.documentWaiting.pending++;
+            addPendingShipment(tiles.documentWaiting, container);
           }
         }
 
-        // Clearance Process — BOE (Bill of Entry) passed customs.
-        if (actual.boePassingDate) tiles.clearanceProcess.completed++;
-        else {
-          tiles.clearanceProcess.pending++;
-          addPendingShipment(tiles.clearanceProcess, container);
+        // Pending Advance Clearance — shipment has arrived but the (legacy) clearance advance
+        // request hasn't been recorded yet.
+        if (hasExplicitShipmentArrival(container)) {
+          if (actual.advanceRequestDate) tiles.pendingAdvanceClearance.completed++;
+          else {
+            tiles.pendingAdvanceClearance.pending++;
+            addPendingShipment(tiles.pendingAdvanceClearance, container);
+          }
         }
 
-        // Transportation Arrangement — at least one transport booking on file.
-        const transportationBooked = Array.isArray(actual.transportationBooked) ? actual.transportationBooked : [];
-        if (transportationBooked.length > 0) tiles.transportationArrangement.completed++;
-        else {
-          tiles.transportationArrangement.pending++;
-          addPendingShipment(tiles.transportationArrangement, container);
+        // Pending Clearance Advance Process — advance requested, final contract not yet received.
+        if (actual.advanceRequestDate) {
+          const finalContractReceived = !!actual.documentsReleasedDate;
+          if (finalContractReceived) tiles.pendingClearanceAdvanceProcess.completed++;
+          else {
+            tiles.pendingClearanceAdvanceProcess.pending++;
+            addPendingShipment(tiles.pendingClearanceAdvanceProcess, container);
+          }
         }
 
-        // Documentation — all customs original documents submitted.
-        const docs = actual.customsOriginalDocuments || {};
-        const allDocsSubmitted = [
-          'boeSubmissionDate', 'doSubmissionDate', 'blOriginalSubmissionDate',
-          'invoiceSubmissionDate', 'packingListSubmissionDate', 'cooSubmissionDate',
-        ].every((field) => !!docs[field]);
-        if (allDocsSubmitted) tiles.documentation.completed++;
-        else {
-          tiles.documentation.pending++;
-          addPendingShipment(tiles.documentation, container);
+        // Pending Transportation Arrangement — final contract received, transportation not yet arranged.
+        if (actual.documentsReleasedDate) {
+          if (actual.transportArrangedDate) tiles.pendingTransportationArrangement.completed++;
+          else {
+            tiles.pendingTransportationArrangement.pending++;
+            addPendingShipment(tiles.pendingTransportationArrangement, container);
+          }
         }
       });
 

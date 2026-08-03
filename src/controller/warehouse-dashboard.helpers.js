@@ -4,6 +4,7 @@
 const num = (v) => Number(v) || 0;
 const round2 = (n) => Math.round(n * 100) / 100;
 const pct = (n, d) => (d > 0 ? round2((n / d) * 100) : 0);
+const normalizeSerial = (v) => String(v || '').trim().toUpperCase().replace(/\s+/g, ' ');
 
 // A storage split counts as "received" once it has GRN / batch / received date.
 // Guards against both `undefined` (default param only covers this) and explicit `null` —
@@ -32,9 +33,12 @@ const warehouseLabel = (wh) => {
  *   When supplied, ALL db warehouses appear in byWarehouse (even with 0 allocations),
  *   ensuring the table is anchored to the database rather than container string data.
  *
- * Allocation source: actual.storageAllocationDecision.itemAllocations[].allocations[]
- *   ({ warehouse, containersAssigned }) with per-item expectedContainers.
- *   Falls back to counting actual.storageAllocations[] rows (one FCL each) per warehouse.
+ * Allocation source: actual.transportationBooked[] (one row per physical container, each
+ *   carrying that container's CURRENT warehouse) — this is the authoritative, live source,
+ *   since a container's warehouse can change after transport is arranged (a reroute) without
+ *   the original storageAllocationDecision plan ever being updated to match. Falls back to the
+ *   plan (itemAllocations[].allocations[].containersAssigned, or legacy storageAllocations[]
+ *   rows) only for containers that haven't reached transportation-arrangement yet.
  * Received source: actual.storageSplits[] rows with GRN/received data, grouped by warehouse.
  */
 const buildWarehouseDashboard = (containers = [], dbWarehouses = []) => {
@@ -49,6 +53,11 @@ const buildWarehouseDashboard = (containers = [], dbWarehouses = []) => {
   let totalAllocated = 0;
   let totalReceived = 0;
   let totalExpected = 0;
+  // A container's storageSplits (or transportationBooked) can hold more than one row for the
+  // same physical container (e.g. from a historical edit-save duplicate, or a legitimate
+  // re-split) — dedupe by container serial so counts reflect distinct containers, not raw rows.
+  const receivedKeysSeen = new Set();
+  const allocatedKeysSeen = new Set();
 
   const addAlloc = (wh, fcl) => {
     const key = String(wh || '').trim();
@@ -71,6 +80,7 @@ const buildWarehouseDashboard = (containers = [], dbWarehouses = []) => {
     const decision = actual.storageAllocationDecision || {};
     const itemAllocations = Array.isArray(decision.itemAllocations) ? decision.itemAllocations : [];
     const allocationRows = Array.isArray(actual.storageAllocations) ? actual.storageAllocations : [];
+    const transportationBooked = Array.isArray(actual.transportationBooked) ? actual.transportationBooked : [];
     const splits = Array.isArray(actual.storageSplits) ? actual.storageSplits : [];
 
     const approval = actual.storageAllocationApproval;
@@ -82,7 +92,26 @@ const buildWarehouseDashboard = (containers = [], dbWarehouses = []) => {
     let containerExpected = 0;
     let containerAllocated = 0;
 
-    if (itemAllocations.length) {
+    if (transportationBooked.length) {
+      // Authoritative: count one distinct physical container per booked row, at its CURRENT
+      // (post-reroute-if-any) warehouse — deduplicated by serial the same way "received" is.
+      transportationBooked.forEach((row) => {
+        const warehouse = String(row?.warehouse || '').trim();
+        if (!warehouse) return;
+        // Only dedupe when we have a real serial to key on — a shared/missing serial isn't
+        // reliable evidence of a duplicate row (e.g. legacy rows can share other fields).
+        const serialKey = normalizeSerial(row?.containerSerialNo);
+        if (serialKey) {
+          if (allocatedKeysSeen.has(serialKey)) return;
+          allocatedKeysSeen.add(serialKey);
+        }
+        addAlloc(warehouse, 1);
+        containerAllocated += 1;
+      });
+      itemAllocations.forEach((item) => {
+        containerExpected += num(item.expectedContainers);
+      });
+    } else if (itemAllocations.length) {
       itemAllocations.forEach((item) => {
         containerExpected += num(item.expectedContainers);
         if (isAllocatedState) {
@@ -101,13 +130,27 @@ const buildWarehouseDashboard = (containers = [], dbWarehouses = []) => {
       });
     }
 
-    // Expected FCL for pending-allocation math: prefer item expectations, else container FCL.
-    const expected = containerExpected || num(actual.FCL) || num(planned.FCL) || containerAllocated;
-    totalExpected += Math.max(expected, containerAllocated);
+    // Expected FCL for pending-allocation math — only counted for containers that have
+    // actually entered the allocation workflow (transport arranged, or have item/legacy
+    // allocation data on file). Containers that never went through this workflow at all
+    // aren't "pending allocation", they're simply outside its scope — counting them here was
+    // what inflated this total to include the entire historical container backlog.
+    const hasAllocationWorkflow = transportationBooked.length > 0 || itemAllocations.length > 0 || allocationRows.length > 0;
+    if (hasAllocationWorkflow) {
+      const expected = containerExpected || num(actual.FCL) || num(planned.FCL) || containerAllocated;
+      totalExpected += Math.max(expected, containerAllocated);
+    }
 
-    // Received: one FCL per received split, grouped by warehouse.
+    // Received: one per received split, grouped by warehouse — deduplicated by container
+    // serial when one is on file (see receivedKeysSeen above); rows with no serial are counted
+    // as-is, since a shared/missing serial isn't reliable evidence of a duplicate row.
     splits.forEach((split) => {
       if (!isSplitReceived(split)) return;
+      const serialKey = normalizeSerial(split.containerSerialNo);
+      if (serialKey) {
+        if (receivedKeysSeen.has(serialKey)) return;
+        receivedKeysSeen.add(serialKey);
+      }
       addRecv(split.warehouse, 1);
     });
   });
