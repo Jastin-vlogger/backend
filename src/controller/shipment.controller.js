@@ -6621,7 +6621,13 @@ exports.getShipmentSummary = async (req, res) => {
         const actual = container?.actual || {};
         const approval = actual.storageAllocationApproval;
         const approvalStatus = approval ? (approval.status || 'draft') : null;
-        if (approvalStatus !== null && approvalStatus !== 'pending_warehouse_manager' && approvalStatus !== 'approved') return false;
+        // A container already booked to transportation is real, current allocation data — the
+        // old storageAllocationApproval status (still 'draft' if a warehouse manager never
+        // formally re-approved after a reroute) shouldn't hide it from the storekeeper who's
+        // actually waiting to receive it. Only apply the approval gate to containers with no
+        // transportation booking at all (the older workflow this gate was built for).
+        const hasTransportationBooked = Array.isArray(actual.transportationBooked) && actual.transportationBooked.length > 0;
+        if (!hasTransportationBooked && approvalStatus !== null && approvalStatus !== 'pending_warehouse_manager' && approvalStatus !== 'approved') return false;
 
         const shipment = shipments.find((s) => String(s._id) === String(container.shipmentId));
         return isAtPortOrLaterStatus(getDashboardStatusColumn(shipment, container));
@@ -8860,6 +8866,7 @@ const STORAGE_ARRIVAL_REPORT_COLUMNS = [
   { header: 'P.Date', key: 'pDate', width: 12 },
   { header: 'E.Date', key: 'eDate', width: 12 },
   { header: 'Status', key: 'status', width: 14 },
+  { header: 'Shortage Bag', key: 'shortageBags', width: 12 },
   { header: 'Remarks', key: 'remarks', width: 22 },
 ];
 
@@ -8951,6 +8958,7 @@ const buildStorageArrivalReportRows = async (user = null) => {
           pDate: formatDateValue(split.productionDate) || '',
           eDate: formatDateValue(split.expiryDate) || '',
           status: received ? 'Arrived' : 'Pending',
+          shortageBags: split.shortageBags ?? 0,
           remarks: split.remarks || '',
         });
       });
