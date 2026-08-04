@@ -82,6 +82,14 @@ const buildWarehouseDashboard = (containers = [], dbWarehouses = []) => {
     const allocationRows = Array.isArray(actual.storageAllocations) ? actual.storageAllocations : [];
     const transportationBooked = Array.isArray(actual.transportationBooked) ? actual.transportationBooked : [];
     const splits = Array.isArray(actual.storageSplits) ? actual.storageSplits : [];
+    // Fallback for transportationBooked rows with no warehouse recorded (a real data gap seen
+    // in practice — a container can be physically received and recorded at a warehouse via the
+    // storage-arrival flow even though its own transport-arrangement row was left blank).
+    const splitWarehouseBySerial = new Map(
+      splits
+        .filter((s) => normalizeSerial(s?.containerSerialNo) && String(s?.warehouse || '').trim())
+        .map((s) => [normalizeSerial(s.containerSerialNo), String(s.warehouse).trim()])
+    );
 
     const approval = actual.storageAllocationApproval;
     const approvalStatus = approval ? (approval.status || 'draft') : null;
@@ -96,7 +104,8 @@ const buildWarehouseDashboard = (containers = [], dbWarehouses = []) => {
       // Authoritative: count one distinct physical container per booked row, at its CURRENT
       // (post-reroute-if-any) warehouse — deduplicated by serial the same way "received" is.
       transportationBooked.forEach((row) => {
-        const warehouse = String(row?.warehouse || '').trim();
+        const bookedWarehouse = String(row?.warehouse || '').trim();
+        const warehouse = bookedWarehouse || splitWarehouseBySerial.get(normalizeSerial(row?.containerSerialNo)) || '';
         if (!warehouse) return;
         // Only dedupe when we have a real serial to key on — a shared/missing serial isn't
         // reliable evidence of a duplicate row (e.g. legacy rows can share other fields).

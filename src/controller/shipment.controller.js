@@ -1238,11 +1238,22 @@ const getDashboardPivotLabel = (shipment, groupBy) => {
   return shipment?.supplierId?.name || shipment?.supplierName || 'Unknown Supplier';
 };
 
+// Internal status-classification strings (REPORT_STATUS_ETD_DUE/_UNCONFIRMED) are matched
+// against elsewhere in this file and possibly stored data — kept unchanged. Only the DISPLAYED
+// label is renamed here, mirroring the Status Snapshot table's STATUS_SNAPSHOT_CONFIG labels,
+// so the two stay consistent throughout the dashboard.
+const displayDashboardStatusColumn = (column) => {
+  if (column === REPORT_STATUS_ETD_DUE) return 'ETD yet to Due';
+  if (column === REPORT_STATUS_ETD_UNCONFIRMED) return 'Shipment Not Schedule';
+  return column;
+};
+
 const buildDashboardStatusPivot = (shipments, containerMap, groupBy = 'supplier') => {
   const currentMonth = new Date().toLocaleString('en-US', { month: 'long' });
-  const columns = DASHBOARD_STATUS_COLUMNS.map((column) =>
-    column === REPORT_STATUS_ETD_DUE ? `${column} - ${currentMonth}` : column
-  );
+  const columns = DASHBOARD_STATUS_COLUMNS.map((column) => {
+    const display = displayDashboardStatusColumn(column);
+    return column === REPORT_STATUS_ETD_DUE ? `${display} - ${currentMonth}` : display;
+  });
   const rowMap = new Map();
   const totals = Object.fromEntries(columns.map((column) => [column, 0]));
   const totalsFCL = Object.fromEntries(columns.map((column) => [column, 0]));
@@ -1274,7 +1285,7 @@ const buildDashboardStatusPivot = (shipments, containerMap, groupBy = 'supplier'
     if (!shipmentContainers.length) {
       addValue(
         label,
-        REPORT_STATUS_ETD_UNCONFIRMED,
+        displayDashboardStatusColumn(REPORT_STATUS_ETD_UNCONFIRMED),
         Number(shipment?.plannedQtyMT || shipment?.totalOrderedQtyMT || 0),
         Number(shipment?.fcl || 0)
       );
@@ -1283,7 +1294,8 @@ const buildDashboardStatusPivot = (shipments, containerMap, groupBy = 'supplier'
 
     shipmentContainers.forEach((container) => {
       const baseColumn = getDashboardStatusColumn(shipment, container);
-      const column = baseColumn === REPORT_STATUS_ETD_DUE ? `${baseColumn} - ${currentMonth}` : baseColumn;
+      const displayBase = displayDashboardStatusColumn(baseColumn);
+      const column = baseColumn === REPORT_STATUS_ETD_DUE ? `${displayBase} - ${currentMonth}` : displayBase;
       addValue(
         label,
         column,
@@ -3051,7 +3063,25 @@ exports.updatePackagingBags = async (req, res) => {
       if (idx < containerInfo.length) {
         containerInfo[idx].no_of_bags = no_of_bags === undefined ? (containerInfo[idx].no_of_bags || 0) : safeBags;
         if (container_number !== undefined) {
-          containerInfo[idx].container_number = container_number || '';
+          const oldNumber = String(containerInfo[idx].container_number || '').trim();
+          const newNumber = String(container_number || '').trim();
+          containerInfo[idx].container_number = newNumber;
+
+          // Bulk Update Transportation reads container names from actual.transportationBooked —
+          // a rename here must propagate there too, or the old (now-wrong) number keeps showing
+          // in that modal. Match by the OLD serial first (safer than a blind positional index,
+          // since these two arrays can drift apart); fall back to position only when the old
+          // number was never set on that transportationBooked row either.
+          if (newNumber && newNumber !== oldNumber && Array.isArray(container.actual.transportationBooked)) {
+            const booked = container.actual.transportationBooked;
+            let matched = oldNumber
+              ? booked.filter((row) => String(row?.containerSerialNo || '').trim() === oldNumber)
+              : [];
+            if (!matched.length && booked[idx] && !String(booked[idx].containerSerialNo || '').trim()) {
+              matched = [booked[idx]];
+            }
+            matched.forEach((row) => { row.containerSerialNo = newNumber; });
+          }
         }
       }
     });
@@ -6457,9 +6487,10 @@ exports.getShipmentSummary = async (req, res) => {
       let statusPending = 0;
       let statusOverdue = 0;
 
-      let stageDaSigned = 0;
-      let stageMurabahaSkipped = 0;
-      let stageMurabahaReceived = 0;
+      let stageCadCompleted = 0;
+      let stageCadPending = 0;
+      let stageMurabahaCompleted = 0;
+      let stageMurabahaPending = 0;
       let stageFinalContract = 0;
 
       // Provider Wise is grouped dynamically by the real free-text courierServiceProvider
@@ -6498,18 +6529,19 @@ exports.getShipmentSummary = async (req, res) => {
           }
         }
 
-        // 3. Document Stage (Bank Receiver Only)
+        // 3. Document Stage (Bank Receiver Only) — CAD vs Murabaha Through, each split into
+        // its own completed/pending by whether the final contract has been received.
         if (isBank) {
-          if (actual.daSignedDocumentUrl) {
-            stageDaSigned++;
-          }
+          const finalContractReceived = !!(actual.documentsReleasedDocumentUrl || actual.documentsReleasedDate);
           const murabahaSkipped = actual.skipMurabaha === true || actual.skipMurabaha === 'true';
           if (murabahaSkipped) {
-            stageMurabahaSkipped++;
-          } else if (actual.murabahaSubmittedToBank || actual.daSubmittedToBank) {
-            stageMurabahaReceived++;
+            if (finalContractReceived) stageCadCompleted++;
+            else stageCadPending++;
+          } else {
+            if (finalContractReceived) stageMurabahaCompleted++;
+            else stageMurabahaPending++;
           }
-          if (actual.documentsReleasedDocumentUrl || actual.documentsReleasedDate) {
+          if (finalContractReceived) {
             stageFinalContract++;
           }
         }
@@ -6542,9 +6574,10 @@ exports.getShipmentSummary = async (req, res) => {
         statusBreakdown: { completed: statusCompleted, inProgress: statusInProgress, pending: statusPending, overdue: statusOverdue, total: statusCompleted + statusInProgress + statusPending + statusOverdue },
         stageOverview: {
           totalBank: bankReceiver,
-          daSigned: stageDaSigned,
-          murabahaSkipped: stageMurabahaSkipped,
-          murabahaReceived: stageMurabahaReceived,
+          cadCompleted: stageCadCompleted,
+          cadPending: stageCadPending,
+          murabahaCompleted: stageMurabahaCompleted,
+          murabahaPending: stageMurabahaPending,
           finalContract: stageFinalContract
         },
         providerWise: Array.from(providerCounts.values()).sort((a, b) => b.value - a.value),
@@ -6612,13 +6645,22 @@ exports.getShipmentSummary = async (req, res) => {
         const allocationRows = Array.isArray(actual.storageAllocations) ? actual.storageAllocations : [];
         const transportationBooked = Array.isArray(actual.transportationBooked) ? actual.transportationBooked : [];
         const splits = Array.isArray(actual.storageSplits) ? actual.storageSplits : [];
+        // Fallback for transportationBooked rows with no warehouse recorded (a real data gap —
+        // a container can be physically received/recorded at a warehouse via the storage-arrival
+        // flow even though its own transport-arrangement row was left blank).
+        const splitWarehouseBySerial = new Map(
+          splits
+            .filter((s) => normalizeSerialForDashboard(s?.containerSerialNo) && String(s?.warehouse || '').trim())
+            .map((s) => [normalizeSerialForDashboard(s.containerSerialNo), String(s.warehouse).trim()])
+        );
 
         // Allocated is recalculated from transportationBooked — each container's CURRENT
         // warehouse (accounts for reroutes after transport is arranged) — falling back to the
         // frozen allocation plan only for containers that haven't reached that stage yet.
         if (transportationBooked.length) {
           transportationBooked.forEach((row) => {
-            const warehouse = String(row?.warehouse || '').trim();
+            const bookedWarehouse = String(row?.warehouse || '').trim();
+            const warehouse = bookedWarehouse || splitWarehouseBySerial.get(normalizeSerialForDashboard(row?.containerSerialNo)) || '';
             if (!warehouse || !labelSet.has(normalizeWarehouseLabelForMatch(warehouse))) return;
             const serialKey = normalizeSerialForDashboard(row.containerSerialNo);
             if (serialKey) {
@@ -6712,9 +6754,16 @@ exports.getShipmentSummary = async (req, res) => {
             const itemAllocs = Array.isArray(decision.itemAllocations) ? decision.itemAllocations : [];
             const allocationRows = Array.isArray(actual.storageAllocations) ? actual.storageAllocations : [];
             const transportationBooked = Array.isArray(actual.transportationBooked) ? actual.transportationBooked : [];
+            const cSplits = Array.isArray(actual.storageSplits) ? actual.storageSplits : [];
+            const cSplitWarehouseBySerial = new Map(
+              cSplits
+                .filter((s) => normalizeSerialForDashboard(s?.containerSerialNo) && String(s?.warehouse || '').trim())
+                .map((s) => [normalizeSerialForDashboard(s.containerSerialNo), String(s.warehouse).trim()])
+            );
             if (transportationBooked.length) {
               transportationBooked.forEach((row) => {
-                const warehouse = String(row?.warehouse || '').trim();
+                const bookedWarehouse = String(row?.warehouse || '').trim();
+                const warehouse = bookedWarehouse || cSplitWarehouseBySerial.get(normalizeSerialForDashboard(row?.containerSerialNo)) || '';
                 if (!warehouse || normalizeWarehouseLabelForMatch(warehouse) !== normalizedLabel) return;
                 const serialKey = normalizeSerialForDashboard(row.containerSerialNo);
                 if (serialKey) {
@@ -6796,9 +6845,15 @@ exports.getShipmentSummary = async (req, res) => {
     const addPendingShipment = (tile, container) => {
       const info = shipmentLookupById.get(String(container.shipmentId));
       if (!info) return;
-      if (!tile.pendingShipments.some((s) => String(s._id) === String(info._id))) {
-        tile.pendingShipments.push(info);
-      }
+      const containerId = String(container._id);
+      if (tile.pendingShipments.some((s) => s.containerId === containerId)) return;
+      // Precise, container-level shipment number (e.g. "RHST-0001/PO01-2696-1") — matches
+      // the child-numbering shown throughout the shipment tracker UI. A shipment with multiple
+      // pending containers now lists each one separately instead of collapsing to one parent row.
+      const shipmentContainers = containerMap.get(String(container.shipmentId)) || [];
+      const childIndex = shipmentContainers.findIndex((c) => String(c._id) === containerId);
+      const childShipmentNo = childIndex >= 0 ? `${info.shipmentNo}-${childIndex + 1}` : info.shipmentNo;
+      tile.pendingShipments.push({ _id: info._id, containerId, shipmentNo: childShipmentNo, supplier: info.supplier });
     };
 
     // ── FAS Dashboard: Pending vs Completed per sub-process ─────────────────
@@ -6861,10 +6916,10 @@ exports.getShipmentSummary = async (req, res) => {
     // ── Logistics Dashboard: Pending vs Completed per sub-process ───────────
     const logisticsPendingCompletedDashboard = (() => {
       const tiles = {
-        documentWaiting: { key: 'documentWaiting', label: 'Document Waiting', pending: 0, completed: 0, pendingShipments: [] },
-        pendingAdvanceClearance: { key: 'pendingAdvanceClearance', label: 'Pending Advance Clearance', pending: 0, completed: 0, pendingShipments: [] },
-        pendingClearanceAdvanceProcess: { key: 'pendingClearanceAdvanceProcess', label: 'Pending Clearance Advance Process', pending: 0, completed: 0, pendingShipments: [] },
-        pendingTransportationArrangement: { key: 'pendingTransportationArrangement', label: 'Pending Transportation Arrangement', pending: 0, completed: 0, pendingShipments: [] },
+        documentWaiting: { key: 'documentWaiting', label: 'Awaiting Commercial Document', pending: 0, completed: 0, pendingShipments: [] },
+        pendingAdvanceClearance: { key: 'pendingAdvanceClearance', label: 'Clearing Advance Pending', pending: 0, completed: 0, pendingShipments: [] },
+        pendingClearanceAdvanceProcess: { key: 'pendingClearanceAdvanceProcess', label: 'Clearance Advance Allocation Pending', pending: 0, completed: 0, pendingShipments: [] },
+        pendingTransportationArrangement: { key: 'pendingTransportationArrangement', label: 'Transportation Pending', pending: 0, completed: 0, pendingShipments: [] },
       };
 
       containers.forEach((container) => {
@@ -6881,10 +6936,13 @@ exports.getShipmentSummary = async (req, res) => {
           }
         }
 
-        // Pending Advance Clearance — shipment has arrived but the (legacy) clearance advance
-        // request hasn't been recorded yet.
+        // Pending Advance Clearance — shipment has arrived but clearance advance hasn't been
+        // requested yet. Uses clearingAdvanceApproval.submittedAt (the actively-used workflow
+        // field) rather than the legacy advanceRequestDate, which is never populated in real
+        // data (confirmed 0/102 containers) and made this tile permanently 100% pending.
+        const clearingAdvanceRequested = !!actual.clearingAdvanceApproval?.submittedAt;
         if (hasExplicitShipmentArrival(container)) {
-          if (actual.advanceRequestDate) tiles.pendingAdvanceClearance.completed++;
+          if (clearingAdvanceRequested) tiles.pendingAdvanceClearance.completed++;
           else {
             tiles.pendingAdvanceClearance.pending++;
             addPendingShipment(tiles.pendingAdvanceClearance, container);
@@ -6892,7 +6950,7 @@ exports.getShipmentSummary = async (req, res) => {
         }
 
         // Pending Clearance Advance Process — advance requested, final contract not yet received.
-        if (actual.advanceRequestDate) {
+        if (clearingAdvanceRequested) {
           const finalContractReceived = !!actual.documentsReleasedDate;
           if (finalContractReceived) tiles.pendingClearanceAdvanceProcess.completed++;
           else {
@@ -6901,9 +6959,12 @@ exports.getShipmentSummary = async (req, res) => {
           }
         }
 
-        // Pending Transportation Arrangement — final contract received, transportation not yet arranged.
+        // Pending Transportation Arrangement — final contract received, transportation not yet
+        // arranged. Uses transportationBooked (the actively-used array, 44/102 containers) rather
+        // than the legacy transportArrangedDate single field, which is never populated (0/102).
         if (actual.documentsReleasedDate) {
-          if (actual.transportArrangedDate) tiles.pendingTransportationArrangement.completed++;
+          const transportationArranged = Array.isArray(actual.transportationBooked) && actual.transportationBooked.length > 0;
+          if (transportationArranged) tiles.pendingTransportationArrangement.completed++;
           else {
             tiles.pendingTransportationArrangement.pending++;
             addPendingShipment(tiles.pendingTransportationArrangement, container);
