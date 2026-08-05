@@ -81,6 +81,7 @@ const { applyLogisticsScalarFields } = require('./logistics.helpers');
 const { isOnTransitOrLaterStatus, isAtPortOrLaterStatus } = require('./shipment-visibility.helpers');
 const { FAS_DOC_TRACKING_COLUMNS, mapFasDocumentTrackingRow, classifyFasReceiver } = require('./fas-report.helpers');
 const { buildWarehouseDashboard } = require('./warehouse-dashboard.helpers');
+const { RH_STATUS_SUMMARY_COLUMNS, buildRhStatusSummaryRows } = require('./rh-status-summary.helpers');
 const Warehouse = require('../models/warehouse.model');
 
 const toSignedDocument = async (url, name, expiresIn = 900) => {
@@ -5270,10 +5271,6 @@ const normalizeWarehouseLabelForMatch = (label) =>
 // container's row should ever be shown to a storekeeper).
 const containerMatchesWarehouseLabelSet = (container, labelSet) => {
   const actual = container?.actual || {};
-  const approval = actual.storageAllocationApproval;
-  const approvalStatus = approval ? (approval.status || 'draft') : null;
-  if (approvalStatus !== null && approvalStatus !== 'pending_warehouse_manager' && approvalStatus !== 'approved') return false;
-
   const allocs = Array.isArray(actual.storageAllocations) ? actual.storageAllocations : [];
   const splits = Array.isArray(actual.storageSplits) ? actual.storageSplits : [];
   const decision = actual.storageAllocationDecision || {};
@@ -5284,6 +5281,18 @@ const containerMatchesWarehouseLabelSet = (container, labelSet) => {
   // the real destination and the stale allocation plan must not also count as a match.
   // Only fall back to the allocation-plan fields when nothing has been booked yet.
   const booked = Array.isArray(actual.transportationBooked) ? actual.transportationBooked : [];
+
+  // The old storageAllocationApproval gate (draft/pending_warehouse_manager/approved) was
+  // built for the pre-transportationBooked workflow — a container can be genuinely booked to
+  // a warehouse (real, current data) while that older approval field is still stuck on 'draft'
+  // (e.g. never re-approved after a reroute). Only apply that gate when there's no booking to
+  // fall back on; a real transportationBooked entry is authoritative on its own.
+  if (!booked.length) {
+    const approval = actual.storageAllocationApproval;
+    const approvalStatus = approval ? (approval.status || 'draft') : null;
+    if (approvalStatus !== null && approvalStatus !== 'pending_warehouse_manager' && approvalStatus !== 'approved') return false;
+  }
+
   return booked.length
     ? booked.some((b) => labelSet.has(normalizeWarehouseLabelForMatch(b.warehouse)))
     : allocs.some((a) => labelSet.has(normalizeWarehouseLabelForMatch(a.warehouse))) ||
@@ -6492,6 +6501,21 @@ exports.getShipmentSummary = async (req, res) => {
       let stageMurabahaCompleted = 0;
       let stageMurabahaPending = 0;
       let stageFinalContract = 0;
+      const cadPendingShipments = [];
+      const murabahaPendingShipments = [];
+      const finalContractPendingShipments = [];
+      // shipmentId -> shipment, for the pending-shipment lists above (eye-icon drill-downs).
+      const stageShipmentLookupById = new Map(shipments.map((s) => [String(s._id), s]));
+      const pushStagePending = (list, container) => {
+        const shipment = stageShipmentLookupById.get(String(container.shipmentId));
+        if (!shipment) return;
+        const containerId = String(container._id);
+        if (list.some((s) => s.containerId === containerId)) return;
+        const shipmentContainers = containerMap.get(String(container.shipmentId)) || [];
+        const childIndex = shipmentContainers.findIndex((c) => String(c._id) === containerId);
+        const shipmentNo = childIndex >= 0 ? `${shipment.shipmentNo}-${childIndex + 1}` : shipment.shipmentNo;
+        list.push({ _id: shipment._id, containerId, shipmentNo, supplier: shipment.supplierId?.name || shipment.supplierName || null });
+      };
 
       // Provider Wise is grouped dynamically by the real free-text courierServiceProvider
       // value (not a fixed DHL/Aramex/UPS/TNT set) — see below, "4. Provider Wise".
@@ -6536,13 +6560,15 @@ exports.getShipmentSummary = async (req, res) => {
           const murabahaSkipped = actual.skipMurabaha === true || actual.skipMurabaha === 'true';
           if (murabahaSkipped) {
             if (finalContractReceived) stageCadCompleted++;
-            else stageCadPending++;
+            else { stageCadPending++; pushStagePending(cadPendingShipments, container); }
           } else {
             if (finalContractReceived) stageMurabahaCompleted++;
-            else stageMurabahaPending++;
+            else { stageMurabahaPending++; pushStagePending(murabahaPendingShipments, container); }
           }
           if (finalContractReceived) {
             stageFinalContract++;
+          } else {
+            pushStagePending(finalContractPendingShipments, container);
           }
         }
 
@@ -6576,9 +6602,12 @@ exports.getShipmentSummary = async (req, res) => {
           totalBank: bankReceiver,
           cadCompleted: stageCadCompleted,
           cadPending: stageCadPending,
+          cadPendingShipments,
           murabahaCompleted: stageMurabahaCompleted,
           murabahaPending: stageMurabahaPending,
-          finalContract: stageFinalContract
+          murabahaPendingShipments,
+          finalContract: stageFinalContract,
+          finalContractPendingShipments
         },
         providerWise: Array.from(providerCounts.values()).sort((a, b) => b.value - a.value),
         pendingPaymentRequested,
@@ -6754,6 +6783,9 @@ exports.getShipmentSummary = async (req, res) => {
           let recv = 0;
           const whReceivedKeysSeen = new Set();
           const whAllocatedKeysSeen = new Set();
+          // Track which container each allocated serial came from, so pending (allocated but
+          // not yet received) entries can be resolved to a real shipment for the drill-down.
+          const allocatedContainerBySerial = new Map();
           storekeeperContainers.forEach((c) => {
             const actual = c?.actual || {};
             const decision = actual.storageAllocationDecision || {};
@@ -6775,6 +6807,7 @@ exports.getShipmentSummary = async (req, res) => {
                 if (serialKey) {
                   if (whAllocatedKeysSeen.has(serialKey)) return;
                   whAllocatedKeysSeen.add(serialKey);
+                  allocatedContainerBySerial.set(serialKey, c);
                 }
                 alloc += 1;
               });
@@ -6802,7 +6835,33 @@ exports.getShipmentSummary = async (req, res) => {
             });
           });
           const pending = Math.max(alloc - recv, 0);
-          return { warehouse: label, allocated: alloc, received: recv, pendingReceiving: pending, progress: pct(recv, alloc) };
+
+          // Pending shipments = allocated containers not yet received, resolved to a real
+          // shipment reference (with the same container-level "-N" numbering used elsewhere)
+          // for the drill-down modal. A single container DOCUMENT can hold many physical
+          // containers (serials) — dedupe by document so a doc with e.g. 3 pending serials
+          // shows once in the list, not 3 identical-looking rows that all link to the same page.
+          const pendingShipments = [];
+          const pendingContainerDocsSeen = new Set();
+          allocatedContainerBySerial.forEach((c, serialKey) => {
+            if (whReceivedKeysSeen.has(serialKey)) return;
+            const containerDocId = String(c._id);
+            if (pendingContainerDocsSeen.has(containerDocId)) return;
+            pendingContainerDocsSeen.add(containerDocId);
+            const shipment = shipments.find((s) => String(s._id) === String(c.shipmentId));
+            if (!shipment) return;
+            const shipmentContainers = containerMap.get(String(c.shipmentId)) || [];
+            const childIndex = shipmentContainers.findIndex((sc) => String(sc._id) === containerDocId);
+            const childShipmentNo = childIndex >= 0 ? `${shipment.shipmentNo}-${childIndex + 1}` : shipment.shipmentNo;
+            pendingShipments.push({
+              _id: shipment._id,
+              containerId: c._id,
+              shipmentNo: childShipmentNo,
+              supplier: shipment.supplierId?.name || shipment.supplierName || null,
+            });
+          });
+
+          return { warehouse: label, allocated: alloc, received: recv, pendingReceiving: pending, progress: pct(recv, alloc), pendingShipments };
         })
         .filter((w) => w.allocated > 0 || w.received > 0),
       };
@@ -9088,6 +9147,94 @@ exports.downloadFasDocumentTrackingReport = async (req, res) => {
   } catch (err) {
     console.error('downloadFasDocumentTrackingReport error:', err);
     return res.status(500).json({ message: 'Unable to generate FAS document tracking report' });
+  }
+};
+
+// ── Shipment Status Summary RH report ─────────────────────────────────────────
+// Row mapping/columns live in ./rh-status-summary.helpers.js — this just fetches the
+// data and reuses the same Excel-export layout as the other reports above.
+const buildRhStatusSummaryReportRows = async () => {
+  const shipments = await Shipment.find({})
+    .populate('supplierId', 'name')
+    .populate('itemId', 'description')
+    .sort({ createdAt: -1, orderDate: -1 })
+    .lean();
+  const shipmentIds = shipments.map((s) => s._id);
+  const containers = await Container.find({ shipmentId: { $in: shipmentIds } })
+    .sort({ createdAt: 1 })
+    .lean();
+  const containersByShipment = new Map();
+  containers.forEach((c) => {
+    const key = String(c.shipmentId);
+    if (!containersByShipment.has(key)) containersByShipment.set(key, []);
+    containersByShipment.get(key).push(c);
+  });
+  return buildRhStatusSummaryRows(shipments, containersByShipment, (d) => formatDateValue(d) || '');
+};
+
+exports.getRhStatusSummaryData = async (req, res) => {
+  try {
+    const rows = await buildRhStatusSummaryReportRows();
+    return res.json({ rows, generatedAt: new Date().toISOString() });
+  } catch (err) {
+    console.error('getRhStatusSummaryData error:', err);
+    return res.status(500).json({ message: 'Unable to fetch shipment status summary RH data' });
+  }
+};
+
+exports.downloadRhStatusSummaryReport = async (req, res) => {
+  try {
+    const rows = await buildRhStatusSummaryReportRows();
+    const downloadedBy = req.user?.name || 'Royal Horizon User';
+    const downloadedAt = formatDateTimeValue(new Date());
+    const totalColumns = RH_STATUS_SUMMARY_COLUMNS.length;
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Shipment Status Summary RH', {
+      views: [{ state: 'frozen', ySplit: 4 }],
+    });
+    const border = { style: 'thin', color: { argb: 'FF94A3B8' } };
+    const fullBorder = { top: border, bottom: border, left: border, right: border };
+
+    worksheet.columns = RH_STATUS_SUMMARY_COLUMNS.map((c) => ({ key: c.key, width: c.width }));
+    const titleRow = worksheet.addRow(['Royal Horizon Group']);
+    const subtitleRow = worksheet.addRow(['Shipment Status Summary RH']);
+    const metaRow = worksheet.addRow([
+      `Downloaded By: ${downloadedBy}`,
+      ...Array.from({ length: totalColumns - 2 }, () => ''),
+      `Downloaded At: ${downloadedAt}`,
+    ]);
+    const headerRow = worksheet.addRow(RH_STATUS_SUMMARY_COLUMNS.map((c) => c.header));
+
+    worksheet.mergeCells(1, 1, 1, totalColumns);
+    worksheet.mergeCells(2, 1, 2, totalColumns);
+    worksheet.getCell(1, 1).font = { name: 'Calibri', size: 14, bold: true };
+    worksheet.getCell(2, 1).font = { name: 'Calibri', size: 12, bold: true };
+    titleRow.height = 20; subtitleRow.height = 18; metaRow.height = 16; headerRow.height = 22;
+
+    headerRow.eachCell((cell) => {
+      cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF334155' } };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+      cell.border = fullBorder;
+    });
+    rows.forEach((row) => {
+      const dataRow = worksheet.addRow(RH_STATUS_SUMMARY_COLUMNS.map((c) => row[c.key] ?? ''));
+      dataRow.eachCell((cell) => {
+        cell.font = { name: 'Calibri', size: 11 };
+        cell.alignment = { vertical: 'middle', horizontal: 'left' };
+        cell.border = fullBorder;
+      });
+    });
+
+    const filename = `shipment-status-summary-rh-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    const buffer = await workbook.xlsx.writeBuffer();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.send(Buffer.from(buffer));
+  } catch (err) {
+    console.error('downloadRhStatusSummaryReport error:', err);
+    return res.status(500).json({ message: 'Unable to generate shipment status summary RH report' });
   }
 };
 
