@@ -367,12 +367,31 @@ const isStorageArrivalRowRecorded = (row) =>
   String(row?.receivedOnTime || '').trim().length > 0 ||
   String(row?.grn || '').trim().length > 0;
 
+// How many physical containers this container doc actually represents. `actual.noOfContainers`
+// (a manually-typed BL Details field) is unreliable — confirmed stale/doubled against real data
+// (e.g. declared 26 when transportationBooked/packagingList/extractedContainers all independently
+// agree on 18, or declared 40 when they all agree on 20). Those three sources are populated by the
+// same sync path and always agree with each other in practice, so prefer them over the manual field.
+const getExpectedContainerSerialCount = (container) => {
+  const actual = container?.actual || {};
+  const booked = Array.isArray(actual.transportationBooked) ? actual.transportationBooked.length : 0;
+  if (booked) return booked;
+  const packing = Array.isArray(actual.packagingList?.containerInfo) ? actual.packagingList.containerInfo.length : 0;
+  if (packing) return packing;
+  const extracted = Array.isArray(actual.extractedContainers) ? actual.extractedContainers.length : 0;
+  return extracted;
+};
+
 // "Delivered WH" / warehouse-manager-approvable only once EVERY container in the split has been
 // recorded — a single recorded row must never flip the whole shipment to Delivered WH while the
-// rest are still Pending.
+// rest are still Pending. Also require the row count to match the container's real expected count
+// (see getExpectedContainerSerialCount) — a container with only 2 of 8 real containers logged must
+// not read as fully delivered just because those 2 existing rows are individually complete.
 const hasSavedStorageArrivalData = (container) => {
   const rows = container?.actual?.storageSplits || [];
-  return Array.isArray(rows) && rows.length > 0 && rows.every(isStorageArrivalRowRecorded);
+  if (!Array.isArray(rows) || !rows.length || !rows.every(isStorageArrivalRowRecorded)) return false;
+  const expected = getExpectedContainerSerialCount(container);
+  return expected === 0 || rows.length >= expected;
 };
 
 const hasAssignedWarehouse = (container) => {
@@ -1437,10 +1456,12 @@ const buildDashboardRStatusMetrics = (shipments, containerMap) => {
     // `arrivalRows.every(isRowRecorded)` alone is not enough — a container with 20 expected
     // containers but only 3 storageSplits rows saved (17 never even started) passes trivially
     // since every EXISTING row is recorded. Also require the row count to match each container's
-    // own declared "No of Containers" (BL Details), so a partially-started arrival can't read
-    // as complete just because nobody has touched the remaining rows yet.
+    // real expected count (see getExpectedContainerSerialCount — NOT the manually-typed
+    // `noOfContainers` BL Details field, which is confirmed stale/doubled against real data), so a
+    // partially-started arrival can't read as complete just because nobody has touched the
+    // remaining rows yet.
     const expectedContainerCount = dashboardContainers.reduce(
-      (sum, container) => sum + (Number(container?.actual?.noOfContainers) || 0),
+      (sum, container) => sum + getExpectedContainerSerialCount(container),
       0
     );
     const isCompletedLpo =
@@ -2021,6 +2042,7 @@ module.exports = {
   getDashboardPivotLabel,
   getDashboardStatusColumn,
   getDisplayStageName,
+  getExpectedContainerSerialCount,
   getMeaningfulNumber,
   getPaymentAllocationSummaryLines,
   getPaymentCostingSummaryLines,

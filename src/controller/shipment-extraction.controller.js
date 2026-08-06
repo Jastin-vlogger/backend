@@ -62,6 +62,7 @@ const {
   getDashboardPivotLabel,
   getDashboardStatusColumn,
   getDisplayStageName,
+  getExpectedContainerSerialCount,
   getMeaningfulNumber,
   getPaymentAllocationSummaryLines,
   getPaymentCostingSummaryLines,
