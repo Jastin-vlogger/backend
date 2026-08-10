@@ -528,7 +528,15 @@ exports.getShipmentSummary = async (req, res) => {
         const shipmentContainers = containerMap.get(String(container.shipmentId)) || [];
         const childIndex = shipmentContainers.findIndex((c) => String(c._id) === containerId);
         const shipmentNo = childIndex >= 0 ? `${shipment.shipmentNo}-${childIndex + 1}` : shipment.shipmentNo;
-        list.push({ _id: shipment._id, containerId, shipmentNo, supplier: shipment.supplierId?.name || shipment.supplierName || null });
+        list.push({
+          _id: shipment._id,
+          containerId,
+          shipmentNo,
+          shipmentIndex: childIndex >= 0 ? childIndex : null,
+          supplier: shipment.supplierId?.name || shipment.supplierName || null,
+          status: getDashboardStatusColumn(shipment, container),
+          commercialInvoiceNo: container?.actual?.commercialInvoiceNo || null,
+        });
       };
 
       // Provider Wise is grouped dynamically by the real free-text courierServiceProvider
@@ -918,7 +926,7 @@ exports.getShipmentSummary = async (req, res) => {
     const shipmentLookupById = new Map(
       shipments.map((s) => [
         String(s._id),
-        { _id: s._id, shipmentNo: s.shipmentNo, supplier: s.supplierId?.name || s.supplierName || null },
+        { _id: s._id, shipmentNo: s.shipmentNo, supplier: s.supplierId?.name || s.supplierName || null, plannedETD: s.plannedETD },
       ])
     );
     const addPendingShipment = (tile, container) => {
@@ -932,7 +940,15 @@ exports.getShipmentSummary = async (req, res) => {
       const shipmentContainers = containerMap.get(String(container.shipmentId)) || [];
       const childIndex = shipmentContainers.findIndex((c) => String(c._id) === containerId);
       const childShipmentNo = childIndex >= 0 ? `${info.shipmentNo}-${childIndex + 1}` : info.shipmentNo;
-      tile.pendingShipments.push({ _id: info._id, containerId, shipmentNo: childShipmentNo, supplier: info.supplier });
+      tile.pendingShipments.push({
+        _id: info._id,
+        containerId,
+        shipmentNo: childShipmentNo,
+        shipmentIndex: childIndex >= 0 ? childIndex : null,
+        supplier: info.supplier,
+        status: getDashboardStatusColumn({ plannedETD: info.plannedETD }, container),
+        commercialInvoiceNo: container?.actual?.commercialInvoiceNo || null,
+      });
     };
 
     // ── FAS Dashboard: Pending vs Completed per sub-process ─────────────────
@@ -1029,8 +1045,12 @@ exports.getShipmentSummary = async (req, res) => {
         }
 
         // Pending Clearance Advance Process — advance requested, final contract not yet received.
+        // Same "final contract received" definition as Document Waiting above (line ~1010) —
+        // documentsReleasedDate OR documentsReleasedDocumentUrl, not date alone. A container
+        // whose release was recorded via document upload without the date field would otherwise
+        // never register as received here, keeping it stuck "pending" forever.
         if (clearingAdvanceRequested) {
-          const finalContractReceived = !!actual.documentsReleasedDate;
+          const finalContractReceived = !!(actual.documentsReleasedDate || actual.documentsReleasedDocumentUrl);
           if (finalContractReceived) tiles.pendingClearanceAdvanceProcess.completed++;
           else {
             tiles.pendingClearanceAdvanceProcess.pending++;
@@ -1041,7 +1061,10 @@ exports.getShipmentSummary = async (req, res) => {
         // Pending Transportation Arrangement — final contract received, transportation not yet
         // arranged. Uses transportationBooked (the actively-used array, 44/102 containers) rather
         // than the legacy transportArrangedDate single field, which is never populated (0/102).
-        if (actual.documentsReleasedDate) {
+        // Same OR gate as above — documentsReleasedDate alone previously excluded containers
+        // released via documentsReleasedDocumentUrl only, dropping them out of this tile entirely
+        // (counted as neither pending nor completed).
+        if (actual.documentsReleasedDate || actual.documentsReleasedDocumentUrl) {
           const transportationArranged = Array.isArray(actual.transportationBooked) && actual.transportationBooked.length > 0;
           if (transportationArranged) tiles.pendingTransportationArrangement.completed++;
           else {

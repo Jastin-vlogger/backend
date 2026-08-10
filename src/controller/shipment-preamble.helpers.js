@@ -361,11 +361,12 @@ const hasSavedStorageAllocationData = (container) => {
   return hasLegacyRows || hasSplitRows;
 };
 
-// A row counts as "recorded" once its arrival has actually been logged (received date/time or GRN).
+// A row counts as "recorded" once GRN + batch are both present — same "Recorded" definition
+// the Status column uses (shipment-storage.component.ts). NOT receivedOnDate/receivedOnTime:
+// those auto-prefill to "now" client-side even on untouched rows, so treating them as signal
+// let a still-pending row (no GRN/batch) count as recorded once SAVE ALL persisted the prefill.
 const isStorageArrivalRowRecorded = (row) =>
-  !!row?.receivedOnDate ||
-  String(row?.receivedOnTime || '').trim().length > 0 ||
-  String(row?.grn || '').trim().length > 0;
+  !!String(row?.grn || '').trim() && !!String(row?.batch || '').trim();
 
 // How many physical containers this container doc actually represents. `actual.noOfContainers`
 // (a manually-typed BL Details field) is unreliable — confirmed stale/doubled against real data
@@ -1171,10 +1172,16 @@ const getComputedContainerShipmentStatus = (shipment, container) => {
   if (hasArrivedAtPortOfDischarge(shipment, container)) return 'At Port of Discharge';
   if (hasOnTransitStatus(shipment, container)) return 'On Transit';
 
+  // "ETA yet to Due" only once THIS container's own actual documentation (BL/CI/ship-on-board/
+  // ETD/ETA) has actually been saved but ETD hasn't passed yet — never just because the
+  // PARENT shipment/container has SOME planned ETD. Otherwise a fully-documented container and
+  // a completely untouched one collapse into the identical label.
   const scheduledEtd = toDateOrNull(container?.planned?.etd || shipment?.plannedETD);
-  if (scheduledEtd) {
+  if (scheduledEtd && hasTransitActualMilestone(container)) {
     return REPORT_STATUS_ETD_DUE;
   }
+
+  if (!hasTransitActualMilestone(container)) return REPORT_STATUS_ETD_UNCONFIRMED;
 
   const fallback = getDisplayStageName(shipment?.currentStage || 'Shipment Entry');
   return fallback === 'Shipment Entry' ? REPORT_STATUS_ETD_UNCONFIRMED : fallback;
@@ -1193,7 +1200,12 @@ const getComputedShipmentStatus = (shipment, shipmentContainers = []) => {
     return 'On Transit';
   }
 
+  // "ETA yet to Due" only counts containers whose own actual docs (BL/CI/ship-on-board/
+  // ETD/ETA) are actually saved — a container with zero actual data must fall through to
+  // REPORT_STATUS_ETD_UNCONFIRMED ("Shipment Not Scheduled"), not borrow another container's
+  // planned ETD just because it exists somewhere on the shipment.
   const pendingScheduledDates = shipmentContainers
+    .filter((container) => hasTransitActualMilestone(container))
     .filter((container) => !hasOnTransitStatus(shipment, container) && !hasArrivedAtPortOfDischarge(shipment, container))
     .map((container) => toDateOrNull(container?.planned?.etd || shipment?.plannedETD))
     .filter(Boolean)
@@ -1203,7 +1215,8 @@ const getComputedShipmentStatus = (shipment, shipmentContainers = []) => {
     return REPORT_STATUS_ETD_DUE;
   }
 
-  const shipmentLevelEtd = toDateOrNull(shipment?.plannedETD);
+  const anyContainerHasMilestone = shipmentContainers.some((container) => hasTransitActualMilestone(container));
+  const shipmentLevelEtd = anyContainerHasMilestone ? toDateOrNull(shipment?.plannedETD) : null;
   if (shipmentLevelEtd) {
     return REPORT_STATUS_ETD_DUE;
   }
@@ -1264,7 +1277,7 @@ const getDashboardPivotLabel = (shipment, groupBy) => {
 // so the two stay consistent throughout the dashboard.
 const displayDashboardStatusColumn = (column) => {
   if (column === REPORT_STATUS_ETD_DUE) return 'ETD yet to Due';
-  if (column === REPORT_STATUS_ETD_UNCONFIRMED) return 'Shipment Not Schedule';
+  if (column === REPORT_STATUS_ETD_UNCONFIRMED) return 'Shipment Not Scheduled';
   return column;
 };
 
