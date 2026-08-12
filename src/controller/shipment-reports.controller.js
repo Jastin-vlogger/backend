@@ -70,6 +70,7 @@ const {
   getScheduleActorLabel,
   getScheduledShipmentId,
   getShipmentMonthLabel,
+  getShipmentOverallStatus,
   getShipmentReportStatus,
   getShipmentSplitCount,
   getShipmentTrackerBase,
@@ -325,7 +326,7 @@ const buildFasDocumentTrackingRows = async () => {
   let slNo = 0;
   shipments.forEach((shipment) => {
     const shipmentContainers = byShipment.get(String(shipment._id)) || [];
-    const status = getShipmentReportStatus(shipment, shipmentContainers);
+    const status = getShipmentOverallStatus(shipment, shipmentContainers);
     // Point 20: list every shipment in the FAS Activity Status report (previously only
     // "On Transit" or later shipments were included, which hid most of them).
     // One row per container with document-tracking data; fall back to a single row.
@@ -564,5 +565,66 @@ exports.downloadStorageArrivalReport = async (req, res) => {
   } catch (err) {
     console.error('downloadStorageArrivalReport error:', err);
     return res.status(500).json({ message: 'Unable to generate storage arrival report' });
+  }
+};
+
+// Generic Excel export for any dashboard chart/card: { title, columns, rows } in, a single-sheet
+// workbook out. Built once here so the dashboard's per-chart Export modal doesn't need a bespoke
+// backend handler per chart — reuses the same title/header/border styling as the report above.
+exports.exportDashboardChart = async (req, res) => {
+  try {
+    const { title, columns, rows } = req.body || {};
+    if (!title || !Array.isArray(columns) || !columns.length || !Array.isArray(rows)) {
+      return res.status(400).json({ message: 'title, columns[], and rows[] are required' });
+    }
+    const totalColumns = columns.length;
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet(String(title).slice(0, 31) || 'Chart', {
+      views: [{ state: 'frozen', ySplit: 3 }],
+    });
+
+    const border = { style: 'thin', color: { argb: 'FF94A3B8' } };
+    const fullBorder = { top: border, bottom: border, left: border, right: border };
+
+    worksheet.columns = columns.map(() => ({ width: 22 }));
+
+    const titleRow = worksheet.addRow(['Royal Horizon Group']);
+    const subtitleRow = worksheet.addRow([String(title)]);
+    const headerRow = worksheet.addRow(columns);
+
+    worksheet.mergeCells(1, 1, 1, totalColumns);
+    worksheet.mergeCells(2, 1, 2, totalColumns);
+
+    worksheet.getCell(1, 1).font = { name: 'Calibri', size: 14, bold: true };
+    worksheet.getCell(2, 1).font = { name: 'Calibri', size: 12, bold: true };
+    titleRow.height = 20;
+    subtitleRow.height = 18;
+    headerRow.height = 22;
+
+    headerRow.eachCell((cell) => {
+      cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF334155' } };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+      cell.border = fullBorder;
+    });
+
+    rows.forEach((row) => {
+      const dataRow = worksheet.addRow(Array.isArray(row) ? row : columns.map((c) => row?.[c] ?? ''));
+      dataRow.eachCell((cell) => {
+        cell.font = { name: 'Calibri', size: 11 };
+        cell.alignment = { vertical: 'middle', horizontal: 'left' };
+        cell.border = fullBorder;
+      });
+    });
+
+    const filename = `${String(title).replace(/[^a-z0-9_-]/gi, '_')}-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    const buffer = await workbook.xlsx.writeBuffer();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.send(Buffer.from(buffer));
+  } catch (err) {
+    console.error('exportDashboardChart error:', err);
+    return res.status(500).json({ message: 'Unable to export chart' });
   }
 };

@@ -70,6 +70,7 @@ const {
   getScheduleActorLabel,
   getScheduledShipmentId,
   getShipmentMonthLabel,
+  getShipmentOverallStatus,
   getShipmentReportStatus,
   getShipmentSplitCount,
   getShipmentTrackerBase,
@@ -371,7 +372,7 @@ const mapShipmentListRow = (s, shipmentContainers = [], precomputedStatus = null
   fcPerUnit: s.fcPerUnit || 0,
   totalFC: s.totalFC || 0,
   noOfShipments: s.noOfShipments || s.assumedContainerCount || 0,
-  status: precomputedStatus ?? getShipmentReportStatus(s, shipmentContainers),
+  status: precomputedStatus ?? getShipmentOverallStatus(s, shipmentContainers),
 });
 
 // Builds a Map<shipmentId, container[]> from a flat container array.
@@ -427,9 +428,12 @@ const fetchShipmentList = async ({ page = 1, limit = 20, search = '', status = '
     blNoShipmentIds,
   });
 
-  // Point 3: multi-select status filter. The displayed status is computed from container
-  // data (not a single stored field), so when statuses are requested we compute the status
-  // for every matching shipment, filter, then paginate in memory.
+  // Point 3: multi-select status filter. The row's DISPLAYED status stays the shipment's
+  // overall/worst-container status (getShipmentOverallStatus, accurate single-label summary).
+  // But MATCHING a filter checkbox uses "does ANY container hit this status" (same per-container
+  // classification the dashboard drill-down uses) — otherwise a shipment whose worst container is
+  // e.g. fully unscheduled would never surface for "ETA Yet To Due" even though it genuinely has
+  // containers sitting in that state, which is what a user picking that filter wants to find.
   const statusFilterSet = buildStatusFilterSet(statuses);
   if (statusFilterSet) {
     const allShipments = await Shipment.find(query)
@@ -442,10 +446,17 @@ const fetchShipmentList = async ({ page = 1, limit = 20, search = '', status = '
 
     const matched = allShipments
       .map((s) => {
-        const computedStatus = getShipmentReportStatus(s, containerMap.get(String(s._id)) || []);
-        return { row: mapShipmentListRow(s, [], computedStatus), computedStatus };
+        const shipmentContainers = containerMap.get(String(s._id)) || [];
+        const overallStatus = getShipmentOverallStatus(s, shipmentContainers);
+        const containerStatuses = shipmentContainers.length
+          ? shipmentContainers.map((container) => getComputedContainerShipmentStatus(s, container))
+          : [overallStatus];
+        const matchesFilter = containerStatuses.some((status) =>
+          statusFilterSet.has(String(status || '').trim().toLowerCase())
+        );
+        return { row: mapShipmentListRow(s, [], overallStatus), matchesFilter };
       })
-      .filter(({ computedStatus }) => statusFilterSet.has(String(computedStatus || '').trim().toLowerCase()))
+      .filter(({ matchesFilter }) => matchesFilter)
       .map(({ row }) => row);
 
     const total = matched.length;
@@ -602,7 +613,7 @@ const fetchFlatShipmentList = async ({ page = 1, limit = 20, search = '', status
         commercialInvoiceNo: actual.commercialInvoiceNo || '',
         buyingQty: container ? getDashboardChildQuantity(s, container, splitCount) : (s.plannedQtyMT || s.totalOrderedQtyMT || 0),
         fcl: container ? getDashboardChildFcl(s, container, splitCount) : (s.fcl || 0),
-        status: container ? getDashboardStatusColumn(s, container) : getShipmentReportStatus(s, []),
+        status: container ? getDashboardStatusColumn(s, container) : getShipmentOverallStatus(s, []),
 
         // ===== Full-detail export columns, matching the "Final Data.xlsx" reference format =====
         // Purchase Department

@@ -22,6 +22,7 @@ router.get('/',                    authMiddleware, authorize({ tag: 'any-active'
 router.get('/all-shipments',       authMiddleware, authorize({ tag: 'any-active' }), controller.getAllShipmentsFlat);
 router.get('/search',              authMiddleware, authorize({ tag: 'any-active' }), controller.searchShipments);
 router.get('/dashboard',           authMiddleware, authorize({ tag: 'any-active' }), controller.getShipmentSummary);
+router.post('/dashboard/export-chart', authMiddleware, authorize({ tag: 'any-active' }), controller.exportDashboardChart);
 router.get('/reports/export-data', authMiddleware, authorize({ tag: 'any-active' }), controller.getShipmentReportExportData);
 router.get('/reports/export/excel',authMiddleware, authorize({ tag: 'any-active' }), controller.downloadShipmentReportExcel);
 router.get('/reports/export/pdf',  authMiddleware, authorize({ tag: 'any-active' }), controller.downloadShipmentReportPdf);

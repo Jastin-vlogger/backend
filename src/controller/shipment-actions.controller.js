@@ -70,6 +70,7 @@ const {
   getScheduleActorLabel,
   getScheduledShipmentId,
   getShipmentMonthLabel,
+  getShipmentOverallStatus,
   getShipmentReportStatus,
   getShipmentSplitCount,
   getShipmentTrackerBase,

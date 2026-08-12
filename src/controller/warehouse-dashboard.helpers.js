@@ -103,17 +103,17 @@ const buildWarehouseDashboard = (containers = [], dbWarehouses = []) => {
     if (transportationBooked.length) {
       // Authoritative: count one distinct physical container per booked row, at its CURRENT
       // (post-reroute-if-any) warehouse — deduplicated by serial the same way "received" is.
-      transportationBooked.forEach((row) => {
+      transportationBooked.forEach((row, rowIndex) => {
         const bookedWarehouse = String(row?.warehouse || '').trim();
         const warehouse = bookedWarehouse || splitWarehouseBySerial.get(normalizeSerial(row?.containerSerialNo)) || '';
         if (!warehouse) return;
-        // Only dedupe when we have a real serial to key on — a shared/missing serial isn't
-        // reliable evidence of a duplicate row (e.g. legacy rows can share other fields).
+        // Dedupe by real serial when we have one; otherwise fall back to the row's own _id (or,
+        // failing that, the parent container + row index) rather than skipping dedup entirely —
+        // a blank serial isn't a license to double-count a row on re-render/re-save.
         const serialKey = normalizeSerial(row?.containerSerialNo);
-        if (serialKey) {
-          if (allocatedKeysSeen.has(serialKey)) return;
-          allocatedKeysSeen.add(serialKey);
-        }
+        const dedupeKey = serialKey || (row?._id ? String(row._id) : `${container._id}-${rowIndex}`);
+        if (allocatedKeysSeen.has(dedupeKey)) return;
+        allocatedKeysSeen.add(dedupeKey);
         addAlloc(warehouse, 1);
         containerAllocated += 1;
       });
@@ -151,15 +151,14 @@ const buildWarehouseDashboard = (containers = [], dbWarehouses = []) => {
     }
 
     // Received: one per received split, grouped by warehouse — deduplicated by container
-    // serial when one is on file (see receivedKeysSeen above); rows with no serial are counted
-    // as-is, since a shared/missing serial isn't reliable evidence of a duplicate row.
-    splits.forEach((split) => {
+    // serial when one is on file; otherwise falls back to the split row's own _id (or the
+    // parent container + row index) so a blank serial can't bypass dedup entirely.
+    splits.forEach((split, splitIndex) => {
       if (!isSplitReceived(split)) return;
       const serialKey = normalizeSerial(split.containerSerialNo);
-      if (serialKey) {
-        if (receivedKeysSeen.has(serialKey)) return;
-        receivedKeysSeen.add(serialKey);
-      }
+      const dedupeKey = serialKey || (split?._id ? String(split._id) : `${container._id}-${splitIndex}`);
+      if (receivedKeysSeen.has(dedupeKey)) return;
+      receivedKeysSeen.add(dedupeKey);
       addRecv(split.warehouse, 1);
     });
   });

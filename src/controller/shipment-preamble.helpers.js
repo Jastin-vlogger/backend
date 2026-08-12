@@ -1187,6 +1187,44 @@ const getComputedContainerShipmentStatus = (shipment, container) => {
   return fallback === 'Shipment Entry' ? REPORT_STATUS_ETD_UNCONFIRMED : fallback;
 };
 
+// Rank per container status — higher = further along. Anything not in this table (including
+// REPORT_STATUS_ETD_UNCONFIRMED and generic workflow-stage fallback names) is treated as the
+// lowest tier, "not meaningfully progressed yet".
+const SHIPMENT_STATUS_RANK = {
+  'Delivered WH': 4,
+  'At Port of Discharge': 3,
+  'On Transit': 2,
+  [REPORT_STATUS_ETD_DUE]: 1,
+};
+
+// A shipment's DISPLAYED overall status — used by the Order/Shipment list, shipment detail,
+// dashboard summary, and report exports. Deliberately "least advanced container wins" (a
+// shipment is only as far along as its slowest container), NOT "most advanced wins": with the
+// old getComputedShipmentStatus, a single at-port container made the WHOLE shipment report "At
+// Port of Discharge" even while other containers were still fully unscheduled, permanently
+// masking them — confirmed against real data, zero shipments in the DB could ever compute to
+// "ETA yet to Due" because of this, making that filter option structurally dead.
+// NOT used for role-visibility gates (getOnTransitOrLaterShipmentIds/getAtPortOrLaterShipmentIds
+// deliberately keep the OLD "any container reached this stage" semantics via
+// getComputedShipmentStatus/getShipmentReportStatus below — a warehouse manager should see a
+// shipment the moment ONE container arrives, not wait for the slowest one to catch up).
+const getShipmentOverallStatus = (shipment, shipmentContainers = []) => {
+  if (!shipmentContainers.length) {
+    return getComputedContainerShipmentStatus(shipment, null);
+  }
+  let worst = null;
+  let worstRank = Infinity;
+  shipmentContainers.forEach((container) => {
+    const status = getComputedContainerShipmentStatus(shipment, container);
+    const rank = SHIPMENT_STATUS_RANK[status] ?? 0;
+    if (rank < worstRank) {
+      worstRank = rank;
+      worst = status;
+    }
+  });
+  return worst;
+};
+
 const getComputedShipmentStatus = (shipment, shipmentContainers = []) => {
   if (shipmentContainers.length && shipmentContainers.every((container) => hasSavedStorageArrivalData(container))) {
     return 'Delivered WH';
@@ -1238,8 +1276,12 @@ const getDashboardStatusColumn = (shipment, container) => {
   if (hasArrivedAtPortOfDischarge(shipment, container)) return 'At the Port';
   if (hasOnTransitStatus(shipment, container)) return 'On Transit';
 
+  // "ETA yet to Due" only once real actual documentation is saved (BL/CI/ship-on-board/ETD/ETA)
+  // — a bare planned.etd alone (set at order creation, before anything real happens) isn't
+  // enough. Same fix already applied to getComputedContainerShipmentStatus; this function
+  // (Status Snapshot + both pivot charts + Dynamic Metrics Explorer) had the same gap.
   const plannedEtd = toDateOrNull(container?.planned?.etd || shipment?.plannedETD);
-  if (plannedEtd) return REPORT_STATUS_ETD_DUE;
+  if (plannedEtd && hasTransitActualMilestone(container)) return REPORT_STATUS_ETD_DUE;
 
   return REPORT_STATUS_ETD_UNCONFIRMED;
 };
@@ -2063,6 +2105,7 @@ module.exports = {
   getScheduleActorLabel,
   getScheduledShipmentId,
   getShipmentMonthLabel,
+  getShipmentOverallStatus,
   getShipmentReportStatus,
   getShipmentSplitCount,
   getShipmentTrackerBase,

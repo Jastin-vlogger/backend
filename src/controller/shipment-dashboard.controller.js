@@ -70,6 +70,7 @@ const {
   getScheduleActorLabel,
   getScheduledShipmentId,
   getShipmentMonthLabel,
+  getShipmentOverallStatus,
   getShipmentReportStatus,
   getShipmentSplitCount,
   getShipmentTrackerBase,
@@ -165,6 +166,49 @@ const {
   writeAuditLog,
 } = require('./shipment-preamble.helpers');
 
+// Shared by getShipmentSummary's "Average FC per Unit by Supplier" chart (rowKeyFn = item
+// description) and its PO-wise sibling (rowKeyFn = PO number) — columns by supplier, value =
+// average fcPerUnit across whatever shipments are passed in (no container data needed).
+const buildSupplierAvgFcRows = (shipments, rowKeyFn) => {
+  const supplierAvgFcMap = new Map();
+  shipments.forEach((s) => {
+    const rowKey = rowKeyFn(s);
+    const supplierName = s.supplierId?.name || s.supplierName || 'Unknown Supplier';
+    const fcPerUnit = Number(s.fcPerUnit || 0);
+
+    if (!supplierAvgFcMap.has(rowKey)) supplierAvgFcMap.set(rowKey, { rowLabel: rowKey });
+    const supAvg = supplierAvgFcMap.get(rowKey);
+    if (!supAvg[`${supplierName}_sum`]) {
+      supAvg[`${supplierName}_sum`] = 0;
+      supAvg[`${supplierName}_count`] = 0;
+    }
+    supAvg[`${supplierName}_sum`] += fcPerUnit;
+    supAvg[`${supplierName}_count`] += 1;
+  });
+
+  return Array.from(supplierAvgFcMap.values()).map((row) => {
+    const newRow = { rowLabel: row.rowLabel };
+    Object.keys(row).forEach((k) => {
+      if (k.endsWith('_sum')) {
+        const supplier = k.replace('_sum', '');
+        newRow[supplier] = Number((row[`${supplier}_sum`] / row[`${supplier}_count`]).toFixed(2));
+      }
+    });
+    return newRow;
+  });
+};
+
+const buildSupplierAvgFcRowsByItem = (shipments) => buildSupplierAvgFcRows(shipments, (s) => {
+  const sLineItems = Array.isArray(s.lineItems) ? s.lineItems : [];
+  return s.itemId?.description
+    || joinDistinctLineItemValues(sLineItems, 'itemDescription')
+    || s.itemDescription
+    || 'Unknown Item';
+});
+
+const buildSupplierAvgFcRowsByPo = (shipments) =>
+  buildSupplierAvgFcRows(shipments, (s) => String(s.poNumber || '').trim() || 'Unknown PO');
+
 exports.getShipmentSummary = async (req, res) => {
   try {
     const shipments = await Shipment.find({})
@@ -172,6 +216,8 @@ exports.getShipmentSummary = async (req, res) => {
       .populate('itemId', 'description itemCode')
       .sort({ orderDate: -1, createdAt: -1 })
       .lean();
+
+    const poNumbers = Array.from(new Set(shipments.map((s) => String(s.poNumber || '').trim()).filter(Boolean))).sort();
 
     const shipmentIds = shipments.map((shipment) => shipment._id);
     const containers = await Container.find({ shipmentId: { $in: shipmentIds } })
@@ -209,7 +255,7 @@ exports.getShipmentSummary = async (req, res) => {
 
     const stageMap = new Map();
     shipments.forEach((s) => {
-      const stage = getComputedShipmentStatus(s, containerMap.get(String(s._id)) || []);
+      const stage = getShipmentOverallStatus(s, containerMap.get(String(s._id)) || []);
       stageMap.set(stage, (stageMap.get(stage) || 0) + 1);
     });
 
@@ -295,7 +341,7 @@ exports.getShipmentSummary = async (req, res) => {
       shipmentNo: s.shipmentNo,
       orderDate: s.orderDate || s.createdAt,
       plannedETA: s.plannedETA || null,
-      status: getComputedShipmentStatus(s, containerMap.get(String(s._id)) || []),
+      status: getShipmentOverallStatus(s, containerMap.get(String(s._id)) || []),
       totalAmount: Number(s?.payment?.totalAmount || 0),
       supplier: s?.supplierId?.name || '',
       item: s?.itemId?.description || ''
@@ -715,15 +761,14 @@ exports.getShipmentSummary = async (req, res) => {
         // warehouse (accounts for reroutes after transport is arranged) — falling back to the
         // frozen allocation plan only for containers that haven't reached that stage yet.
         if (transportationBooked.length) {
-          transportationBooked.forEach((row) => {
+          transportationBooked.forEach((row, rowIndex) => {
             const bookedWarehouse = String(row?.warehouse || '').trim();
             const warehouse = bookedWarehouse || splitWarehouseBySerial.get(normalizeSerialForDashboard(row?.containerSerialNo)) || '';
             if (!warehouse || !labelSet.has(normalizeWarehouseLabelForMatch(warehouse))) return;
             const serialKey = normalizeSerialForDashboard(row.containerSerialNo);
-            if (serialKey) {
-              if (allocatedKeysSeen.has(serialKey)) return;
-              allocatedKeysSeen.add(serialKey);
-            }
+            const dedupeKey = serialKey || (row?._id ? String(row._id) : `${container._id}-${rowIndex}`);
+            if (allocatedKeysSeen.has(dedupeKey)) return;
+            allocatedKeysSeen.add(dedupeKey);
             totalAllocated += 1;
           });
         } else if (itemAllocs.length) {
@@ -740,7 +785,7 @@ exports.getShipmentSummary = async (req, res) => {
           });
         }
 
-        splits.forEach((split) => {
+        splits.forEach((split, splitIndex) => {
           if (!labelSet.has(normalizeWarehouseLabelForMatch(split.warehouse))) return;
           const isReceived = !!(
             String(split.grn || '').trim() ||
@@ -749,10 +794,9 @@ exports.getShipmentSummary = async (req, res) => {
           );
           if (!isReceived) return;
           const serialKey = normalizeSerialForDashboard(split.containerSerialNo);
-          if (serialKey) {
-            if (receivedKeysSeen.has(serialKey)) return;
-            receivedKeysSeen.add(serialKey);
-          }
+          const dedupeKey = serialKey || (split?._id ? String(split._id) : `${container._id}-${splitIndex}`);
+          if (receivedKeysSeen.has(dedupeKey)) return;
+          receivedKeysSeen.add(dedupeKey);
           totalReceived += 1;
           if (split.receivedOnDate) {
             const d = new Date(split.receivedOnDate);
@@ -821,16 +865,15 @@ exports.getShipmentSummary = async (req, res) => {
                 .map((s) => [normalizeSerialForDashboard(s.containerSerialNo), String(s.warehouse).trim()])
             );
             if (transportationBooked.length) {
-              transportationBooked.forEach((row) => {
+              transportationBooked.forEach((row, rowIndex) => {
                 const bookedWarehouse = String(row?.warehouse || '').trim();
                 const warehouse = bookedWarehouse || cSplitWarehouseBySerial.get(normalizeSerialForDashboard(row?.containerSerialNo)) || '';
                 if (!warehouse || normalizeWarehouseLabelForMatch(warehouse) !== normalizedLabel) return;
                 const serialKey = normalizeSerialForDashboard(row.containerSerialNo);
-                if (serialKey) {
-                  if (whAllocatedKeysSeen.has(serialKey)) return;
-                  whAllocatedKeysSeen.add(serialKey);
-                  allocatedContainerBySerial.set(serialKey, c);
-                }
+                const dedupeKey = serialKey || (row?._id ? String(row._id) : `${c._id}-${rowIndex}`);
+                if (whAllocatedKeysSeen.has(dedupeKey)) return;
+                whAllocatedKeysSeen.add(dedupeKey);
+                if (serialKey) allocatedContainerBySerial.set(serialKey, c);
                 alloc += 1;
               });
             } else if (itemAllocs.length) {
@@ -845,14 +888,13 @@ exports.getShipmentSummary = async (req, res) => {
                 if (normalizeWarehouseLabelForMatch(row.warehouse) === normalizedLabel) alloc += 1;
               });
             }
-            (Array.isArray(actual.storageSplits) ? actual.storageSplits : []).forEach((s) => {
+            (Array.isArray(actual.storageSplits) ? actual.storageSplits : []).forEach((s, sIndex) => {
               if (normalizeWarehouseLabelForMatch(s.warehouse) !== normalizedLabel) return;
               if (!(String(s.grn || '').trim() || String(s.batch || '').trim() || s.receivedOnDate)) return;
               const serialKey = normalizeSerialForDashboard(s.containerSerialNo);
-              if (serialKey) {
-                if (whReceivedKeysSeen.has(serialKey)) return;
-                whReceivedKeysSeen.add(serialKey);
-              }
+              const dedupeKey = serialKey || (s?._id ? String(s._id) : `${c._id}-${sIndex}`);
+              if (whReceivedKeysSeen.has(dedupeKey)) return;
+              whReceivedKeysSeen.add(dedupeKey);
               recv += 1;
             });
           });
@@ -950,6 +992,30 @@ exports.getShipmentSummary = async (req, res) => {
         commercialInvoiceNo: container?.actual?.commercialInvoiceNo || null,
       });
     };
+
+    // Shipment Movement Tracker card: real per-container shipments currently "At the Port" or
+    // "On Transit" (not the Status Snapshot's aggregate counts) — shipment no + commercial
+    // invoice no per row, same shape/child-numbering as the drill-down lists above.
+    const shipmentMovement = { atPort: [], onTransit: [] };
+    containers.forEach((container) => {
+      const info = shipmentLookupById.get(String(container.shipmentId));
+      if (!info) return;
+      const status = getDashboardStatusColumn({ plannedETD: info.plannedETD }, container);
+      if (status !== 'At the Port' && status !== 'On Transit') return;
+      const containerId = String(container._id);
+      const shipmentContainers = containerMap.get(String(container.shipmentId)) || [];
+      const childIndex = shipmentContainers.findIndex((c) => String(c._id) === containerId);
+      const childShipmentNo = childIndex >= 0 ? `${info.shipmentNo}-${childIndex + 1}` : info.shipmentNo;
+      const entry = {
+        _id: info._id,
+        containerId,
+        shipmentNo: childShipmentNo,
+        shipmentIndex: childIndex >= 0 ? childIndex : null,
+        commercialInvoiceNo: container?.actual?.commercialInvoiceNo || null,
+      };
+      if (status === 'At the Port') shipmentMovement.atPort.push(entry);
+      else shipmentMovement.onTransit.push(entry);
+    });
 
     // ── FAS Dashboard: Pending vs Completed per sub-process ─────────────────
     const fasPendingCompletedDashboard = (() => {
@@ -1118,10 +1184,13 @@ exports.getShipmentSummary = async (req, res) => {
         valueMapping: Array.from(valueMappingMap.values()),
         yearlyQtyMapping: Array.from(yearlyQtyMappingMap.values()),
         supplierAvgFc: formatSupplierAvgFc,
+        supplierAvgFcByPo: buildSupplierAvgFcRowsByPo(shipments),
         supplierYearlyQty: Array.from(supplierYearlyQtyMap.values())
       },
       statusPivot,
-      statusPivotByItem
+      statusPivotByItem,
+      poNumbers,
+      shipmentMovement
     });
 
   } catch (err) {
