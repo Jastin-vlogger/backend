@@ -568,16 +568,19 @@ exports.downloadStorageArrivalReport = async (req, res) => {
   }
 };
 
-// Generic Excel export for any dashboard chart/card: { title, columns, rows } in, a single-sheet
-// workbook out. Built once here so the dashboard's per-chart Export modal doesn't need a bespoke
-// backend handler per chart — reuses the same title/header/border styling as the report above.
+// Generic Excel export for any dashboard chart/card. Two shapes, both optional but at least one
+// required: { imageBase64 } — a PNG data URL of the actual rendered Chart.js canvas, embedded
+// directly so the workbook shows the SAME graphic the user sees on screen (not just its numbers);
+// { columns, rows } — plain table data (used alone for table-only cards like Status Snapshot
+// that have no canvas, or underneath the image for chart cards that have both).
 exports.exportDashboardChart = async (req, res) => {
   try {
-    const { title, columns, rows } = req.body || {};
-    if (!title || !Array.isArray(columns) || !columns.length || !Array.isArray(rows)) {
-      return res.status(400).json({ message: 'title, columns[], and rows[] are required' });
+    const { title, columns, rows, imageBase64 } = req.body || {};
+    const hasTable = Array.isArray(columns) && columns.length && Array.isArray(rows);
+    if (!title || (!hasTable && !imageBase64)) {
+      return res.status(400).json({ message: 'title and either (columns[] + rows[]) or imageBase64 are required' });
     }
-    const totalColumns = columns.length;
+    const totalColumns = hasTable ? columns.length : 6;
 
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet(String(title).slice(0, 31) || 'Chart', {
@@ -587,36 +590,55 @@ exports.exportDashboardChart = async (req, res) => {
     const border = { style: 'thin', color: { argb: 'FF94A3B8' } };
     const fullBorder = { top: border, bottom: border, left: border, right: border };
 
-    worksheet.columns = columns.map(() => ({ width: 22 }));
+    if (hasTable) worksheet.columns = columns.map(() => ({ width: 22 }));
 
     const titleRow = worksheet.addRow(['Royal Horizon Group']);
     const subtitleRow = worksheet.addRow([String(title)]);
-    const headerRow = worksheet.addRow(columns);
 
     worksheet.mergeCells(1, 1, 1, totalColumns);
     worksheet.mergeCells(2, 1, 2, totalColumns);
-
     worksheet.getCell(1, 1).font = { name: 'Calibri', size: 14, bold: true };
     worksheet.getCell(2, 1).font = { name: 'Calibri', size: 12, bold: true };
     titleRow.height = 20;
     subtitleRow.height = 18;
-    headerRow.height = 22;
 
-    headerRow.eachCell((cell) => {
-      cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF334155' } };
-      cell.alignment = { vertical: 'middle', horizontal: 'center' };
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
-      cell.border = fullBorder;
-    });
+    let nextRow = 3;
+    if (imageBase64) {
+      const match = /^data:image\/(png|jpeg);base64,(.+)$/.exec(imageBase64);
+      if (match) {
+        const extension = match[1] === 'jpeg' ? 'jpeg' : 'png';
+        const imageId = workbook.addImage({ base64: imageBase64, extension });
+        // Fixed 720x400px placement (~19 rows tall at default row height) — table (if any)
+        // resumes after it so both the picture and its numbers are in one sheet.
+        worksheet.addImage(imageId, { tl: { col: 0, row: nextRow }, ext: { width: 720, height: 400 } });
+        nextRow += 21;
+      }
+    }
 
-    rows.forEach((row) => {
-      const dataRow = worksheet.addRow(Array.isArray(row) ? row : columns.map((c) => row?.[c] ?? ''));
-      dataRow.eachCell((cell) => {
-        cell.font = { name: 'Calibri', size: 11 };
-        cell.alignment = { vertical: 'middle', horizontal: 'left' };
+    if (hasTable) {
+      const headerRow = worksheet.getRow(nextRow + 1);
+      columns.forEach((col, i) => { headerRow.getCell(i + 1).value = col; });
+      headerRow.height = 22;
+      headerRow.eachCell((cell) => {
+        cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF334155' } };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
         cell.border = fullBorder;
       });
-    });
+      headerRow.commit();
+
+      rows.forEach((row, rIdx) => {
+        const dataRow = worksheet.getRow(nextRow + 2 + rIdx);
+        const values = Array.isArray(row) ? row : columns.map((c) => row?.[c] ?? '');
+        values.forEach((v, i) => { dataRow.getCell(i + 1).value = v; });
+        dataRow.eachCell((cell) => {
+          cell.font = { name: 'Calibri', size: 11 };
+          cell.alignment = { vertical: 'middle', horizontal: 'left' };
+          cell.border = fullBorder;
+        });
+        dataRow.commit();
+      });
+    }
 
     const filename = `${String(title).replace(/[^a-z0-9_-]/gi, '_')}-${new Date().toISOString().slice(0, 10)}.xlsx`;
     const buffer = await workbook.xlsx.writeBuffer();

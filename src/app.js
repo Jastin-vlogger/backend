@@ -36,7 +36,9 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With', 'Origin', 'Access-Control-Allow-Headers']
 }));
 
-app.use(bodyParser.json());
+// Raised from the 100kb default: the dashboard chart-export endpoint posts a base64 PNG of the
+// rendered chart canvas back to the server for Excel embedding, which routinely exceeds 100kb.
+app.use(bodyParser.json({ limit: '10mb' }));
 
 // Routes
 app.use('/api/v1/auth', authRoutes);
