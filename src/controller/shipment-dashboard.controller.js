@@ -59,7 +59,7 @@ const {
   getContainerSerialNo,
   getDashboardChildFcl,
   getDashboardChildQuantity,
-  getDashboardPivotLabel,
+  getDashboardPivotLabels,
   getDashboardStatusColumn,
   getDisplayStageName,
   getExpectedContainerSerialCount,
@@ -412,13 +412,17 @@ exports.getShipmentSummary = async (req, res) => {
     const volumeToday = buildDashboardRStatusMetrics(shipments, containerMap);
 
     // Chart Data Generation
+    // Legend/dataset-key labels shown directly on the Dynamic Metrics Explorer chart — must go
+    // through displayDashboardStatusColumn() same as the pivot charts, or the unconfirmed bucket
+    // leaks the raw internal constant ('ETD yet to be confirmed') instead of the renamed
+    // "Shipment Not Scheduled" label used everywhere else on the dashboard.
     const mapStageToStatus = (status) => {
       if (status === 'ETD yet to due' || status === 'ETA yet to due' || status === REPORT_STATUS_ETD_DUE) return REPORT_STATUS_ETD_DUE;
       if (status === 'On Transit') return 'On Transit';
       if (status === 'At Port of Discharge') return 'At the Port';
       if (status === 'Reached WH' || status === 'Delivered WH') return 'Delivered WH';
-      if (status === 'Shipment Entry' || status === REPORT_STATUS_ETD_UNCONFIRMED) return REPORT_STATUS_ETD_UNCONFIRMED;
-      return String(status || REPORT_STATUS_ETD_UNCONFIRMED);
+      if (status === 'Shipment Entry' || status === REPORT_STATUS_ETD_UNCONFIRMED) return displayDashboardStatusColumn(REPORT_STATUS_ETD_UNCONFIRMED);
+      return String(status || displayDashboardStatusColumn(REPORT_STATUS_ETD_UNCONFIRMED));
     };
 
     const mapStageToYearlyStatus = (status) => {
@@ -426,7 +430,8 @@ exports.getShipmentSummary = async (req, res) => {
       if (status === 'At Port of Discharge') return 'At the Port';
       if (status === 'On Transit') return 'On Transit';
       if (status === 'ETD yet to due' || status === 'ETA yet to due' || status === REPORT_STATUS_ETD_DUE) return REPORT_STATUS_ETD_DUE;
-      return String(status || REPORT_STATUS_ETD_UNCONFIRMED);
+      if (status === 'Shipment Entry' || status === REPORT_STATUS_ETD_UNCONFIRMED) return displayDashboardStatusColumn(REPORT_STATUS_ETD_UNCONFIRMED);
+      return String(status || displayDashboardStatusColumn(REPORT_STATUS_ETD_UNCONFIRMED));
     };
 
     const qtyMappingMap = new Map();
@@ -441,6 +446,13 @@ exports.getShipmentSummary = async (req, res) => {
         || joinDistinctLineItemValues(sLineItems, 'itemDescription')
         || s.itemDescription
         || 'Unknown Item';
+      // Separate from itemDesc (which stays combined — it also feeds supplierAvgFcMap, out of
+      // scope): each distinct line-item description gets its own row instead of one combo-string
+      // row, same fix pattern as getDashboardPivotLabels in shipment-preamble.helpers.js.
+      const distinctItemDescs = [...new Set(
+        sLineItems.map((item) => String(item?.itemDescription || '').trim()).filter(Boolean)
+      )];
+      const itemDescsForCharts = distinctItemDescs.length ? distinctItemDescs : [itemDesc];
       const supplierName = s.supplierId?.name || s.supplierName || 'Unknown Supplier';
       const shipmentContainers = containerMap.get(String(s._id)) || [];
       const fc = Number(s.totalFC || 0);
@@ -461,17 +473,19 @@ exports.getShipmentSummary = async (req, res) => {
         const yearlyStatus = mapStageToYearlyStatus(childStatus);
         const valueShare = Number(s.plannedQtyMT || 0) > 0 ? fc * (qty / Number(s.plannedQtyMT || 0)) : 0;
 
-        // 1. Qty Mapping
-        if (!qtyMappingMap.has(itemDesc)) qtyMappingMap.set(itemDesc, { rowLabel: itemDesc });
-        qtyMappingMap.get(itemDesc)[status] = (qtyMappingMap.get(itemDesc)[status] || 0) + qty;
+        itemDescsForCharts.forEach((desc) => {
+          // 1. Qty Mapping
+          if (!qtyMappingMap.has(desc)) qtyMappingMap.set(desc, { rowLabel: desc });
+          qtyMappingMap.get(desc)[status] = (qtyMappingMap.get(desc)[status] || 0) + qty;
 
-        // 2. Value Mapping
-        if (!valueMappingMap.has(itemDesc)) valueMappingMap.set(itemDesc, { rowLabel: itemDesc });
-        valueMappingMap.get(itemDesc)[status] = (valueMappingMap.get(itemDesc)[status] || 0) + valueShare;
+          // 2. Value Mapping
+          if (!valueMappingMap.has(desc)) valueMappingMap.set(desc, { rowLabel: desc });
+          valueMappingMap.get(desc)[status] = (valueMappingMap.get(desc)[status] || 0) + valueShare;
 
-        // 3. Yearly Qty Mapping
-        if (!yearlyQtyMappingMap.has(itemDesc)) yearlyQtyMappingMap.set(itemDesc, { rowLabel: itemDesc });
-        yearlyQtyMappingMap.get(itemDesc)[yearlyStatus] = (yearlyQtyMappingMap.get(itemDesc)[yearlyStatus] || 0) + qty;
+          // 3. Yearly Qty Mapping
+          if (!yearlyQtyMappingMap.has(desc)) yearlyQtyMappingMap.set(desc, { rowLabel: desc });
+          yearlyQtyMappingMap.get(desc)[yearlyStatus] = (yearlyQtyMappingMap.get(desc)[yearlyStatus] || 0) + qty;
+        });
 
         // 5. Supplier Yearly Qty
         if (!supplierYearlyQtyMap.has(supplierName)) supplierYearlyQtyMap.set(supplierName, { rowLabel: supplierName });
@@ -968,7 +982,15 @@ exports.getShipmentSummary = async (req, res) => {
     const shipmentLookupById = new Map(
       shipments.map((s) => [
         String(s._id),
-        { _id: s._id, shipmentNo: s.shipmentNo, supplier: s.supplierId?.name || s.supplierName || null, plannedETD: s.plannedETD },
+        {
+          _id: s._id,
+          shipmentNo: s.shipmentNo,
+          supplier: s.supplierId?.name || s.supplierName || null,
+          plannedETD: s.plannedETD,
+          fcl: s.fcl,
+          noOfShipments: s.noOfShipments,
+          assumedContainerCount: s.assumedContainerCount,
+        },
       ])
     );
     const addPendingShipment = (tile, container) => {
@@ -1006,12 +1028,15 @@ exports.getShipmentSummary = async (req, res) => {
       const shipmentContainers = containerMap.get(String(container.shipmentId)) || [];
       const childIndex = shipmentContainers.findIndex((c) => String(c._id) === containerId);
       const childShipmentNo = childIndex >= 0 ? `${info.shipmentNo}-${childIndex + 1}` : info.shipmentNo;
+      const splitCount = getShipmentSplitCount(info, shipmentContainers);
       const entry = {
         _id: info._id,
         containerId,
         shipmentNo: childShipmentNo,
         shipmentIndex: childIndex >= 0 ? childIndex : null,
         commercialInvoiceNo: container?.actual?.commercialInvoiceNo || null,
+        supplier: info.supplier,
+        fcl: getDashboardChildFcl(info, container, splitCount),
       };
       if (status === 'At the Port') shipmentMovement.atPort.push(entry);
       else shipmentMovement.onTransit.push(entry);

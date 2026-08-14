@@ -59,7 +59,7 @@ const {
   getContainerSerialNo,
   getDashboardChildFcl,
   getDashboardChildQuantity,
-  getDashboardPivotLabel,
+  getDashboardPivotLabels,
   getDashboardStatusColumn,
   getDisplayStageName,
   getExpectedContainerSerialCount,

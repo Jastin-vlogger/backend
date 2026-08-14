@@ -1298,19 +1298,27 @@ const getDashboardChildFcl = (shipment, container, splitCount) => {
   return Number(getContainerReportNumber(actual.FCL, planned.FCL, shipment?.fcl, splitCount) || 0);
 };
 
-const getDashboardPivotLabel = (shipment, groupBy) => {
+// Returns an ARRAY of labels a shipment contributes to for the given grouping — plural because
+// a multi-line-item shipment must contribute to EACH of its distinct items' own rows, not one
+// combined comma-joined row (that combined string was showing up as its own near-duplicate row,
+// separate from the same items' standalone rows elsewhere in the chart). Quantity tracking lives
+// at the container level, not per line-item, so each distinct item gets the shipment's FULL
+// quantity/status added to its row (confirmed acceptable — simplest option, no fabricated split).
+const getDashboardPivotLabels = (shipment, groupBy) => {
   if (groupBy === 'item') {
-    // itemDescription is literally stored as "Multiple Items (N)" for multi-item shipments
-    // (see shipment.action.controller.js) — join the real per-item names from lineItems
-    // instead, same fallback chain used for report exports (joinDistinctLineItemValues, below).
     const lineItems = Array.isArray(shipment?.lineItems) ? shipment.lineItems : [];
-    return shipment?.itemId?.description
-      || joinDistinctLineItemValues(lineItems, 'itemDescription')
-      || shipment?.itemDescription
-      || shipment?.item
-      || 'Unknown Item';
+    const distinctDescriptions = [...new Set(
+      lineItems.map((item) => String(item?.itemDescription || '').trim()).filter(Boolean)
+    )];
+    if (distinctDescriptions.length) return distinctDescriptions;
+    return [
+      shipment?.itemId?.description
+        || shipment?.itemDescription
+        || shipment?.item
+        || 'Unknown Item'
+    ];
   }
-  return shipment?.supplierId?.name || shipment?.supplierName || 'Unknown Supplier';
+  return [shipment?.supplierId?.name || shipment?.supplierName || 'Unknown Supplier'];
 };
 
 // Internal status-classification strings (REPORT_STATUS_ETD_DUE/_UNCONFIRMED) are matched
@@ -1353,17 +1361,17 @@ const buildDashboardStatusPivot = (shipments, containerMap, groupBy = 'supplier'
   };
 
   shipments.forEach((shipment) => {
-    const label = getDashboardPivotLabel(shipment, groupBy);
+    const labels = getDashboardPivotLabels(shipment, groupBy);
     const shipmentContainers = containerMap.get(String(shipment._id)) || [];
     const splitCount = getShipmentSplitCount(shipment, shipmentContainers);
 
     if (!shipmentContainers.length) {
-      addValue(
+      labels.forEach((label) => addValue(
         label,
         displayDashboardStatusColumn(REPORT_STATUS_ETD_UNCONFIRMED),
         Number(shipment?.plannedQtyMT || shipment?.totalOrderedQtyMT || 0),
         Number(shipment?.fcl || 0)
-      );
+      ));
       return;
     }
 
@@ -1371,12 +1379,9 @@ const buildDashboardStatusPivot = (shipments, containerMap, groupBy = 'supplier'
       const baseColumn = getDashboardStatusColumn(shipment, container);
       const displayBase = displayDashboardStatusColumn(baseColumn);
       const column = baseColumn === REPORT_STATUS_ETD_DUE ? `${displayBase} - ${currentMonth}` : displayBase;
-      addValue(
-        label,
-        column,
-        getDashboardChildQuantity(shipment, container, splitCount),
-        getDashboardChildFcl(shipment, container, splitCount)
-      );
+      const qty = getDashboardChildQuantity(shipment, container, splitCount);
+      const fcl = getDashboardChildFcl(shipment, container, splitCount);
+      labels.forEach((label) => addValue(label, column, qty, fcl));
     });
   });
 
@@ -2094,7 +2099,7 @@ module.exports = {
   getContainerSerialNo,
   getDashboardChildFcl,
   getDashboardChildQuantity,
-  getDashboardPivotLabel,
+  getDashboardPivotLabels,
   getDashboardStatusColumn,
   getDisplayStageName,
   getExpectedContainerSerialCount,
