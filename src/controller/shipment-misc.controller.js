@@ -237,6 +237,72 @@ exports.updateBankName = async (req, res) => {
   }
 };
 
+// Whitelisted dot-path shapes writable inside shipment.q1Report via updateQualityReportField.
+// q1Report is a Mixed blob (populated once from Python OCR extraction, no Mongoose schema of
+// its own) — without this whitelist any arbitrary nested key could be written by a client.
+const Q1_REPORT_EDITABLE_PATH_PATTERNS = [
+  /^sample_details\.(shipment_no_batch_no|commodity|variety_of_grains|vendor|country_of_origin|purpose)$/,
+  /^report_details\.(report_date|report_no)$/,
+  /^analysis_details\.(analyzed_by|date|time)$/,
+  /^quality_parameters\.\d+\.(criteria|preferred_standard|actual|remark)$/,
+];
+
+// Update one field inside a shipment's q1Report (S1 quality-report metadata card + Quality
+// Parameters table on the Quality step) — path is a dot-path such as "sample_details.commodity"
+// or "quality_parameters.2.actual", validated against Q1_REPORT_EDITABLE_PATH_PATTERNS above.
+exports.updateQualityReportField = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { path, value } = req.body;
+
+    if (typeof path !== 'string' || !Q1_REPORT_EDITABLE_PATH_PATTERNS.some((re) => re.test(path))) {
+      return res.status(400).json({ message: 'That field cannot be edited.' });
+    }
+    if (typeof value !== 'string') {
+      return res.status(400).json({ message: 'value must be a string' });
+    }
+
+    const shipment = await Shipment.findById(id);
+    if (!shipment) return res.status(404).json({ message: 'Shipment not found' });
+
+    const before = { q1Report: shipment.q1Report };
+
+    const segments = path.split('.');
+    const leafKey = segments.pop();
+    let cursor = shipment.q1Report;
+    if (cursor == null || typeof cursor !== 'object') {
+      cursor = {};
+      shipment.q1Report = cursor;
+    }
+    for (const seg of segments) {
+      const isIndex = /^\d+$/.test(seg);
+      if (cursor[seg] == null || typeof cursor[seg] !== 'object') {
+        cursor[seg] = isIndex ? [] : {};
+      }
+      cursor = cursor[seg];
+    }
+    cursor[leafKey] = value;
+    shipment.markModified('q1Report');
+    await shipment.save();
+
+    await writeAuditLog({
+      userId: req.user._id,
+      module: 'Shipment',
+      entity: 'Shipment',
+      entityId: shipment._id,
+      action: 'Updated',
+      before,
+      after: { q1Report: shipment.q1Report },
+      remarks: `Quality report field updated: ${path}`,
+    });
+
+    res.json({ message: 'Quality report field updated', q1Report: shipment.q1Report });
+  } catch (err) {
+    console.error('updateQualityReportField error:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 // Refresh a single line item's Brand/Barcode/DM Barcode/Variant/H.S Code/Country of
 // Origin/Packing from the Item Master catalog, filling only fields still blank on the
 // shipment — same mapping as enrichExtractionItemsFromCatalog, but on-demand for line

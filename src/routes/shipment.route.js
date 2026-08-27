@@ -387,6 +387,7 @@ router.post('/container/transportation/bulk-save', authMiddleware, authorize({ t
 // Supplier email — Purchase team only
 router.patch('/:id/supplier-email', authMiddleware, authorize({ tag: 'any-active' }), controller.updateSupplierEmail);
 router.patch('/:id/bank-name', authMiddleware, authorize({ tag: 'any-active' }), controller.updateBankName);
+router.patch('/:id/quality-report-field', authMiddleware, authorize({ tag: 'any-active' }), controller.updateQualityReportField);
 router.patch('/:id/line-item/:index/refresh-from-catalog', authMiddleware, authorize({ tag: 'any-active' }), controller.refreshLineItemFromCatalog);
 
 module.exports = router;
