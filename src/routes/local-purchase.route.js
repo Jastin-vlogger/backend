@@ -44,8 +44,8 @@ router.post(
 );
 
 // ── Create ────────────────────────────────────────────────────────────────
-// proformaDocument is optional — not used for extraction, just stored/attached like Shipment's
-// proformaDocument (that's why it's only here, not on /extract-lpo above).
+// commercialDocument is optional — not used for extraction, just stored/attached
+// (that's why it's only here, not on /extract-lpo above).
 router.post(
   '/create',
   authMiddleware,
@@ -53,7 +53,7 @@ router.post(
   upload.fields([
     { name: 'lpoDocument', maxCount: 1 },
     { name: 's1QualityReport', maxCount: 1 },
-    { name: 'proformaDocument', maxCount: 1 },
+    { name: 'commercialDocument', maxCount: 1 },
   ]),
   actionsController.createLocalPurchase
 );

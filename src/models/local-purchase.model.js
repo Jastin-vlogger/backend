@@ -40,7 +40,7 @@ const localPurchaseSchema = new mongoose.Schema({
   advanceAmountDate: { type: Date },
   bankName: { type: String },
 
-  // Only document required at creation — no PI/BL/proforma/S1-quality-report.
+  // Only document required at creation — no PI/BL/commercial doc/S1-quality-report.
   lpoDocumentName: { type: String },
   lpoDocumentUrl: { type: String },
   // Both LPO and S1 Quality Report are uploaded at Local Purchase creation, same as the regular
@@ -49,9 +49,9 @@ const localPurchaseSchema = new mongoose.Schema({
   s1QualityReportName: { type: String },
   s1QualityReportUrl: { type: String },
   // Optional — not used for extraction (only lpoDocument + s1QualityReport go to the Python
-  // service), just stored/attached like Shipment's proformaDocument.
-  proformaDocumentName: { type: String },
-  proformaDocumentUrl: { type: String },
+  // service), just stored/attached.
+  commercialDocumentName: { type: String },
+  commercialDocumentUrl: { type: String },
 
   payment: {
     totalAmount: { type: Number, default: 0 },

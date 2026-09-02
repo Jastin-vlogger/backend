@@ -1,4 +1,4 @@
-// Local Purchase — creation. Independent of the Shipment flow: no PO/BL/proforma/S1-quality
+// Local Purchase — creation. Independent of the Shipment flow: no PO/BL/commercial doc/S1-quality
 // document requirements, no lineItems/container-split logic. Mirrors createShipment's overall
 // structure (validation -> duplicate guard -> auto-number -> S3 upload -> create -> audit log)
 // but stripped down for a single nearby-store purchase document (the LPO only).
@@ -46,8 +46,8 @@ exports.createLocalPurchase = async (req, res) => {
     const files = req.files || {};
     const lpoDocument = files?.lpoDocument?.[0];
     const s1QualityReport = files?.s1QualityReport?.[0];
-    // Optional — not used for extraction, just stored/attached like Shipment's proformaDocument.
-    const proformaDocument = files?.proformaDocument?.[0];
+    // Optional — not used for extraction, just stored/attached.
+    const commercialDocument = files?.commercialDocument?.[0];
 
     const missingFields = [];
     if (!orderDate) missingFields.push('orderDate');
@@ -96,10 +96,10 @@ exports.createLocalPurchase = async (req, res) => {
       lpNumber = `LP${yy}${mm}${String(runningNo).padStart(3, '0')}`;
     }
 
-    const [lpoUpload, s1Upload, proformaUpload] = await Promise.all([
+    const [lpoUpload, s1Upload, commercialUpload] = await Promise.all([
       uploadBufferToS3(lpoDocument, 'local-purchase/lpo'),
       uploadBufferToS3(s1QualityReport, 'local-purchase/quality/s1'),
-      proformaDocument ? uploadBufferToS3(proformaDocument, 'local-purchase/proforma') : Promise.resolve(null),
+      commercialDocument ? uploadBufferToS3(commercialDocument, 'local-purchase/commercial') : Promise.resolve(null),
     ]);
 
     const qty = Number(plannedQtyMT) || 0;
@@ -137,8 +137,8 @@ exports.createLocalPurchase = async (req, res) => {
       lpoDocumentUrl: lpoUpload.url,
       s1QualityReportName: s1Upload.fileName,
       s1QualityReportUrl: s1Upload.url,
-      proformaDocumentName: proformaUpload?.fileName || '',
-      proformaDocumentUrl: proformaUpload?.url || '',
+      commercialDocumentName: commercialUpload?.fileName || '',
+      commercialDocumentUrl: commercialUpload?.url || '',
       payment: {
         totalAmount,
         paidAmount: 0,
@@ -164,7 +164,7 @@ exports.createLocalPurchase = async (req, res) => {
       documents: {
         lpo: { name: lpoUpload.fileName, url: lpoUpload.url },
         s1QualityReport: { name: s1Upload.fileName, url: s1Upload.url },
-        proforma: proformaUpload ? { name: proformaUpload.fileName, url: proformaUpload.url } : null,
+        commercial: commercialUpload ? { name: commercialUpload.fileName, url: commercialUpload.url } : null,
       },
     });
   } catch (error) {
