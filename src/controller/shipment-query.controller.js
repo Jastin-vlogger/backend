@@ -192,6 +192,7 @@ const buildShipmentListQuery = ({
   shipmentIds = null,
   commercialInvoiceShipmentIds = null,
   blNoShipmentIds = null,
+  isLocal = false,
 }) => {
   const query = {};
   const normalizedSearch = String(search || '').trim();
@@ -236,6 +237,13 @@ const buildShipmentListQuery = ({
 
   if (normalizedStatus) {
     query.currentStage = normalizedStatus;
+  }
+
+  // All-Shipments "Local Purchases" filter — regular shipments explicitly tagged local at
+  // creation (Feature B: isLocal flag). Only applied when truthy; the default "All Shipments"
+  // view is unaffected (no isLocal condition added at all).
+  if (isLocal) {
+    query.isLocal = true;
   }
 
   return query;
@@ -496,7 +504,7 @@ const fetchShipmentList = async ({ page = 1, limit = 20, search = '', status = '
 
 // Point 4: flat list of every individual shipment (one row per container/split) across all
 // LPOs. Reuses the same role restrictions, search and status computation as the Order list.
-const fetchFlatShipmentList = async ({ page = 1, limit = 20, search = '', statuses = null, user = null }) => {
+const fetchFlatShipmentList = async ({ page = 1, limit = 20, search = '', statuses = null, user = null, isLocal = false }) => {
   let restrictedShipmentIds = null;
   let storekeeperLabelSet = null;
   if (shouldRestrictShipmentListForPendingBlRoles(user)) {
@@ -533,6 +541,7 @@ const fetchFlatShipmentList = async ({ page = 1, limit = 20, search = '', status
     shipmentIds: restrictedShipmentIds,
     commercialInvoiceShipmentIds,
     blNoShipmentIds,
+    isLocal,
   });
 
   const shipments = await Shipment.find(query)
@@ -742,7 +751,7 @@ const fetchFlatShipmentList = async ({ page = 1, limit = 20, search = '', status
 
 exports.getAllShipmentsFlat = async (req, res) => {
   try {
-    let { page = 1, limit = 20, search = '', q = '', statuses = '' } = req.query;
+    let { page = 1, limit = 20, search = '', q = '', statuses = '', isLocal = '' } = req.query;
     page = parseInt(page);
     limit = parseInt(limit);
     const result = await fetchFlatShipmentList({
@@ -751,6 +760,7 @@ exports.getAllShipmentsFlat = async (req, res) => {
       search: String(search || q || ''),
       statuses,
       user: req.user,
+      isLocal: isLocal === 'true' || isLocal === true,
     });
     res.json(result);
   } catch (err) {

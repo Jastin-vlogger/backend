@@ -209,7 +209,8 @@ exports.createShipment = async (req, res) => {
       totalSplitQtyMT,
       q1Report
       ,
-      itemsJson
+      itemsJson,
+      isLocal
     } = req.body;
 
     const files = req.files || {};
@@ -466,6 +467,7 @@ exports.createShipment = async (req, res) => {
       bankName: bankName || '',
       advanceAmount,
       advanceAmountDate,
+      isLocal: isLocal === 'true' || isLocal === true,
       q1Report: parsedQ1Report,
       lineItems: derivedLineItems,
       lpoDocumentName: lpoUpload.fileName,

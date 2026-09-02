@@ -17,6 +17,7 @@ const MENU_PERMISSION_TEMPLATES = [
   { key: 'menu.dashboard.view', resource: 'menu', screen: 'dashboard', type: 'screen', label: 'View Dashboard Menu', sortOrder: 10 },
   { key: 'menu.shipments.view', resource: 'menu', screen: 'shipments', type: 'screen', label: 'View Order Menu', sortOrder: 20 },
   { key: 'menu.all_shipments.view', resource: 'menu', screen: 'all_shipments', type: 'screen', label: 'View Shipments Menu', sortOrder: 21 },
+  { key: 'menu.local_purchase.view', resource: 'menu', screen: 'local_purchase', type: 'screen', label: 'View Local Purchase Menu', sortOrder: 22 },
   { key: 'menu.suppliers.view', resource: 'menu', screen: 'suppliers', type: 'screen', label: 'View Suppliers Menu', sortOrder: 30 },
   { key: 'menu.reports.view', resource: 'menu', screen: 'reports', type: 'screen', label: 'View Reports Menu', sortOrder: 40 },
   { key: 'menu.access_control.view', resource: 'menu', screen: 'access_control', type: 'screen', label: 'View Access Control Menu', sortOrder: 50 },
@@ -213,6 +214,24 @@ const REPORTS_PERMISSION_TEMPLATES = [
 ];
 const REPORTS_PERMISSION_KEYS = REPORTS_PERMISSION_TEMPLATES.map((template) => template.key);
 
+// Local Purchase — independent screen/tab set for the new nearby-store-purchase flow
+// (menu.local_purchase.view lives in MENU_PERMISSION_TEMPLATES above). Same
+// {key, resource, screen, tab?, type, action?, label, sortOrder} shape as SHIPMENT_PERMISSION_TEMPLATES.
+const LOCAL_PURCHASE_PERMISSION_TEMPLATES = [
+  { key: 'local_purchase.screen.create.view', resource: 'local_purchase', screen: 'create_local_purchase', type: 'screen', label: 'View Create Local Purchase', sortOrder: 500 },
+  { key: 'local_purchase.screen.create.save', resource: 'local_purchase', screen: 'create_local_purchase', type: 'action', action: 'save', label: 'Save Local Purchase', sortOrder: 501 },
+  { key: 'local_purchase.screen.create.extract', resource: 'local_purchase', screen: 'create_local_purchase', type: 'action', action: 'extract', label: 'Extract LPO Document', sortOrder: 502 },
+  { key: 'local_purchase.tab.entry.view', resource: 'local_purchase', screen: 'local_purchase_tracker', tab: 'entry', type: 'tab', label: 'View Local Purchase Entry', sortOrder: 510 },
+  { key: 'local_purchase.tab.storage_allocation.view', resource: 'local_purchase', screen: 'local_purchase_tracker', tab: 'storage_allocation', type: 'tab', label: 'View Storage Allocation', sortOrder: 515 },
+  { key: 'local_purchase.tab.storage_allocation.edit', resource: 'local_purchase', screen: 'local_purchase_tracker', tab: 'storage_allocation', type: 'action', action: 'edit', label: 'Edit Storage Allocation', sortOrder: 516 },
+  { key: 'local_purchase.tab.storage_allocation.approve_warehouse_manager', resource: 'local_purchase', screen: 'local_purchase_tracker', tab: 'storage_allocation', type: 'action', action: 'approve_warehouse_manager', label: 'Approve Storage Allocation', sortOrder: 517 },
+  { key: 'local_purchase.tab.storage_arrival.view', resource: 'local_purchase', screen: 'local_purchase_tracker', tab: 'storage_arrival', type: 'tab', label: 'View Storage Allocation & Arrival', sortOrder: 520 },
+  { key: 'local_purchase.tab.storage_arrival.edit', resource: 'local_purchase', screen: 'local_purchase_tracker', tab: 'storage_arrival', type: 'action', action: 'edit', label: 'Edit Storage Allocation & Arrival', sortOrder: 521 },
+  { key: 'local_purchase.tab.quality.view', resource: 'local_purchase', screen: 'local_purchase_tracker', tab: 'quality', type: 'tab', label: 'View Quality', sortOrder: 530 },
+  { key: 'local_purchase.tab.quality.edit', resource: 'local_purchase', screen: 'local_purchase_tracker', tab: 'quality', type: 'action', action: 'edit', label: 'Edit Quality', sortOrder: 531 },
+];
+const LOCAL_PURCHASE_PERMISSION_KEYS = LOCAL_PURCHASE_PERMISSION_TEMPLATES.map((template) => template.key);
+
 const ALL_PERMISSION_TEMPLATES = [
   ...MENU_PERMISSION_TEMPLATES,
   ...DASHBOARD_PERMISSION_TEMPLATES,
@@ -221,6 +240,7 @@ const ALL_PERMISSION_TEMPLATES = [
   ...SHIPMENT_PERMISSION_TEMPLATES,
   ...REPORTS_PERMISSION_TEMPLATES,
   ...LEGACY_PERMISSION_TEMPLATES,
+  ...LOCAL_PURCHASE_PERMISSION_TEMPLATES,
 ];
 
 const DEFAULT_ROLE_PERMISSION_MAP = {
@@ -231,6 +251,8 @@ const DEFAULT_ROLE_PERMISSION_MAP = {
     ...DASHBOARD_PERMISSION_KEYS,
     'menu.shipments.view',
     'menu.all_shipments.view',
+    'menu.local_purchase.view',
+    ...LOCAL_PURCHASE_PERMISSION_KEYS,
     'menu.suppliers.view',
     'menu.reports.view',
     ...REPORTS_PERMISSION_KEYS,
@@ -394,6 +416,13 @@ const DEFAULT_ROLE_PERMISSION_MAP = {
     'dashboard.section.warehouse_receiving_status.view',
     'menu.shipments.view',
     'menu.all_shipments.view',
+    'menu.local_purchase.view',
+    'local_purchase.tab.entry.view',
+    'local_purchase.tab.storage_allocation.view',
+    'local_purchase.tab.storage_allocation.edit',
+    'local_purchase.tab.storage_allocation.approve_warehouse_manager',
+    'local_purchase.tab.storage_arrival.view',
+    'local_purchase.tab.storage_arrival.edit',
     'menu.reports.view',
     ...REPORTS_PERMISSION_KEYS,
     'menu.settings.view',

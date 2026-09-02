@@ -98,6 +98,10 @@ const shipmentSchema = new mongoose.Schema({
   advanceAmountDate: { type: Date },   
 
   noOfShipments: { type: Number, default: null },
+  // Reporting/filtering flag only — a "local purchase" from a nearby store, entered through the
+  // regular Shipment flow. Does not change validation or the tracker stages; the dedicated Local
+  // Purchase menu/collection (LocalPurchase model) is a separate, independent flow.
+  isLocal: { type: Boolean, default: false },
   currentStage: {
     type: String,
     enum: [
