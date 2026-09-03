@@ -2461,6 +2461,79 @@ exports.updateStorageArrivalRow = async (req, res) => {
   }
 };
 
+// In-house quality fields copied to peer containers that share an in-house report number.
+const PROPAGATED_INHOUSE_FIELDS = [
+  'inhouseReportDate',
+  'inhouseReportDocumentUrl',
+  'inhouseReportDocumentName',
+  'inhouseRemarks',
+];
+
+const isBlankValue = (value) =>
+  value == null || (typeof value === 'string' && value.trim() === '');
+
+// When a quality row is saved with an in-house report number, any other shipment's quality
+// row carrying the SAME in-house report number should not need the data re-entered. Copy the
+// in-house fields into matching peer rows, but only into fields that are still empty — never
+// overwrite a value the other shipment already has.
+async function propagateQualityByInhouseReportNo(sourceContainer, actorUserId) {
+  const sourceRows = Array.isArray(sourceContainer.actual?.qualityRows)
+    ? sourceContainer.actual.qualityRows
+    : [];
+
+  const sourceByReportNo = new Map();
+  for (const row of sourceRows) {
+    const reportNo = String(row.inhouseReportNo || '').trim();
+    if (reportNo && !sourceByReportNo.has(reportNo)) sourceByReportNo.set(reportNo, row);
+  }
+  if (sourceByReportNo.size === 0) return;
+
+  const reportNos = [...sourceByReportNo.keys()];
+  const targets = await Container.find({
+    _id: { $ne: sourceContainer._id },
+    'actual.qualityRows.inhouseReportNo': { $in: reportNos },
+  });
+
+  if (targets.length > 100) {
+    console.warn(
+      `propagateQualityByInhouseReportNo: ${targets.length} matching containers for ${reportNos.join(', ')} — skipping bulk propagation as a safety guard.`
+    );
+    return;
+  }
+
+  for (const target of targets) {
+    const targetRows = Array.isArray(target.actual?.qualityRows) ? target.actual.qualityRows : [];
+    let touched = false;
+
+    for (const targetRow of targetRows) {
+      const reportNo = String(targetRow.inhouseReportNo || '').trim();
+      const src = reportNo && sourceByReportNo.get(reportNo);
+      if (!src) continue;
+      for (const field of PROPAGATED_INHOUSE_FIELDS) {
+        if (isBlankValue(targetRow[field]) && !isBlankValue(src[field])) {
+          targetRow[field] = src[field];
+          touched = true;
+        }
+      }
+    }
+
+    if (touched) {
+      target.markModified('actual.qualityRows');
+      await target.save();
+      await writeAuditLog({
+        userId: actorUserId,
+        module: 'Shipment',
+        entity: 'Container',
+        entityId: target._id,
+        action: 'Updated',
+        before: null,
+        after: { qualityRows: target.actual.qualityRows },
+        remarks: `Quality auto-filled from shipment sharing in-house report no (${reportNos.join(', ')})`,
+      });
+    }
+  }
+}
+
 exports.updateQualityDetails = async (req, res) => {
   try {
     const container = await Container.findById(req.params.id);
@@ -2497,6 +2570,7 @@ exports.updateQualityDetails = async (req, res) => {
           inhouseReportDate: toDateOrNull(row.inhouseReportDate),
           inhouseReportDocumentUrl: inhouseUpload?.url || row.inhouseReportDocumentUrl || existing.inhouseReportDocumentUrl || '',
           inhouseReportDocumentName: inhouseUpload?.fileName || row.inhouseReportDocumentName || existing.inhouseReportDocumentName || '',
+          inhouseRemarks: row.inhouseRemarks || existing.inhouseRemarks || '',
           strategicReportNo: row.strategicReportNo || '',
           strategicReportDate: toDateOrNull(row.strategicReportDate),
           strategicReportDocumentUrl: strategicUpload?.url || row.strategicReportDocumentUrl || existing.strategicReportDocumentUrl || '',
@@ -2530,6 +2604,14 @@ exports.updateQualityDetails = async (req, res) => {
 
     container.status = 'GRN';
     await container.save();
+
+    // Copy in-house quality data to any other shipment sharing the same in-house report
+    // number (empty fields only). Best-effort — never blocks the save response.
+    try {
+      await propagateQualityByInhouseReportNo(container, req.user._id);
+    } catch (propagateErr) {
+      console.error('propagateQualityByInhouseReportNo error:', propagateErr.message);
+    }
 
     // Advance shipment stage to Quality
     const shipmentForQuality = await Shipment.findById(container.shipmentId);

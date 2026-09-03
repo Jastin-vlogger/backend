@@ -435,6 +435,7 @@ const actualContainerSchema = new mongoose.Schema({
     inhouseReportDate: { type: Date },
     inhouseReportDocumentUrl: { type: String },
     inhouseReportDocumentName: { type: String },
+    inhouseRemarks: { type: String },
     strategicReportNo: { type: String },
     strategicReportDate: { type: Date },
     strategicReportDocumentUrl: { type: String },

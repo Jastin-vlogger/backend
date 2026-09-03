@@ -822,11 +822,11 @@ exports.downloadShipmentReportExcel = async (req, res) => {
     const downloadedBy = req.user?.name || 'Royal Horizon User';
     const downloadedAt = formatDateTimeValue(new Date());
     const title = 'Royal Horizon Group';
-    const subtitle = 'Shipment Master Report';
+    const subtitle = 'Shipment Master Data';
     const totalColumns = Math.max(parentColumns.length, childColumns.length + 1);
     const childExcelStartCol = 2;
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Shipment Report', {
+    const worksheet = workbook.addWorksheet('Shipment Master Data', {
       views: [{ state: 'frozen', ySplit: 4 }],
     });
 
@@ -978,7 +978,7 @@ exports.downloadShipmentReportExcel = async (req, res) => {
     worksheet.getCell(footerRow.number, 1).alignment = { horizontal: 'left', vertical: 'middle' };
 
     const buffer = await workbook.xlsx.writeBuffer();
-    const filename = `royal-horizon-shipment-report-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    const filename = `royal-horizon-shipment-master-data-${new Date().toISOString().slice(0, 10)}.xlsx`;
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -997,7 +997,7 @@ exports.downloadShipmentReportPdf = async (req, res) => {
     const flattenedRows = buildShipmentReportExportRows(rows, parentColumns, childColumns);
     const downloadedBy = req.user?.name || 'Royal Horizon User';
     const downloadedAt = formatDateTimeValue(new Date());
-    const filename = `royal-horizon-shipment-report-${new Date().toISOString().slice(0, 10)}.pdf`;
+    const filename = `royal-horizon-shipment-master-data-${new Date().toISOString().slice(0, 10)}.pdf`;
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -1108,7 +1108,7 @@ exports.downloadShipmentReportPdf = async (req, res) => {
 
     const drawHeader = () => {
       doc.font('Helvetica-Bold').fontSize(24).text('Royal Horizon Group', startX, 26, { align: 'center', width: usableWidth });
-      doc.font('Helvetica-Bold').fontSize(18).text('Shipment Master Report', startX, 56, { align: 'center', width: usableWidth });
+      doc.font('Helvetica-Bold').fontSize(18).text('Shipment Master Data', startX, 56, { align: 'center', width: usableWidth });
       doc.font('Helvetica').fontSize(12).text(`Downloaded By: ${downloadedBy}`, startX, 92, { align: 'left', width: usableWidth / 2 });
       doc.font('Helvetica').fontSize(12).text(`Downloaded At: ${downloadedAt}`, startX, 92, { align: 'right', width: usableWidth });
     };

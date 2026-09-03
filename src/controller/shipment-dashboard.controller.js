@@ -211,7 +211,9 @@ const buildSupplierAvgFcRowsByPo = (shipments) =>
 
 exports.getShipmentSummary = async (req, res) => {
   try {
-    const shipments = await Shipment.find({})
+    // Local purchases (shipments tagged isLocal at creation) are excluded from every dashboard
+    // tile, KPI and chart — including FAS, Logistics and the Provider breakdown.
+    const shipments = await Shipment.find({ isLocal: { $ne: true } })
       .populate('supplierId', 'name country')
       .populate('itemId', 'description itemCode')
       .sort({ orderDate: -1, createdAt: -1 })

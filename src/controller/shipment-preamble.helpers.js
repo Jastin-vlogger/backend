@@ -952,6 +952,8 @@ const SHIPMENT_REPORT_COLUMNS = [
   { header: 'Rice Name', key: 'riceName', width: 18 },
   { header: 'Packing', key: 'packing', width: 12 },
   { header: 'PI No.', key: 'piNo', width: 20 },
+  { header: 'LPO Number', key: 'poNumber', width: 20 },
+  { header: 'Foreign / Local', key: 'foreignLocal', width: 14 },
   { header: 'FCL', key: 'fcl', width: 10 },
   { header: 'Cont. Size', key: 'containerSize', width: 12 },
   { header: 'Buying Unit', key: 'buyingUnit', width: 14 },
@@ -970,6 +972,13 @@ const SHIPMENT_REPORT_COLUMNS = [
   { header: 'Bags', key: 'bags', width: 12 },
   { header: 'Pallet', key: 'pallet', width: 12 },
   { header: 'Report Status', key: 'reportStatus', width: 26 },
+  { header: 'Batch No', key: 'qualityBatchNo', width: 18 },
+  { header: 'Inhouse Report No', key: 'qualityInhouseReportNo', width: 20 },
+  { header: 'Inhouse Document', key: 'qualityInhouseDocument', width: 24 },
+  { header: 'Inhouse Remarks', key: 'qualityInhouseRemarks', width: 24 },
+  { header: 'Third Party report No', key: 'qualityThirdPartyReportNo', width: 20 },
+  { header: 'Third Party Document', key: 'qualityThirdPartyDocument', width: 24 },
+  { header: 'Third Party Remarks', key: 'qualityThirdPartyRemarks', width: 24 },
 ];
 
 const SHIPMENT_REPORT_CHILD_COLUMNS = [
@@ -989,6 +998,41 @@ const SHIPMENT_REPORT_CHILD_COLUMNS = [
   { header: 'Week', key: 'weekWiseShipment', width: 12 },
   { header: 'Status', key: 'shipmentStatus', width: 22 },
 ];
+
+// Roll every container's quality data for a shipment into one flat set of report cells.
+// Rule: first non-empty value wins (documented in the plan). The data model carries a single
+// `remarks` per quality row — surfaced here as "Third Party Remarks" — while the dedicated
+// in-house remark lives in the newer `inhouseRemarks` field.
+const aggregateShipmentQuality = (shipmentContainers = []) => {
+  const out = {
+    qualityBatchNo: '',
+    qualityInhouseReportNo: '',
+    qualityInhouseDocument: '',
+    qualityInhouseRemarks: '',
+    qualityThirdPartyReportNo: '',
+    qualityThirdPartyDocument: '',
+    qualityThirdPartyRemarks: '',
+  };
+  const take = (key, value) => {
+    if (!out[key] && value != null && String(value).trim() !== '') out[key] = String(value).trim();
+  };
+
+  for (const container of shipmentContainers) {
+    const actual = container?.actual || {};
+    for (const split of Array.isArray(actual.storageSplits) ? actual.storageSplits : []) {
+      take('qualityBatchNo', split?.batch);
+    }
+    for (const row of Array.isArray(actual.qualityRows) ? actual.qualityRows : []) {
+      take('qualityInhouseReportNo', row?.inhouseReportNo);
+      take('qualityInhouseDocument', row?.inhouseReportDocumentName);
+      take('qualityInhouseRemarks', row?.inhouseRemarks);
+      take('qualityThirdPartyReportNo', row?.thirdPartyReportNo);
+      take('qualityThirdPartyDocument', row?.thirdPartyReportDocumentName);
+      take('qualityThirdPartyRemarks', row?.remarks);
+    }
+  }
+  return out;
+};
 
 const formatReportCellValue = (value, key) => {
   if (value == null || value === '') return '';
@@ -1873,6 +1917,7 @@ const buildShipmentReportRows = async (filters = {}, user = null) => {
       riceName: shipment.brandName || '',
       packing: shipment.packing || '',
       piNo: shipment.piNo || '',
+      foreignLocal: shipment.isLocal ? 'Local' : 'Foreign',
       ciNo: actual.commercialInvoiceNo || '',
       fcl: shipment.fcl ?? '',
       containerSize: shipment.containersize || actual.size || planned.size || '',
@@ -1901,6 +1946,7 @@ const buildShipmentReportRows = async (filters = {}, user = null) => {
       advanceAmount: shipment.advanceAmount ?? '',
       bags: shipment.bags ?? '',
       pallet: shipment.pallet ?? '',
+      ...aggregateShipmentQuality(shipmentContainers),
       children,
     };
   });

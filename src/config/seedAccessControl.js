@@ -207,7 +207,7 @@ const LEGACY_PERMISSION_TEMPLATES = [
 
 // Point 23: per-report view permissions for the three Reports-tab dropdown reports.
 const REPORTS_PERMISSION_TEMPLATES = [
-  { key: 'report.quality_activity.view',   resource: 'reports', screen: 'reports', tab: 'quality_activity',   type: 'action', action: 'view', label: 'View Quality Activity Status Report',   sortOrder: 281 },
+  { key: 'report.quality_activity.view',   resource: 'reports', screen: 'reports', tab: 'quality_activity',   type: 'action', action: 'view', label: 'View Shipment Master Data Report',   sortOrder: 281 },
   { key: 'report.warehouse_activity.view', resource: 'reports', screen: 'reports', tab: 'warehouse_activity', type: 'action', action: 'view', label: 'View Warehouse Activity Status Report', sortOrder: 282 },
   { key: 'report.fas_activity.view',       resource: 'reports', screen: 'reports', tab: 'fas_activity',       type: 'action', action: 'view', label: 'View FAS Activity Status Report',       sortOrder: 283 },
   { key: 'report.rh_status_summary.view',  resource: 'reports', screen: 'reports', tab: 'rh_status_summary',  type: 'action', action: 'view', label: 'View Shipment Status Summary RH Report', sortOrder: 284 },

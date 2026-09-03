@@ -247,6 +247,25 @@ const Q1_REPORT_EDITABLE_PATH_PATTERNS = [
   /^quality_parameters\.\d+\.(criteria|preferred_standard|actual|remark)$/,
 ];
 
+const isEditableQ1Path = (path) =>
+  typeof path === 'string' && Q1_REPORT_EDITABLE_PATH_PATTERNS.some((re) => re.test(path));
+
+// Write one whitelisted dot-path into a q1Report blob in place, creating intermediate
+// objects/arrays as needed. Mirrors the single-field setter used by updateQualityReportField.
+const setQ1ReportPath = (q1Report, path, value) => {
+  const segments = path.split('.');
+  const leafKey = segments.pop();
+  let cursor = q1Report;
+  for (const seg of segments) {
+    const isIndex = /^\d+$/.test(seg);
+    if (cursor[seg] == null || typeof cursor[seg] !== 'object') {
+      cursor[seg] = isIndex ? [] : {};
+    }
+    cursor = cursor[seg];
+  }
+  cursor[leafKey] = value;
+};
+
 // Update one field inside a shipment's q1Report (S1 quality-report metadata card + Quality
 // Parameters table on the Quality step) — path is a dot-path such as "sample_details.commodity"
 // or "quality_parameters.2.actual", validated against Q1_REPORT_EDITABLE_PATH_PATTERNS above.
@@ -255,7 +274,7 @@ exports.updateQualityReportField = async (req, res) => {
     const { id } = req.params;
     const { path, value } = req.body;
 
-    if (typeof path !== 'string' || !Q1_REPORT_EDITABLE_PATH_PATTERNS.some((re) => re.test(path))) {
+    if (!isEditableQ1Path(path)) {
       return res.status(400).json({ message: 'That field cannot be edited.' });
     }
     if (typeof value !== 'string') {
@@ -267,21 +286,10 @@ exports.updateQualityReportField = async (req, res) => {
 
     const before = { q1Report: shipment.q1Report };
 
-    const segments = path.split('.');
-    const leafKey = segments.pop();
-    let cursor = shipment.q1Report;
-    if (cursor == null || typeof cursor !== 'object') {
-      cursor = {};
-      shipment.q1Report = cursor;
+    if (shipment.q1Report == null || typeof shipment.q1Report !== 'object') {
+      shipment.q1Report = {};
     }
-    for (const seg of segments) {
-      const isIndex = /^\d+$/.test(seg);
-      if (cursor[seg] == null || typeof cursor[seg] !== 'object') {
-        cursor[seg] = isIndex ? [] : {};
-      }
-      cursor = cursor[seg];
-    }
-    cursor[leafKey] = value;
+    setQ1ReportPath(shipment.q1Report, path, value);
     shipment.markModified('q1Report');
     await shipment.save();
 
@@ -299,6 +307,58 @@ exports.updateQualityReportField = async (req, res) => {
     res.json({ message: 'Quality report field updated', q1Report: shipment.q1Report });
   } catch (err) {
     console.error('updateQualityReportField error:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// Bulk variant of updateQualityReportField — accepts { fields: [{ path, value }] } and applies
+// every whitelisted change in one save. Backs the single "Edit" modal on the Quality step
+// (S1 highlights card + Quality Parameters table), replacing the old per-field pencil edits.
+exports.updateQualityReportBulk = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const fields = Array.isArray(req.body.fields) ? req.body.fields : null;
+
+    if (!fields || fields.length === 0) {
+      return res.status(400).json({ message: 'fields must be a non-empty array' });
+    }
+    for (const f of fields) {
+      if (!f || !isEditableQ1Path(f.path)) {
+        return res.status(400).json({ message: `Field cannot be edited: ${f && f.path}` });
+      }
+      if (typeof f.value !== 'string') {
+        return res.status(400).json({ message: `value must be a string for ${f.path}` });
+      }
+    }
+
+    const shipment = await Shipment.findById(id);
+    if (!shipment) return res.status(404).json({ message: 'Shipment not found' });
+
+    const before = { q1Report: shipment.q1Report };
+
+    if (shipment.q1Report == null || typeof shipment.q1Report !== 'object') {
+      shipment.q1Report = {};
+    }
+    for (const f of fields) {
+      setQ1ReportPath(shipment.q1Report, f.path, f.value);
+    }
+    shipment.markModified('q1Report');
+    await shipment.save();
+
+    await writeAuditLog({
+      userId: req.user._id,
+      module: 'Shipment',
+      entity: 'Shipment',
+      entityId: shipment._id,
+      action: 'Updated',
+      before,
+      after: { q1Report: shipment.q1Report },
+      remarks: `Quality report fields updated: ${fields.map((f) => f.path).join(', ')}`,
+    });
+
+    res.json({ message: 'Quality report updated', q1Report: shipment.q1Report });
+  } catch (err) {
+    console.error('updateQualityReportBulk error:', err);
     res.status(500).json({ message: 'Server error' });
   }
 };
