@@ -584,6 +584,17 @@ const fetchFlatShipmentList = async ({ page = 1, limit = 20, search = '', status
       const transportationBooked = Array.isArray(actual.transportationBooked) ? actual.transportationBooked : [];
       const paymentAllocations = Array.isArray(actual.paymentAllocations) ? actual.paymentAllocations : [];
       const storageSplits = Array.isArray(actual.storageSplits) ? actual.storageSplits : [];
+      const qualityRows = Array.isArray(actual.qualityRows) ? actual.qualityRows : [];
+
+      // First non-empty value across this container's own storage/quality rows — same
+      // "first wins" rule used by the Shipment Master Data report export.
+      const firstNonEmpty = (list, key) => {
+        for (const item of list) {
+          const value = item && item[key];
+          if (value != null && String(value).trim() !== '') return String(value).trim();
+        }
+        return '';
+      };
 
       // "Planned (Containers)" = containers already assigned to a warehouse per the
       // storage allocation decision; "Not Planned" is whatever's left of noOfContainers.
@@ -653,6 +664,21 @@ const fetchFlatShipmentList = async ({ page = 1, limit = 20, search = '', status
         receiver: actual.receiver || '',
         expectedDocDate: actual.expectedDocDate || null,
         arrivalDocumentReceived: actual.arrivalDocumentUrl ? 'Yes' : 'No',
+        // LPO Number — fpoNo is what the app shows as "PO No." (Shipment Summary step reads
+        // fpoNo first, poNumber/orderNumber only as fallback). poNumber is a different,
+        // internal reference code, kept here in case it's needed but not used for this column.
+        poNumber: s.poNumber || '',
+        fpoNo: s.fpoNo || s.poNumber || s.orderNumber || '',
+        foreignLocal: s.isLocal ? 'Local' : 'Foreign',
+
+        // Quality
+        qualityBatchNo: firstNonEmpty(storageSplits, 'batch'),
+        qualityInhouseReportNo: firstNonEmpty(qualityRows, 'inhouseReportNo'),
+        qualityInhouseDocument: firstNonEmpty(qualityRows, 'inhouseReportDocumentName'),
+        qualityInhouseRemarks: firstNonEmpty(qualityRows, 'inhouseRemarks'),
+        qualityThirdPartyReportNo: firstNonEmpty(qualityRows, 'thirdPartyReportNo'),
+        qualityThirdPartyDocument: firstNonEmpty(qualityRows, 'thirdPartyReportDocumentName'),
+        qualityThirdPartyRemarks: firstNonEmpty(qualityRows, 'remarks'),
 
         // Logistics Department (Clearing Advance request)
         clearingAdvanceRequestDate: clearingApproval.submittedAt || null,

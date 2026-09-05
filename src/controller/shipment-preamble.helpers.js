@@ -952,7 +952,10 @@ const SHIPMENT_REPORT_COLUMNS = [
   { header: 'Rice Name', key: 'riceName', width: 18 },
   { header: 'Packing', key: 'packing', width: 12 },
   { header: 'PI No.', key: 'piNo', width: 20 },
-  { header: 'LPO Number', key: 'poNumber', width: 20 },
+  // LPO Number = shipment.fpoNo — same field the "PO No." label on the Shipment Summary step
+  // reads (fpoNo first, poNumber/orderNumber only as fallback). shipment.poNumber is a
+  // different, internal reference code and is NOT what the client means by "LPO Number".
+  { header: 'LPO Number', key: 'fpoNo', width: 20 },
   { header: 'Foreign / Local', key: 'foreignLocal', width: 14 },
   { header: 'FCL', key: 'fcl', width: 10 },
   { header: 'Cont. Size', key: 'containerSize', width: 12 },

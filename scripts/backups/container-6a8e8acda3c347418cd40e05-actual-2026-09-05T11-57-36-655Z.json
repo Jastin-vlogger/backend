@@ -1,0 +1,2319 @@
+{
+  "packagingList": {
+    "brand": "AL MUSTSHAR",
+    "productionDate": "02/2026",
+    "expiryDate": "02/2028",
+    "packingDescription": "",
+    "totalBags": 0,
+    "totalGrossWeight": "502.500 M.TONS",
+    "totalNetWeight": "500.000 M.TONS",
+    "containerInfo": [
+      {
+        "container_number": "DPWU2066673",
+        "no_of_bags": 0,
+        "gross_weight": "",
+        "net_weight": "",
+        "_id": "6a8e8ce4a3c347418cd40ecf"
+      },
+      {
+        "container_number": "DPWU2166097",
+        "no_of_bags": 0,
+        "gross_weight": "",
+        "net_weight": "",
+        "_id": "6a8e8ce4a3c347418cd40ed0"
+      },
+      {
+        "container_number": "DPWU2213352",
+        "no_of_bags": 0,
+        "gross_weight": "",
+        "net_weight": "",
+        "_id": "6a8e8ce4a3c347418cd40ed1"
+      },
+      {
+        "container_number": "DPWU2211703",
+        "no_of_bags": 0,
+        "gross_weight": "",
+        "net_weight": "",
+        "_id": "6a8e8ce4a3c347418cd40ed2"
+      },
+      {
+        "container_number": "DPWU2134063",
+        "no_of_bags": 0,
+        "gross_weight": "",
+        "net_weight": "",
+        "_id": "6a8e8ce4a3c347418cd40ed3"
+      },
+      {
+        "container_number": "DPWU2049526",
+        "no_of_bags": 0,
+        "gross_weight": "",
+        "net_weight": "",
+        "_id": "6a8e8ce4a3c347418cd40ed4"
+      },
+      {
+        "container_number": "DPWU2163919",
+        "no_of_bags": 0,
+        "gross_weight": "",
+        "net_weight": "",
+        "_id": "6a8e8ce4a3c347418cd40ed5"
+      },
+      {
+        "container_number": "DPWU2116959",
+        "no_of_bags": 0,
+        "gross_weight": "",
+        "net_weight": "",
+        "_id": "6a8e8ce4a3c347418cd40ed6"
+      },
+      {
+        "container_number": "DPWU2212464",
+        "no_of_bags": 0,
+        "gross_weight": "",
+        "net_weight": "",
+        "_id": "6a8e8ce4a3c347418cd40ed7"
+      },
+      {
+        "container_number": "DPWU2084912",
+        "no_of_bags": 0,
+        "gross_weight": "",
+        "net_weight": "",
+        "_id": "6a8e8ce4a3c347418cd40ed8"
+      },
+      {
+        "container_number": "DPWU2058744",
+        "no_of_bags": 0,
+        "gross_weight": "",
+        "net_weight": "",
+        "_id": "6a8e8ce4a3c347418cd40ed9"
+      },
+      {
+        "container_number": "DPWU2085518",
+        "no_of_bags": 0,
+        "gross_weight": "",
+        "net_weight": "",
+        "_id": "6a8e8ce4a3c347418cd40eda"
+      },
+      {
+        "container_number": "DPWU2157794",
+        "no_of_bags": 0,
+        "gross_weight": "",
+        "net_weight": "",
+        "_id": "6a8e8ce4a3c347418cd40edb"
+      },
+      {
+        "container_number": "DPWU2206754",
+        "no_of_bags": 0,
+        "gross_weight": "",
+        "net_weight": "",
+        "_id": "6a8e8ce4a3c347418cd40edc"
+      },
+      {
+        "container_number": "DPWU2061579",
+        "no_of_bags": 0,
+        "gross_weight": "",
+        "net_weight": "",
+        "_id": "6a8e8ce4a3c347418cd40edd"
+      },
+      {
+        "container_number": "DPWU2107854",
+        "no_of_bags": 0,
+        "gross_weight": "",
+        "net_weight": "",
+        "_id": "6a8e8ce4a3c347418cd40ede"
+      },
+      {
+        "container_number": "DPWU2060572",
+        "no_of_bags": 0,
+        "gross_weight": "",
+        "net_weight": "",
+        "_id": "6a8e8ce4a3c347418cd40edf"
+      },
+      {
+        "container_number": "DPWU2052638",
+        "no_of_bags": 0,
+        "gross_weight": "",
+        "net_weight": "",
+        "_id": "6a8e8ce4a3c347418cd40ee0"
+      },
+      {
+        "container_number": "DPWU2096132",
+        "no_of_bags": 0,
+        "gross_weight": "",
+        "net_weight": "",
+        "_id": "6a8e8ce4a3c347418cd40ee1"
+      },
+      {
+        "container_number": "DPWU2202574",
+        "no_of_bags": 0,
+        "gross_weight": "",
+        "net_weight": "",
+        "_id": "6a8e8ce4a3c347418cd40ee2"
+      }
+    ]
+  },
+  "actualSerialNo": "RHST-0034/PO01-0622/ACT01",
+  "commercialInvoiceNo": "",
+  "shipOnBoardDate": "2026-03-11T00:00:00.000Z",
+  "size": "20",
+  "FCL": 20,
+  "qtyMT": 800,
+  "bags": 20000,
+  "pallet": 400,
+  "buyingUnit": "MT",
+  "receivedOn": "2026-08-26T06:51:16.960Z",
+  "updatedETD": "2026-03-11T00:00:00.000Z",
+  "updatedETA": "2026-03-23T00:00:00.000Z",
+  "CLNo": "BOMS26030622",
+  "blFirstSavedAt": "2026-08-26T08:52:33.522Z",
+  "BLNo": "BOMS26030622",
+  "arrivalNoticeFreeRetentionDays": 0,
+  "municipalityApplicable": true,
+  "municipalityStatus": "closed",
+  "lockedLogisticsSections": [
+    "boePassingDate",
+    "municipality"
+  ],
+  "customClearanceRequired": false,
+  "paid_amount": 0,
+  "noOfContainers": 60,
+  "noOfBags": 20000,
+  "quantityByMt": 800,
+  "portOfLoading": "KANDLA,INDIA",
+  "portOfDischarge": "KHOR AL FAKHAN, U.A.E.",
+  "shipmentArrived": "Yes",
+  "shippingLine": "SMART SOLUTIONS LINE FZE",
+  "freeDetentionDays": 0,
+  "maximumDetentionDays": 0,
+  "freightPrepared": "No",
+  "extractedContainers": [
+    {
+      "containerNo": "DPWU2066673",
+      "pkgCt": 0,
+      "_id": "6a8e8ce4a3c347418cd40ebb"
+    },
+    {
+      "containerNo": "DPWU2166097",
+      "pkgCt": 0,
+      "_id": "6a8e8ce4a3c347418cd40ebc"
+    },
+    {
+      "containerNo": "DPWU2213352",
+      "pkgCt": 0,
+      "_id": "6a8e8ce4a3c347418cd40ebd"
+    },
+    {
+      "containerNo": "DPWU2211703",
+      "pkgCt": 0,
+      "_id": "6a8e8ce4a3c347418cd40ebe"
+    },
+    {
+      "containerNo": "DPWU2134063",
+      "pkgCt": 0,
+      "_id": "6a8e8ce4a3c347418cd40ebf"
+    },
+    {
+      "containerNo": "DPWU2049526",
+      "pkgCt": 0,
+      "_id": "6a8e8ce4a3c347418cd40ec0"
+    },
+    {
+      "containerNo": "DPWU2163919",
+      "pkgCt": 0,
+      "_id": "6a8e8ce4a3c347418cd40ec1"
+    },
+    {
+      "containerNo": "DPWU2116959",
+      "pkgCt": 0,
+      "_id": "6a8e8ce4a3c347418cd40ec2"
+    },
+    {
+      "containerNo": "DPWU2212464",
+      "pkgCt": 0,
+      "_id": "6a8e8ce4a3c347418cd40ec3"
+    },
+    {
+      "containerNo": "DPWU2084912",
+      "pkgCt": 0,
+      "_id": "6a8e8ce4a3c347418cd40ec4"
+    },
+    {
+      "containerNo": "DPWU2058744",
+      "pkgCt": 0,
+      "_id": "6a8e8ce4a3c347418cd40ec5"
+    },
+    {
+      "containerNo": "DPWU2085518",
+      "pkgCt": 0,
+      "_id": "6a8e8ce4a3c347418cd40ec6"
+    },
+    {
+      "containerNo": "DPWU2157794",
+      "pkgCt": 0,
+      "_id": "6a8e8ce4a3c347418cd40ec7"
+    },
+    {
+      "containerNo": "DPWU2206754",
+      "pkgCt": 0,
+      "_id": "6a8e8ce4a3c347418cd40ec8"
+    },
+    {
+      "containerNo": "DPWU2061579",
+      "pkgCt": 0,
+      "_id": "6a8e8ce4a3c347418cd40ec9"
+    },
+    {
+      "containerNo": "DPWU2107854",
+      "pkgCt": 0,
+      "_id": "6a8e8ce4a3c347418cd40eca"
+    },
+    {
+      "containerNo": "DPWU2060572",
+      "pkgCt": 0,
+      "_id": "6a8e8ce4a3c347418cd40ecb"
+    },
+    {
+      "containerNo": "DPWU2052638",
+      "pkgCt": 0,
+      "_id": "6a8e8ce4a3c347418cd40ecc"
+    },
+    {
+      "containerNo": "DPWU2096132",
+      "pkgCt": 0,
+      "_id": "6a8e8ce4a3c347418cd40ecd"
+    },
+    {
+      "containerNo": "DPWU2202574",
+      "pkgCt": 0,
+      "_id": "6a8e8ce4a3c347418cd40ece"
+    }
+  ],
+  "bankSubmittedToBank": false,
+  "skipMurabaha": false,
+  "daSubmittedToBank": false,
+  "murabahaSubmittedToBank": false,
+  "freeStorageDays": 14,
+  "customerInspectionRequired": false,
+  "_id": "6a8e8ce4a3c347418cd40eba",
+  "deliverySchedules": [],
+  "warehouseSchedules": [],
+  "costSheetBookings": [
+    {
+      "sn": 1,
+      "description": "Invoice Attestation - MOFAIC",
+      "visibleTo": [
+        "logistic",
+        "fas"
+      ],
+      "defaultQty": 2,
+      "defaultRate": 304.41,
+      "requestAmount": 608.82,
+      "paymentTo": "MOFA",
+      "paymentTerm": "CHQ",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6ac2"
+    },
+    {
+      "sn": 2,
+      "description": "Admin fee",
+      "visibleTo": [
+        "logistic",
+        "fas"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 5,
+      "requestAmount": 5,
+      "paymentTo": "Shipping line",
+      "paymentTerm": "Trans",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6ac3"
+    },
+    {
+      "sn": 3,
+      "description": "Haulage charges  / Bonded Movt / Inbound transportation",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 60,
+      "defaultRate": 3500,
+      "requestAmount": 210000,
+      "paymentTo": "Shipping line",
+      "paymentTerm": "Trans",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6ac4"
+    },
+    {
+      "sn": 4,
+      "description": "Container / Equipment Imbalance",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 60,
+      "defaultRate": 19,
+      "requestAmount": 1140,
+      "paymentTo": "Shipping line",
+      "paymentTerm": "Trans",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6ac5"
+    },
+    {
+      "sn": 5,
+      "description": "Container Inspection Charges",
+      "visibleTo": [
+        "logistic",
+        "fas"
+      ],
+      "defaultQty": 60,
+      "defaultRate": 30,
+      "requestAmount": 1800,
+      "paymentTo": "Shipping line",
+      "paymentTerm": "Trans",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6ac6"
+    },
+    {
+      "sn": 6,
+      "description": "Container Maintenance Charge",
+      "visibleTo": [
+        "logistic",
+        "fas"
+      ],
+      "defaultQty": 60,
+      "defaultRate": 100,
+      "requestAmount": 6000,
+      "paymentTo": "Shipping line",
+      "paymentTerm": "Trans",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6ac7"
+    },
+    {
+      "sn": 7,
+      "description": "Container Monitoring Charges",
+      "visibleTo": [
+        "logistic",
+        "fas"
+      ],
+      "defaultQty": 60,
+      "defaultRate": 10,
+      "requestAmount": 600,
+      "paymentTo": "Shipping line",
+      "paymentTerm": "Trans",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6ac8"
+    },
+    {
+      "sn": 8,
+      "description": "Delivery Order fees",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 575,
+      "requestAmount": 575,
+      "paymentTo": "Shipping line",
+      "paymentTerm": "Trans",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6ac9"
+    },
+    {
+      "sn": 9,
+      "description": "Emergency Operational Surcharge",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 60,
+      "defaultRate": 368.5,
+      "requestAmount": 22110,
+      "paymentTo": "Shipping line",
+      "paymentTerm": "Trans",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6aca"
+    },
+    {
+      "sn": 10,
+      "description": "Port Security Surcharge",
+      "visibleTo": [
+        "logistic",
+        "fas"
+      ],
+      "defaultQty": 60,
+      "defaultRate": 85,
+      "requestAmount": 5100,
+      "paymentTo": "Shipping line",
+      "paymentTerm": "Trans",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6acb"
+    },
+    {
+      "sn": 11,
+      "description": "Terminal Conservancy Fee",
+      "visibleTo": [
+        "logistic",
+        "fas"
+      ],
+      "defaultQty": 60,
+      "defaultRate": 25,
+      "requestAmount": 1500,
+      "paymentTo": "Shipping line",
+      "paymentTerm": "Trans",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6acc"
+    },
+    {
+      "sn": 12,
+      "description": "Terminal Infrastructure Fee",
+      "visibleTo": [
+        "logistic",
+        "fas"
+      ],
+      "defaultQty": 60,
+      "defaultRate": 25,
+      "requestAmount": 1500,
+      "paymentTo": "Shipping line",
+      "paymentTerm": "Trans",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6acd"
+    },
+    {
+      "sn": 13,
+      "description": "Container Washing",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 60,
+      "defaultRate": 100,
+      "requestAmount": 6000,
+      "paymentTo": "Shipping line",
+      "paymentTerm": "Trans",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6ace"
+    },
+    {
+      "sn": 15,
+      "description": "DO Other Charges",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6acf"
+    },
+    {
+      "sn": 16,
+      "description": "Freight",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 60,
+      "defaultRate": 7738.5,
+      "requestAmount": 464310,
+      "paymentTo": "Shipping line",
+      "paymentTerm": "Trans",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6ad0"
+    },
+    {
+      "sn": 17,
+      "description": "DO EXtension1",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6ad1"
+    },
+    {
+      "sn": 18,
+      "description": "Shipping Line Demurrage",
+      "visibleTo": [
+        "logistic",
+        "fas"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 9842.62,
+      "requestAmount": 9842.62,
+      "paymentTo": "Shipping line",
+      "paymentTerm": "CHQ",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6ad2"
+    },
+    {
+      "sn": 19,
+      "description": "BOE",
+      "visibleTo": [
+        "logistic",
+        "fas"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 105,
+      "requestAmount": 105,
+      "paymentTo": "Dubai customs",
+      "paymentTerm": "CHQ",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6ad3"
+    },
+    {
+      "sn": 20,
+      "description": "FTA Payment 5%",
+      "visibleTo": [
+        "logistic",
+        "fas"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6ad4"
+    },
+    {
+      "sn": 21,
+      "description": "FTA Payment Service Charges",
+      "visibleTo": [
+        "logistic",
+        "fas"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6ad5"
+    },
+    {
+      "sn": 22,
+      "description": "Customs Duty 5%",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6ad6"
+    },
+    {
+      "sn": 23,
+      "description": "Customs Pay Service Charges",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6ad7"
+    },
+    {
+      "sn": 24,
+      "description": "DPC charges",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 55,
+      "requestAmount": 55,
+      "paymentTo": "DP World",
+      "paymentTerm": "CHQ",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6ad8"
+    },
+    {
+      "sn": 25,
+      "description": "TLUC - DP World",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 60,
+      "defaultRate": 314,
+      "requestAmount": 18840,
+      "paymentTo": "DP World",
+      "paymentTerm": "CHQ",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6ad9"
+    },
+    {
+      "sn": 26,
+      "description": "THC - DP World",
+      "visibleTo": [
+        "logistic",
+        "fas"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6ada"
+    },
+    {
+      "sn": 27,
+      "description": "Port Storage - DP World",
+      "visibleTo": [
+        "logistic",
+        "fas"
+      ],
+      "defaultQty": 2,
+      "defaultRate": 82,
+      "requestAmount": 164,
+      "paymentTo": "DP World",
+      "paymentTerm": "CHQ",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6adb"
+    },
+    {
+      "sn": 28,
+      "description": "Transportation 01",
+      "visibleTo": [
+        "fas"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6adc"
+    },
+    {
+      "sn": 29,
+      "description": "Transportation 02",
+      "visibleTo": [
+        "fas"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6add"
+    },
+    {
+      "sn": 30,
+      "description": "Transportation 03",
+      "visibleTo": [
+        "fas"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6ade"
+    },
+    {
+      "sn": 31,
+      "description": "Cont Inspection By Transptr",
+      "visibleTo": [
+        "fas"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6adf"
+    },
+    {
+      "sn": 32,
+      "description": "DP Gate Token By Transptr",
+      "visibleTo": [
+        "fas"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6ae0"
+    },
+    {
+      "sn": 33,
+      "description": "Waiting Charges Transptr",
+      "visibleTo": [
+        "fas"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6ae1"
+    },
+    {
+      "sn": 34,
+      "description": "Other Charges By Transptr",
+      "visibleTo": [
+        "fas"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6ae2"
+    },
+    {
+      "sn": 35,
+      "description": "Offloading Charges 01",
+      "visibleTo": [
+        "fas"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6ae3"
+    },
+    {
+      "sn": 36,
+      "description": "Offloading Charges 02",
+      "visibleTo": [
+        "fas"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6ae4"
+    },
+    {
+      "sn": 37,
+      "description": "Other Charges 01",
+      "visibleTo": [
+        "fas"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6ae5"
+    },
+    {
+      "sn": 58,
+      "description": "Other Charges 02",
+      "visibleTo": [
+        "fas"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6ae6"
+    },
+    {
+      "sn": 59,
+      "description": "Murabaha Profit",
+      "visibleTo": [
+        "fas"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6ae7"
+    },
+    {
+      "sn": 87,
+      "description": "THC - Base Port",
+      "visibleTo": [
+        "logistic",
+        "fas"
+      ],
+      "defaultQty": 60,
+      "defaultRate": 1122,
+      "requestAmount": 67320,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6ae8"
+    },
+    {
+      "sn": 88,
+      "description": "TLUC - Base Port",
+      "visibleTo": [
+        "logistic",
+        "fas"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6ae9"
+    },
+    {
+      "sn": 89,
+      "description": "DP Charges",
+      "visibleTo": [
+        "logistic",
+        "fas"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6aea"
+    },
+    {
+      "sn": 91,
+      "description": "Token - Base Port",
+      "visibleTo": [
+        "logistic",
+        "fas"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6aeb"
+    },
+    {
+      "sn": 92,
+      "description": "Token - DP World",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6aec"
+    },
+    {
+      "sn": 93,
+      "description": "Operation Recovery",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6aed"
+    },
+    {
+      "sn": 94,
+      "description": "Equipment repositioning charge / Drop OFF fee",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6aee"
+    },
+    {
+      "sn": 95,
+      "description": "Storage  - Base Port",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6aef"
+    },
+    {
+      "sn": 96,
+      "description": "Terminal Conservancy Fee (IMP)",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6af0"
+    },
+    {
+      "sn": 97,
+      "description": "Documentation Processing Charges",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6af1"
+    },
+    {
+      "sn": 98,
+      "description": "Container release Charge",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6af2"
+    },
+    {
+      "sn": 99,
+      "description": "ISPS Charges",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6af3"
+    },
+    {
+      "sn": 100,
+      "description": "Seal Charges",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6af4"
+    },
+    {
+      "sn": 101,
+      "description": "JAT DO",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6af5"
+    },
+    {
+      "sn": 102,
+      "description": "Additional Surcharge",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6af6"
+    },
+    {
+      "sn": 103,
+      "description": "Peak Season Surcharge",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6af7"
+    },
+    {
+      "sn": 104,
+      "description": "Feeder Surcharge",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6af8"
+    },
+    {
+      "sn": 105,
+      "description": "War Risk Surcharge",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6af9"
+    },
+    {
+      "sn": 106,
+      "description": "Handling Charge",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6afa"
+    },
+    {
+      "sn": 107,
+      "description": "PHC",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6afb"
+    },
+    {
+      "sn": 108,
+      "description": "Remote Outlying Charge",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6afc"
+    },
+    {
+      "sn": 109,
+      "description": "Port Receiving Charge",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6afd"
+    },
+    {
+      "sn": 110,
+      "description": "Inbound Service  Surcharge",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6afe"
+    },
+    {
+      "sn": 111,
+      "description": "VGM",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6aff"
+    },
+    {
+      "sn": 112,
+      "description": "Operation Cost Recovery",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6b00"
+    },
+    {
+      "sn": 113,
+      "description": "All in one Charges",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6b01"
+    },
+    {
+      "sn": 114,
+      "description": "Local Transportation",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 60,
+      "defaultRate": 1330.86,
+      "requestAmount": 79851.6,
+      "paymentTo": "Transporter",
+      "paymentTerm": "Trans",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6b02"
+    },
+    {
+      "sn": 115,
+      "description": "Container  Token / Gatepass",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6b03"
+    },
+    {
+      "sn": 116,
+      "description": "Waiting Charges",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6b04"
+    },
+    {
+      "sn": 117,
+      "description": "MECRC Container Repair",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6b05"
+    },
+    {
+      "sn": 118,
+      "description": "DPWorld  Loading Unloading for Inspection",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6b06"
+    },
+    {
+      "sn": 119,
+      "description": "MECRC Container Washing",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6b07"
+    },
+    {
+      "sn": 120,
+      "description": "Clearance Charges",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6b08"
+    },
+    {
+      "sn": 121,
+      "description": "Container Inspection Charges -Tranporter Service Charge",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6b09"
+    },
+    {
+      "sn": 122,
+      "description": "Cont Return Service Charges",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6b0a"
+    },
+    {
+      "sn": 123,
+      "description": "Lift On Lift Off",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6b0b"
+    },
+    {
+      "sn": 124,
+      "description": "My Exclusive Concierge",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6b0c"
+    },
+    {
+      "sn": 125,
+      "description": "DESTINATION CHARGES",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6b0d"
+    },
+    {
+      "sn": 127,
+      "description": "CO2 Reduction",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6b0e"
+    },
+    {
+      "sn": 128,
+      "description": "Storages Paid by the Transporter",
+      "visibleTo": [
+        "fas",
+        "logistic"
+      ],
+      "defaultQty": 1,
+      "defaultRate": 0,
+      "requestAmount": 0,
+      "paymentTo": "",
+      "paymentTerm": "",
+      "remarks": "",
+      "attachmentDocumentUrl": "",
+      "attachmentDocumentName": "",
+      "_id": "6a8fed72386e83d64f7e6b0f"
+    }
+  ],
+  "clearingAdvancePaymentDetails": {
+    "chequeNo": "NA",
+    "chequeDate": "2026-08-27T00:00:00.000Z",
+    "paymentVoucherNo": "NA",
+    "transactionId": ""
+  },
+  "clearingAdvanceApproval": {
+    "status": "approved",
+    "submittedAt": "2026-08-27T07:45:51.002Z",
+    "submittedBy": "6a3cb36ba19858f5ed0d12bb",
+    "fasApprovedAt": "2026-08-27T11:23:03.712Z",
+    "fasApprovedBy": "69ea332e908c2edc57abeda2",
+    "fasManagerApprovedAt": null,
+    "fasManagerApprovedBy": null
+  },
+  "additionalClearingAdvanceRequests": [],
+  "storageAllocations": [],
+  "storageAllocationDecision": {
+    "similarItems": true,
+    "splitRequired": false,
+    "splitQuantity": 0,
+    "singleItem": true,
+    "allocateSameWarehouse": true,
+    "warehousesSelected": [],
+    "itemAllocations": []
+  },
+  "storageAllocationSplits": [],
+  "storageAllocationApproval": {
+    "status": "draft",
+    "submittedAt": null,
+    "submittedBy": null,
+    "lastUpdatedAt": null,
+    "lastUpdatedBy": null,
+    "warehouseManagerApprovedAt": null,
+    "warehouseManagerApprovedBy": null
+  },
+  "transportationBooked": [
+    {
+      "sn": 1,
+      "transactionId": "TXN-1787909881746-jb49uoh",
+      "containerSerialNo": "DPWU2066673",
+      "transportCompanyName": "FLUXION LLC",
+      "warehouse": "SAJAH",
+      "bookedDate": "2026-04-13T00:00:00.000Z",
+      "bookingTime": "15:00",
+      "transportDate": "2026-04-14T00:00:00.000Z",
+      "transportTime": "08:00",
+      "delayHours": 3336.5,
+      "storageStartDate": null,
+      "storageEndDate": null,
+      "tokenReceivedDate": null,
+      "_id": "6a9157c309c7a6ffd25114c6"
+    },
+    {
+      "sn": 2,
+      "transactionId": "TXN-1787909881746-jb49uoh",
+      "containerSerialNo": "DPWU2166097",
+      "transportCompanyName": "FLUXION LLC",
+      "warehouse": "SAJAH",
+      "bookedDate": "2026-04-13T00:00:00.000Z",
+      "bookingTime": "15:00",
+      "transportDate": "2026-04-14T00:00:00.000Z",
+      "transportTime": "08:00",
+      "delayHours": 3336.5,
+      "storageStartDate": null,
+      "storageEndDate": null,
+      "tokenReceivedDate": null,
+      "_id": "6a9157c309c7a6ffd25114c7"
+    },
+    {
+      "sn": 3,
+      "transactionId": "TXN-1787909881746-jb49uoh",
+      "containerSerialNo": "DPWU2213352",
+      "transportCompanyName": "FLUXION LLC",
+      "warehouse": "SAJAH",
+      "bookedDate": "2026-04-13T00:00:00.000Z",
+      "bookingTime": "15:00",
+      "transportDate": "2026-04-14T00:00:00.000Z",
+      "transportTime": "08:00",
+      "delayHours": 3336.5,
+      "storageStartDate": null,
+      "storageEndDate": null,
+      "tokenReceivedDate": null,
+      "_id": "6a9157c309c7a6ffd25114c8"
+    },
+    {
+      "sn": 4,
+      "transactionId": "TXN-1787909881746-jb49uoh",
+      "containerSerialNo": "DPWU2211703",
+      "transportCompanyName": "FLUXION LLC",
+      "warehouse": "SAJAH",
+      "bookedDate": "2026-04-13T00:00:00.000Z",
+      "bookingTime": "15:00",
+      "transportDate": "2026-04-14T00:00:00.000Z",
+      "transportTime": "08:00",
+      "delayHours": 3336.5,
+      "storageStartDate": null,
+      "storageEndDate": null,
+      "tokenReceivedDate": null,
+      "_id": "6a9157c309c7a6ffd25114c9"
+    },
+    {
+      "sn": 5,
+      "transactionId": "TXN-1787910026167-3woc820",
+      "containerSerialNo": "DPWU2134063",
+      "transportCompanyName": "FLUXION LLC",
+      "warehouse": "DIC",
+      "bookedDate": "2026-04-13T00:00:00.000Z",
+      "bookingTime": "15:00",
+      "transportDate": "2026-04-14T00:00:00.000Z",
+      "transportTime": "08:00",
+      "delayHours": 3292.55,
+      "storageStartDate": null,
+      "storageEndDate": null,
+      "tokenReceivedDate": null,
+      "_id": "6a9157c309c7a6ffd25114ca"
+    },
+    {
+      "sn": 6,
+      "transactionId": "TXN-1787909881746-jb49uoh",
+      "containerSerialNo": "DPWU2049526",
+      "transportCompanyName": "FLUXION LLC",
+      "warehouse": "SAJAH",
+      "bookedDate": "2026-04-13T00:00:00.000Z",
+      "bookingTime": "15:00",
+      "transportDate": "2026-04-14T00:00:00.000Z",
+      "transportTime": "08:00",
+      "delayHours": 0,
+      "storageStartDate": null,
+      "storageEndDate": null,
+      "tokenReceivedDate": null,
+      "_id": "6a9157c309c7a6ffd25114cb"
+    },
+    {
+      "sn": 7,
+      "transactionId": "TXN-1787910026167-3woc820",
+      "containerSerialNo": "DPWU2163919",
+      "transportCompanyName": "FLUXION LLC",
+      "warehouse": "DIC",
+      "bookedDate": "2026-04-13T00:00:00.000Z",
+      "bookingTime": "15:00",
+      "transportDate": "2026-04-14T00:00:00.000Z",
+      "transportTime": "08:00",
+      "delayHours": 3416.47,
+      "storageStartDate": null,
+      "storageEndDate": null,
+      "tokenReceivedDate": null,
+      "_id": "6a9157c309c7a6ffd25114cc"
+    },
+    {
+      "sn": 8,
+      "transactionId": "TXN-1787910026167-3woc820",
+      "containerSerialNo": "DPWU2116959",
+      "transportCompanyName": "FLUXION LLC",
+      "warehouse": "DIC",
+      "bookedDate": "2026-04-13T00:00:00.000Z",
+      "bookingTime": "15:00",
+      "transportDate": "2026-04-14T00:00:00.000Z",
+      "transportTime": "08:00",
+      "delayHours": 3416.47,
+      "storageStartDate": null,
+      "storageEndDate": null,
+      "tokenReceivedDate": null,
+      "_id": "6a9157c309c7a6ffd25114cd"
+    },
+    {
+      "sn": 9,
+      "transactionId": "TXN-1787910026167-3woc820",
+      "containerSerialNo": "DPWU2212464",
+      "transportCompanyName": "FLUXION LLC",
+      "warehouse": "DIC",
+      "bookedDate": "2026-04-13T00:00:00.000Z",
+      "bookingTime": "15:00",
+      "transportDate": "2026-04-14T00:00:00.000Z",
+      "transportTime": "08:00",
+      "delayHours": 3416.47,
+      "storageStartDate": null,
+      "storageEndDate": null,
+      "tokenReceivedDate": null,
+      "_id": "6a9157c309c7a6ffd25114ce"
+    },
+    {
+      "sn": 10,
+      "transactionId": "TXN-1787910026167-3woc820",
+      "containerSerialNo": "DPWU2084912",
+      "transportCompanyName": "FLUXION LLC",
+      "warehouse": "DIC",
+      "bookedDate": "2026-04-13T00:00:00.000Z",
+      "bookingTime": "15:00",
+      "transportDate": "2026-04-14T00:00:00.000Z",
+      "transportTime": "08:00",
+      "delayHours": 3416.47,
+      "storageStartDate": null,
+      "storageEndDate": null,
+      "tokenReceivedDate": null,
+      "_id": "6a9157c309c7a6ffd25114cf"
+    },
+    {
+      "sn": 11,
+      "transactionId": "TXN-1787910026167-3woc820",
+      "containerSerialNo": "DPWU2058744",
+      "transportCompanyName": "FLUXION LLC",
+      "warehouse": "DIC",
+      "bookedDate": "2026-04-13T00:00:00.000Z",
+      "bookingTime": "15:00",
+      "transportDate": "2026-04-14T00:00:00.000Z",
+      "transportTime": "08:00",
+      "delayHours": 3416.47,
+      "storageStartDate": null,
+      "storageEndDate": null,
+      "tokenReceivedDate": null,
+      "_id": "6a9157c309c7a6ffd25114d0"
+    },
+    {
+      "sn": 12,
+      "transactionId": "TXN-1787910026167-3woc820",
+      "containerSerialNo": "DPWU2085518",
+      "transportCompanyName": "FLUXION LLC",
+      "warehouse": "DIC",
+      "bookedDate": "2026-04-13T00:00:00.000Z",
+      "bookingTime": "15:00",
+      "transportDate": "2026-04-14T00:00:00.000Z",
+      "transportTime": "08:00",
+      "delayHours": 0,
+      "storageStartDate": null,
+      "storageEndDate": null,
+      "tokenReceivedDate": null,
+      "_id": "6a9157c309c7a6ffd25114d1"
+    },
+    {
+      "sn": 13,
+      "transactionId": "TXN-1787909881746-jb49uoh",
+      "containerSerialNo": "DPWU2157794",
+      "transportCompanyName": "FLUXION LLC",
+      "warehouse": "SAJAH",
+      "bookedDate": "2026-04-13T00:00:00.000Z",
+      "bookingTime": "15:00",
+      "transportDate": "2026-04-14T00:00:00.000Z",
+      "transportTime": "08:00",
+      "delayHours": 0,
+      "storageStartDate": null,
+      "storageEndDate": null,
+      "tokenReceivedDate": null,
+      "_id": "6a9157c309c7a6ffd25114d2"
+    },
+    {
+      "sn": 14,
+      "transactionId": "TXN-1787909881746-jb49uoh",
+      "containerSerialNo": "DPWU2206754",
+      "transportCompanyName": "FLUXION LLC",
+      "warehouse": "SAJAH",
+      "bookedDate": "2026-04-13T00:00:00.000Z",
+      "bookingTime": "15:00",
+      "transportDate": "2026-04-14T00:00:00.000Z",
+      "transportTime": "08:00",
+      "delayHours": 0,
+      "storageStartDate": null,
+      "storageEndDate": null,
+      "tokenReceivedDate": null,
+      "_id": "6a9157c309c7a6ffd25114d3"
+    },
+    {
+      "sn": 15,
+      "transactionId": "TXN-1787910082927-l75tyr1",
+      "containerSerialNo": "DPWU2061579",
+      "transportCompanyName": "FLUXION LLC",
+      "warehouse": "AL AIN",
+      "bookedDate": "2026-04-13T00:00:00.000Z",
+      "bookingTime": "15:00",
+      "transportDate": "2026-04-14T00:00:00.000Z",
+      "transportTime": "08:00",
+      "delayHours": 3367.33,
+      "storageStartDate": null,
+      "storageEndDate": null,
+      "tokenReceivedDate": null,
+      "_id": "6a9157c309c7a6ffd25114d4"
+    },
+    {
+      "sn": 16,
+      "transactionId": "TXN-1787909881746-jb49uoh",
+      "containerSerialNo": "DPWU2107854",
+      "transportCompanyName": "FLUXION LLC",
+      "warehouse": "SAJAH",
+      "bookedDate": "2026-04-13T00:00:00.000Z",
+      "bookingTime": "15:00",
+      "transportDate": "2026-04-14T00:00:00.000Z",
+      "transportTime": "08:00",
+      "delayHours": 0,
+      "storageStartDate": null,
+      "storageEndDate": null,
+      "tokenReceivedDate": null,
+      "_id": "6a9157c309c7a6ffd25114d5"
+    },
+    {
+      "sn": 17,
+      "transactionId": "TXN-1787909881746-jb49uoh",
+      "containerSerialNo": "DPWU2060572",
+      "transportCompanyName": "FLUXION LLC",
+      "warehouse": "SAJAH",
+      "bookedDate": "2026-04-13T00:00:00.000Z",
+      "bookingTime": "15:00",
+      "transportDate": "2026-04-14T00:00:00.000Z",
+      "transportTime": "08:00",
+      "delayHours": 3336.5,
+      "storageStartDate": null,
+      "storageEndDate": null,
+      "tokenReceivedDate": null,
+      "_id": "6a9157c309c7a6ffd25114d6"
+    },
+    {
+      "sn": 18,
+      "transactionId": "TXN-1787909881746-jb49uoh",
+      "containerSerialNo": "DPWU2052638",
+      "transportCompanyName": "FLUXION LLC",
+      "warehouse": "SAJAH",
+      "bookedDate": "2026-04-13T00:00:00.000Z",
+      "bookingTime": "15:00",
+      "transportDate": "2026-04-14T00:00:00.000Z",
+      "transportTime": "08:00",
+      "delayHours": 3336.5,
+      "storageStartDate": null,
+      "storageEndDate": null,
+      "tokenReceivedDate": null,
+      "_id": "6a9157c309c7a6ffd25114d7"
+    },
+    {
+      "sn": 19,
+      "transactionId": "TXN-1787909881746-jb49uoh",
+      "containerSerialNo": "DPWU2096132",
+      "transportCompanyName": "FLUXION LLC",
+      "warehouse": "SAJAH",
+      "bookedDate": "2026-04-13T00:00:00.000Z",
+      "bookingTime": "15:00",
+      "transportDate": "2026-04-14T00:00:00.000Z",
+      "transportTime": "08:00",
+      "delayHours": 3336.5,
+      "storageStartDate": null,
+      "storageEndDate": null,
+      "tokenReceivedDate": null,
+      "_id": "6a9157c309c7a6ffd25114d8"
+    },
+    {
+      "sn": 20,
+      "transactionId": "TXN-1787909881746-jb49uoh",
+      "containerSerialNo": "DPWU2202574",
+      "transportCompanyName": "FLUXION LLC",
+      "warehouse": "SAJAH",
+      "bookedDate": "2026-04-13T00:00:00.000Z",
+      "bookingTime": "15:00",
+      "transportDate": "2026-04-14T00:00:00.000Z",
+      "transportTime": "08:00",
+      "delayHours": 3336.5,
+      "storageStartDate": null,
+      "storageEndDate": null,
+      "tokenReceivedDate": null,
+      "_id": "6a9157c309c7a6ffd25114d9"
+    }
+  ],
+  "storageSplits": [
+    {
+      "containerSerialNo": "DPWU2134063",
+      "bags": 0,
+      "warehouse": "DIC",
+      "block": "",
+      "storageAvailability": 0,
+      "receivedOnDate": "2026-08-29T00:00:00.000Z",
+      "receivedOnTime": "12:33",
+      "customsInspection": "Yes",
+      "grn": "GRN01/26/00952",
+      "batch": "DR3215",
+      "productionDate": "2026-02-01T00:00:00.000Z",
+      "expiryDate": "2028-02-01T00:00:00.000Z",
+      "shortageBags": 1,
+      "remarks": "1 BAG IS SHORTAGE ",
+      "documentUrl": "",
+      "documentName": "",
+      "_id": "6a9299876092ea283ead6b4d"
+    },
+    {
+      "containerSerialNo": "DPWU2213352",
+      "bags": 0,
+      "warehouse": "SAJAH",
+      "block": "",
+      "storageAvailability": 0,
+      "receivedOnDate": "2026-08-31T00:00:00.000Z",
+      "receivedOnTime": "08:30",
+      "customsInspection": "Yes",
+      "grn": "GRN01/26/01002",
+      "batch": "DRRK 3525",
+      "productionDate": "2026-02-01T00:00:00.000Z",
+      "expiryDate": "2028-02-29T00:00:00.000Z",
+      "shortageBags": 0,
+      "remarks": "",
+      "documentUrl": "",
+      "documentName": "",
+      "_id": "6a950a33012527b65e8d92cd"
+    },
+    {
+      "containerSerialNo": "DPWU2211703",
+      "bags": 0,
+      "warehouse": "SAJAH",
+      "block": "",
+      "storageAvailability": 0,
+      "receivedOnDate": "2026-08-31T00:00:00.000Z",
+      "receivedOnTime": "08:30",
+      "customsInspection": "Yes",
+      "grn": "GRN01/26/01002",
+      "batch": "DRRK 3235",
+      "productionDate": "2026-02-01T00:00:00.000Z",
+      "expiryDate": "2028-02-29T00:00:00.000Z",
+      "shortageBags": 0,
+      "remarks": "",
+      "documentUrl": "",
+      "documentName": "",
+      "_id": "6a950ab5012527b65e8d9363"
+    },
+    {
+      "containerSerialNo": "DPWU2066673",
+      "bags": 0,
+      "warehouse": "SAJAH",
+      "block": "",
+      "storageAvailability": 0,
+      "receivedOnDate": "2026-08-31T00:00:00.000Z",
+      "receivedOnTime": "08:30",
+      "customsInspection": "Yes",
+      "grn": "GRN01/26/01002",
+      "batch": "DRRK 3235",
+      "productionDate": "2026-02-01T00:00:00.000Z",
+      "expiryDate": "2028-02-29T00:00:00.000Z",
+      "shortageBags": 0,
+      "remarks": "",
+      "documentUrl": "",
+      "documentName": "",
+      "_id": "6a950ace012527b65e8d93fa"
+    },
+    {
+      "containerSerialNo": "DPWU2166097",
+      "bags": 0,
+      "warehouse": "SAJAH",
+      "block": "",
+      "storageAvailability": 0,
+      "receivedOnDate": "2026-08-31T00:00:00.000Z",
+      "receivedOnTime": "08:30",
+      "customsInspection": "Yes",
+      "grn": "GRN01/26/01002",
+      "batch": "DRRK 3235",
+      "productionDate": "2026-02-01T00:00:00.000Z",
+      "expiryDate": "2028-02-29T00:00:00.000Z",
+      "shortageBags": 0,
+      "remarks": "",
+      "documentUrl": "",
+      "documentName": "",
+      "_id": "6a950ae0012527b65e8d9492"
+    },
+    {
+      "containerSerialNo": "DPWU2096132",
+      "bags": 0,
+      "warehouse": "SAJAH",
+      "block": "",
+      "storageAvailability": 0,
+      "receivedOnDate": "2026-08-31T00:00:00.000Z",
+      "receivedOnTime": "08:30",
+      "customsInspection": "Yes",
+      "grn": "GRN01/26/01002",
+      "batch": "DRRK 3235",
+      "productionDate": "2026-02-01T00:00:00.000Z",
+      "expiryDate": "2028-02-29T00:00:00.000Z",
+      "shortageBags": 0,
+      "remarks": "",
+      "documentUrl": "",
+      "documentName": "",
+      "_id": "6a950b85012527b65e8d952c"
+    },
+    {
+      "containerSerialNo": "DPWU2202574",
+      "bags": 0,
+      "warehouse": "SAJAH",
+      "block": "",
+      "storageAvailability": 0,
+      "receivedOnDate": "2026-08-31T00:00:00.000Z",
+      "receivedOnTime": "08:30",
+      "customsInspection": "Yes",
+      "grn": "GRN01/26/01002",
+      "batch": "DRRK 3235",
+      "productionDate": "2026-02-01T00:00:00.000Z",
+      "expiryDate": "2028-02-29T00:00:00.000Z",
+      "shortageBags": 0,
+      "remarks": "",
+      "documentUrl": "",
+      "documentName": "",
+      "_id": "6a950bb5012527b65e8d95c6"
+    },
+    {
+      "containerSerialNo": "DPWU2060572",
+      "bags": 0,
+      "warehouse": "SAJAH",
+      "block": "",
+      "storageAvailability": 0,
+      "receivedOnDate": "2026-08-31T00:00:00.000Z",
+      "receivedOnTime": "08:30",
+      "customsInspection": "Yes",
+      "grn": "GRN01/26/01002",
+      "batch": "DRRK 3235",
+      "productionDate": "2026-02-01T00:00:00.000Z",
+      "expiryDate": "2028-02-29T00:00:00.000Z",
+      "shortageBags": 0,
+      "remarks": "",
+      "documentUrl": "",
+      "documentName": "",
+      "_id": "6a950bcb012527b65e8d9661"
+    },
+    {
+      "containerSerialNo": "DPWU2052638",
+      "bags": 0,
+      "warehouse": "SAJAH",
+      "block": "",
+      "storageAvailability": 0,
+      "receivedOnDate": "2026-08-31T00:00:00.000Z",
+      "receivedOnTime": "08:30",
+      "customsInspection": "Yes",
+      "grn": "GRN01/26/01002",
+      "batch": "DRRK 3235",
+      "productionDate": "2026-02-01T00:00:00.000Z",
+      "expiryDate": "2028-02-29T00:00:00.000Z",
+      "shortageBags": 0,
+      "remarks": "",
+      "documentUrl": "",
+      "documentName": "",
+      "_id": "6a950be8012527b65e8d96fd"
+    },
+    {
+      "containerSerialNo": "DPWU2061579",
+      "bags": 0,
+      "warehouse": "AL AIN",
+      "block": "",
+      "storageAvailability": 0,
+      "receivedOnDate": "2026-09-01T00:00:00.000Z",
+      "receivedOnTime": "15:20",
+      "customsInspection": "Yes",
+      "grn": "GRN01/26/00982",
+      "batch": "0126-DRRK/3511-008",
+      "productionDate": "2026-02-01T00:00:00.000Z",
+      "expiryDate": "2028-02-01T00:00:00.000Z",
+      "shortageBags": 4,
+      "remarks": "",
+      "documentUrl": "",
+      "documentName": "",
+      "_id": "6a96ba359e259f234cfca1ab"
+    },
+    {
+      "containerSerialNo": "DPWU2163919",
+      "bags": 0,
+      "warehouse": "DIC",
+      "block": "",
+      "storageAvailability": 0,
+      "receivedOnDate": "2026-09-03T00:00:00.000Z",
+      "receivedOnTime": "16:28",
+      "customsInspection": "Yes",
+      "grn": "GRN01/26/00953",
+      "batch": "LRNK4303",
+      "productionDate": "2026-02-01T00:00:00.000Z",
+      "expiryDate": "2028-02-01T00:00:00.000Z",
+      "shortageBags": 0,
+      "remarks": "",
+      "documentUrl": "",
+      "documentName": "",
+      "_id": "6a9969f20fc4065bb45696ad"
+    },
+    {
+      "containerSerialNo": "DPWU2116959",
+      "bags": 0,
+      "warehouse": "DIC",
+      "block": "",
+      "storageAvailability": 0,
+      "receivedOnDate": "2026-09-03T00:00:00.000Z",
+      "receivedOnTime": "16:28",
+      "customsInspection": "Yes",
+      "grn": "GRN01/26/00953",
+      "batch": "LRNK4303",
+      "productionDate": "2026-02-01T00:00:00.000Z",
+      "expiryDate": "2028-02-01T00:00:00.000Z",
+      "shortageBags": 0,
+      "remarks": "",
+      "documentUrl": "",
+      "documentName": "",
+      "_id": "6a9969ff0fc4065bb456974c"
+    },
+    {
+      "containerSerialNo": "DPWU2212464",
+      "bags": 0,
+      "warehouse": "DIC",
+      "block": "",
+      "storageAvailability": 0,
+      "receivedOnDate": "2026-09-03T00:00:00.000Z",
+      "receivedOnTime": "16:28",
+      "customsInspection": "Yes",
+      "grn": "GRN01/26/00953",
+      "batch": "LRNK4303",
+      "productionDate": "2026-02-01T00:00:00.000Z",
+      "expiryDate": "2028-02-01T00:00:00.000Z",
+      "shortageBags": 0,
+      "remarks": "",
+      "documentUrl": "",
+      "documentName": "",
+      "_id": "6a996a0b0fc4065bb45697ec"
+    },
+    {
+      "containerSerialNo": "DPWU2084912",
+      "bags": 0,
+      "warehouse": "DIC",
+      "block": "",
+      "storageAvailability": 0,
+      "receivedOnDate": "2026-09-03T00:00:00.000Z",
+      "receivedOnTime": "16:28",
+      "customsInspection": "Yes",
+      "grn": "GRN01/26/00953",
+      "batch": "LRNK4303",
+      "productionDate": "2026-02-01T00:00:00.000Z",
+      "expiryDate": "2028-02-01T00:00:00.000Z",
+      "shortageBags": 0,
+      "remarks": "",
+      "documentUrl": "",
+      "documentName": "",
+      "_id": "6a996a290fc4065bb456988d"
+    },
+    {
+      "containerSerialNo": "DPWU2058744",
+      "bags": 0,
+      "warehouse": "DIC",
+      "block": "",
+      "storageAvailability": 0,
+      "receivedOnDate": "2026-09-03T00:00:00.000Z",
+      "receivedOnTime": "16:28",
+      "customsInspection": "Yes",
+      "grn": "GRN01/26/00953",
+      "batch": "LRNK4303",
+      "productionDate": "2026-02-01T00:00:00.000Z",
+      "expiryDate": "2028-02-01T00:00:00.000Z",
+      "shortageBags": 0,
+      "remarks": "",
+      "documentUrl": "",
+      "documentName": "",
+      "_id": "6a996a380fc4065bb4569930"
+    }
+  ],
+  "storageArrivalApproval": {
+    "status": "draft",
+    "submittedAt": "2026-09-03T12:38:16.503Z",
+    "submittedBy": "69f4520aa8885d63c65ed03c",
+    "warehouseManagerApprovedAt": null,
+    "warehouseManagerApprovedBy": null
+  },
+  "qualityRows": [],
+  "qualityReports": [],
+  "paymentAllocations": [],
+  "paymentAllocationApproval": {
+    "status": "draft",
+    "submittedAt": null,
+    "submittedBy": null,
+    "fasManagerApprovedAt": null,
+    "fasManagerApprovedBy": null
+  },
+  "paymentCostings": [],
+  "paymentCostingApproval": {
+    "status": "draft",
+    "submittedAt": null,
+    "submittedBy": null,
+    "fasManagerApprovedAt": null,
+    "fasManagerApprovedBy": null
+  },
+  "packagingExpenses": [],
+  "additionalDocuments": [],
+  "transportationTransactions": [],
+  "blDocumentUrl": "https://amzn-s3-shipment.s3.us-east-1.amazonaws.com/shipments/1787727076968-hbl_draft-3524-3525-3526.pdf",
+  "blDocumentName": "HBL_DRAFT-3524-3525-3526.pdf",
+  "packagingListDocumentUrl": "https://amzn-s3-shipment.s3.us-east-1.amazonaws.com/shipments/1787727079977-packaging-list-3524-shipment.pdf",
+  "packagingListDocumentName": "packaging list 3524 shipment.pdf",
+  "createdAt": "2026-08-26T06:51:21.902Z",
+  "updatedAt": "2026-09-03T12:38:16.516Z",
+  "actualBags": 12500,
+  "blDetailsRemarks": "",
+  "expiryDate": "2028-02-01T00:00:00.000Z",
+  "grossWeight": "502.500 M.TONS",
+  "hsCode": "10063099",
+  "netWeight": "500.000 M.TONS",
+  "packagingDate": "2026-02-01T00:00:00.000Z",
+  "DHL": "N/A",
+  "bankName": "ADIB",
+  "courierServiceProvider": "N/A",
+  "courierTrackNo": "N/A",
+  "docArrivalNotes": "N/A",
+  "expectedDocDate": "2026-03-02T00:00:00.000Z",
+  "receiver": "Bank",
+  "boePassingDate": "2026-04-13T00:00:00.000Z",
+  "boePassingDocumentName": "BOMS26030622 BOE.pdf",
+  "boePassingDocumentUrl": "https://amzn-s3-shipment.s3.us-east-1.amazonaws.com/shipments/1787909428552-boms26030622-boe.pdf",
+  "boePassingRemarks": "",
+  "dmBarcode": "101-00661482-26",
+  "dpwCargoExtraction": null,
+  "municipalityComments": "",
+  "municipalityDate": "2026-04-14T00:00:00.000Z",
+  "municipalityReleasedDate": "2026-04-30T00:00:00.000Z",
+  "municipalityRemarks": "ZDLM-13042026-00738",
+  "municipalityResponseRemarks": "",
+  "municipalityStatusComment": ""
+}

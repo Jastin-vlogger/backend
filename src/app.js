@@ -27,24 +27,15 @@ const allowedOrigins = (process.env.CLIENT_ORIGINS || '')
 
 console.log('✅ Allowed CORS origins:', allowedOrigins);
 
-// app.use(cors({
-//   origin: (origin, callback) => {
-//     // Allow requests with no origin (like mobile apps or curl requests)
-//     if (!origin) return callback(null, true);
-//     if (allowedOrigins.indexOf(origin) === -1) {
-//       const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-//       return callback(new Error(msg), false);
-//     }
-//     return callback(null, true);
-//   },
-//   credentials: true,
-//   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-//   allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With', 'Origin', 'Access-Control-Allow-Headers']
-// }));
-
-
 const corsOptions = {
-    origin: 'https://shipmenttracker.rhutility.com',
+    origin: (origin, callback) => {
+        // Allow requests with no origin (mobile apps, curl, server-to-server)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.indexOf(origin) === -1) {
+            return callback(new Error('CORS policy does not allow access from the specified Origin.'), false);
+        }
+        return callback(null, true);
+    },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: [
         'Content-Type',
