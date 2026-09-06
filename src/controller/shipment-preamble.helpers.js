@@ -1037,7 +1037,26 @@ const aggregateShipmentQuality = (shipmentContainers = []) => {
   return out;
 };
 
+// Sum the per-container actual figures (qtyMT / bags / pallet) a shipment currently holds.
+// B/L Details (step 3) is the manual source of truth for these, so the report parent row
+// reflects them once they're entered; until then it falls back to the ordered/shipment value.
+const aggregateShipmentActuals = (shipmentContainers = []) => {
+  let qtyMT = 0, bags = 0, pallet = 0, has = false;
+  for (const container of shipmentContainers) {
+    const a = container && container.actual;
+    if (!a) continue;
+    if (Number(a.qtyMT) > 0) { qtyMT += Number(a.qtyMT); has = true; }
+    if (Number(a.bags) > 0) { bags += Number(a.bags); has = true; }
+    if (Number(a.pallet) > 0) { pallet += Number(a.pallet); has = true; }
+  }
+  return has ? { qtyMT, bags, pallet } : null;
+};
+
+const QUALITY_DOCUMENT_KEYS = new Set(['qualityInhouseDocument', 'qualityThirdPartyDocument']);
+
 const formatReportCellValue = (value, key) => {
+  // "No document uploaded" is a real state a reviewer needs to see, not a blank gap.
+  if ((value == null || value === '') && QUALITY_DOCUMENT_KEYS.has(key)) return 'Not Available';
   if (value == null || value === '') return '';
   if (typeof value === 'number') {
     if (['fcPerUnit', 'totalFC', 'advanceAmount'].includes(key)) {
@@ -1905,6 +1924,8 @@ const buildShipmentReportRows = async (filters = {}, user = null) => {
       };
     });
 
+    const shipmentActuals = aggregateShipmentActuals(shipmentContainers);
+
     return {
       rowType: 'parent',
       sn: totalShipments - index,
@@ -1925,7 +1946,7 @@ const buildShipmentReportRows = async (filters = {}, user = null) => {
       fcl: shipment.fcl ?? '',
       containerSize: shipment.containersize || actual.size || planned.size || '',
       buyingUnit: shipment.buyunit || actual.buyingUnit || planned.buyingUnit || '',
-      buyingQtyMT: shipment.plannedQtyMT ?? shipment.totalOrderedQtyMT ?? '',
+      buyingQtyMT: shipmentActuals?.qtyMT ?? shipment.plannedQtyMT ?? shipment.totalOrderedQtyMT ?? '',
       fcPerUnit: shipment.fcPerUnit ?? '',
       totalFC: shipment.totalFC ?? '',
       incoterms: shipment.incoterms || '',
@@ -1947,8 +1968,8 @@ const buildShipmentReportRows = async (filters = {}, user = null) => {
       ].filter(Boolean),
       weekWiseShipment: planned.weekWiseShipment || actual.weekWiseShipment || '',
       advanceAmount: shipment.advanceAmount ?? '',
-      bags: shipment.bags ?? '',
-      pallet: shipment.pallet ?? '',
+      bags: shipmentActuals?.bags ?? shipment.bags ?? '',
+      pallet: shipmentActuals?.pallet ?? shipment.pallet ?? '',
       ...aggregateShipmentQuality(shipmentContainers),
       children,
     };

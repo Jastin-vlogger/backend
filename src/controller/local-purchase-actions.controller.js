@@ -5,7 +5,7 @@
 const LocalPurchase = require('../models/local-purchase.model');
 const Supplier = require('../models/supplier.model');
 const writeAuditLog = require('../core/utils/auditLogger');
-const { uploadBufferToS3 } = require('../core/utils/s3Upload');
+const { uploadBufferToS3, createSignedGetUrl } = require('../core/utils/s3Upload');
 
 const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
 const toDateOrNull = (value) => {
@@ -219,11 +219,44 @@ exports.getLocalPurchaseById = async (req, res) => {
       .populate('itemId', 'description')
       .populate('storageAllocationApproval.submittedBy', 'name email')
       .populate('storageAllocationApproval.lastUpdatedBy', 'name email')
-      .populate('storageAllocationApproval.warehouseManagerApprovedBy', 'name email');
+      .populate('storageAllocationApproval.warehouseManagerApprovedBy', 'name email')
+      .lean();
     if (!localPurchase) return res.status(404).json({ message: 'Local Purchase not found' });
+
+    // The S3 bucket is private — the stored *DocumentUrl values are raw public URLs and open
+    // with AccessDenied. Presign every one on read (15 min), same as shipment-detail does.
+    await signLocalPurchaseDocuments(localPurchase);
+
     res.json({ data: localPurchase });
   } catch (error) {
     console.error('getLocalPurchaseById error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
+
+// Replace each raw document URL on a lean LocalPurchase with a short-lived signed GET URL.
+async function signLocalPurchaseDocuments(lp) {
+  const targets = [];
+  const push = (obj, key) => {
+    if (obj && typeof obj[key] === 'string' && obj[key]) targets.push({ obj, key, url: obj[key] });
+  };
+
+  push(lp, 'lpoDocumentUrl');
+  push(lp, 's1QualityReportUrl');
+  push(lp, 'commercialDocumentUrl');
+  for (const split of Array.isArray(lp.storageSplits) ? lp.storageSplits : []) {
+    push(split, 'documentUrl');
+  }
+  for (const row of Array.isArray(lp.qualityRows) ? lp.qualityRows : []) {
+    push(row, 'inhouseReportDocumentUrl');
+    push(row, 'strategicReportDocumentUrl');
+    push(row, 'thirdPartyReportDocumentUrl');
+    push(row, 'attachmentDocumentUrl');
+  }
+
+  await Promise.all(
+    targets.map(async ({ obj, key, url }) => {
+      obj[key] = await createSignedGetUrl(url, 900).catch(() => url);
+    })
+  );
+}

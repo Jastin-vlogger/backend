@@ -992,7 +992,12 @@ exports.updateBLDetails = async (req, res) => {
       packagingDate,
       grossWeight,
       netWeight,
-      packagingList
+      packagingList,
+      // Canonical per-container figures — B/L Details (step 3) is now the single manual source
+      // of truth for these; the Actual tab and reports read them straight back.
+      bags,
+      pallet,
+      qtyMT
     } = req.body;
 
     const parsedCostSheetBookings = parseJsonField(costSheetBookings);
@@ -1035,7 +1040,10 @@ exports.updateBLDetails = async (req, res) => {
     if (portOfLoading !== undefined) container.actual.portOfLoading = portOfLoading || '';
     if (portOfDischarge !== undefined) container.actual.portOfDischarge = portOfDischarge || '';
     if (shipmentArrived !== undefined) container.actual.shipmentArrived = shipmentArrived === 'Yes' ? 'Yes' : 'No';
-    if (noOfContainers !== undefined) container.actual.noOfContainers = Number(noOfContainers) || 0;
+    // "No of Containers (Packing)" is admin-only — a non-admin's value is ignored, the rest of
+    // the B/L save proceeds normally.
+    const isAdminLevelRole = ['Admin', 'Manager', 'Management'].includes(normalizeRole(req.user?.role || ''));
+    if (noOfContainers !== undefined && isAdminLevelRole) container.actual.noOfContainers = Number(noOfContainers) || 0;
     if (noOfBags !== undefined) container.actual.noOfBags = Number(noOfBags) || 0;
     if (quantityByMt !== undefined) container.actual.quantityByMt = Number(quantityByMt) || 0;
     if (shippingLine !== undefined) container.actual.shippingLine = shippingLine || '';
@@ -1049,6 +1057,10 @@ exports.updateBLDetails = async (req, res) => {
     if (packagingDate !== undefined) container.actual.packagingDate = toDateOrNull(packagingDate);
     if (grossWeight !== undefined) container.actual.grossWeight = grossWeight || '';
     if (netWeight !== undefined) container.actual.netWeight = netWeight || '';
+    // Canonical figures — the same fields the Actual tab and every report read.
+    if (bags !== undefined) container.actual.bags = Number(bags) || 0;
+    if (pallet !== undefined) container.actual.pallet = Number(pallet) || 0;
+    if (qtyMT !== undefined) container.actual.qtyMT = Number(qtyMT) || 0;
     const uploadedByField = {};
     for (const [field, list] of Object.entries(files)) {
       if (field === 'commercialInvoiceDocument') continue;
@@ -1219,6 +1231,13 @@ exports.updateBLDetails = async (req, res) => {
     const shipmentForBL = await Shipment.findById(container.shipmentId);
     if (shipmentForBL) {
       advanceShipmentStage(shipmentForBL, 'B/L Details');
+      // Keep the shipment-level actual totals in step with per-container figures edited on
+      // this tab (B/L Details is now the manual source of truth for qtyMT / bags).
+      if (bags !== undefined || qtyMT !== undefined || pallet !== undefined) {
+        const containersForTotals = await Container.find({ shipmentId: container.shipmentId });
+        shipmentForBL.actualQtyMT = containersForTotals.reduce((sum, c) => sum + (Number(c.actual?.qtyMT) || 0), 0);
+        shipmentForBL.actualBags = containersForTotals.reduce((sum, c) => sum + (Number(c.actual?.bags) || 0), 0);
+      }
       await shipmentForBL.save();
       if (isFirstBlSave) {
         notifyActualContainerSavedRolesByEmail({
