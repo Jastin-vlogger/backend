@@ -7,6 +7,7 @@
 const mapPythonShipmentFormResponse = (pythonRes) => {
   if (!pythonRes || typeof pythonRes !== 'object') return {};
   const lpo = pythonRes.lpo_invoice || {};
+  const calc = pythonRes.shipment_calculations || {};
 
   // lpo_invoice fields can be scalar (single-item LPO) or arrays (multi-item) — take index 0
   // either way, matching the pattern used by the real shipment extraction mapper.
@@ -29,6 +30,8 @@ const mapPythonShipmentFormResponse = (pythonRes) => {
     plannedQtyMT: asNumber(lpo.quantity_in_mt),
     fcPerUnit: asNumber(lpo.price_per_mt),
     totalFC: asNumber(lpo.total_amount),
+    lpoNumber: asString(lpo.po_number),
+    fcl: asNumber(calc.fcl ?? lpo.fcl ?? lpo.no_of_containers),
   };
 };
 

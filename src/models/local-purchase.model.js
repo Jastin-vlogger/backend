@@ -27,9 +27,17 @@ const localPurchaseSchema = new mongoose.Schema({
   hsCode: { type: String },
   packing: { type: String },
 
+  // The purchase-order number printed on the LPO document (format "PO01/26/00385"),
+  // extracted from lpo_invoice.po_number. Shown to users instead of the internal lpNumber.
+  lpoNumber: { type: String },
+
   orderDate: { type: Date },
   plannedQtyMT: { type: Number, required: true },
   buyunit: { type: String },
+  // Full-container-load count for this purchase (from the LPO's shipment_calculations, or
+  // ceil(plannedQtyMT / 25) as a fallback). LP has no container-split tracking — this is a
+  // single reference figure for the list view.
+  fcl: { type: Number },
 
   fcPerUnit: { type: Number },
   totalFC: { type: Number },

@@ -31,7 +31,9 @@ exports.createLocalPurchase = async (req, res) => {
       variant,
       hsCode,
       packing,
+      lpoNumber,
       plannedQtyMT,
+      fcl,
       buyunit,
       fcPerUnit,
       totalFC,
@@ -105,6 +107,8 @@ exports.createLocalPurchase = async (req, res) => {
     const qty = Number(plannedQtyMT) || 0;
     const rate = Number(fcPerUnit) || 0;
     const totalAmount = Number(totalFC) || qty * rate;
+    // FCL: use the extracted/entered value, else derive from qty (20ft container = 25 MT).
+    const fclCount = Number(fcl) > 0 ? Number(fcl) : (qty > 0 ? Math.ceil(qty / 25) : 0);
 
     const localPurchase = await LocalPurchase.create({
       lpNumber,
@@ -123,7 +127,9 @@ exports.createLocalPurchase = async (req, res) => {
       variant: variant || '',
       hsCode: hsCode || '',
       packing: packing || '',
+      lpoNumber: lpoNumber || '',
       plannedQtyMT: qty,
+      fcl: fclCount,
       buyunit,
       fcPerUnit: rate,
       totalFC: totalAmount,
@@ -184,6 +190,7 @@ exports.getLocalPurchaseList = async (req, res) => {
     if (normalizedSearch) {
       query.$or = [
         { lpNumber: { $regex: normalizedSearch, $options: 'i' } },
+        { lpoNumber: { $regex: normalizedSearch, $options: 'i' } },
         { supplierName: { $regex: normalizedSearch, $options: 'i' } },
         { itemDescription: { $regex: normalizedSearch, $options: 'i' } },
       ];
