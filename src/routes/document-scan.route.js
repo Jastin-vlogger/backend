@@ -1,9 +1,7 @@
-// General image scan route. Same JWT as every other API (authMiddleware), then forwarded to the
-// Python service. Independent of the shipment routes/controllers.
+// General image scan route. PUBLIC by request: no token, no database. It only forwards the
+// uploaded images to the Python service. Independent of the shipment routes/controllers.
 const express = require('express');
 const multer = require('multer');
-const authMiddleware = require('../core/utils/authMiddleware');
-const authorize = require('../core/utils/authorize');
 const controller = require('../controller/document-scan.controller');
 
 const router = express.Router();
@@ -24,8 +22,6 @@ const upload = multer({
 
 router.post(
   '/extract',
-  authMiddleware,
-  authorize({ tag: 'any-active' }),
   (req, res, next) => {
     upload.array('images', MAX_IMAGES)(req, res, (err) => {
       if (!err) return next();

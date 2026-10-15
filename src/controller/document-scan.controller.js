@@ -1,8 +1,6 @@
-// General image scan — thin authenticated proxy to the Python document-AI service.
-// The Python service has no auth of its own, so this is the only door the app uses.
+// General image scan: thin PUBLIC proxy to the Python document-AI service (no token, no database).
 // Nothing here stores or logs the images or the extracted content (cards/IDs are sensitive).
 const mongoose = require('mongoose');
-const writeAuditLog = require('../core/utils/auditLogger');
 
 // Covers the slowest valid scan: the main model call plus the logo-refinement calls.
 const SCAN_TIMEOUT_MS = 250 * 1000;
@@ -42,20 +40,6 @@ exports.scanImages = async (req, res) => {
 
     const result = await response.json();
     const scanId = new mongoose.Types.ObjectId();
-
-    await writeAuditLog({
-      userId: req.user._id,
-      module: 'Document Scan',
-      entity: 'DocumentScan',
-      entityId: scanId,
-      action: 'Scan',
-      before: {},
-      after: {
-        imageCount: result.image_count,
-        documentTypes: (result.documents || []).map((doc) => doc.document_type),
-      },
-      remarks: 'Image scan completed',
-    });
 
     return res.status(200).json({ scan_id: String(scanId), ...result });
   } catch (err) {
