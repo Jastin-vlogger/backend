@@ -48,6 +48,20 @@ const corsOptions = {
     optionsSuccessStatus: 204
 };
 
+// The image scan API is public (no token), so it accepts calls from ANY website origin. It is
+// mounted before the strict CORS rule below, which only allows CLIENT_ORIGINS for every other API.
+app.use(
+  '/api/v1/document-scan',
+  cors({
+    origin: '*',
+    methods: ['POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Accept', 'Authorization', 'X-Requested-With'],
+    maxAge: 86400,
+    optionsSuccessStatus: 204,
+  }),
+  documentScanRoutes
+);
+
 app.use(cors(corsOptions));
 
 // Raised from the 100kb default: the dashboard chart-export endpoint posts a base64 PNG of the
@@ -62,7 +76,6 @@ app.use('/api/v1/supplier-schedules', supplierScheduleRoutes);
 app.use('/api/v1/item', itemRoutes);
 app.use('/api/v1/shipment', shipmentRoutes);
 app.use('/api/v1/local-purchase', localPurchaseRoutes);
-app.use('/api/v1/document-scan', documentScanRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/access-control', accessControlRoutes);
 app.use('/api/v1/warehouse', warehouseRoutes);
