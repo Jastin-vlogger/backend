@@ -1,7 +1,5 @@
 // General image scan: thin PUBLIC proxy to the Python document-AI service (no token, no database).
 // Nothing here stores or logs the images or the extracted content (cards/IDs are sensitive).
-const mongoose = require('mongoose');
-
 // Covers the slowest valid scan: the main model call plus the logo-refinement calls.
 const SCAN_TIMEOUT_MS = 250 * 1000;
 
@@ -38,10 +36,7 @@ exports.scanImages = async (req, res) => {
       });
     }
 
-    const result = await response.json();
-    const scanId = new mongoose.Types.ObjectId();
-
-    return res.status(200).json({ scan_id: String(scanId), ...result });
+    return res.status(200).json(await response.json());
   } catch (err) {
     console.error('Document scan error:', err.name, err.message);
     const unavailable = err.cause?.code === 'ECONNREFUSED' || err.code === 'ECONNREFUSED';
