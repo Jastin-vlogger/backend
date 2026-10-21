@@ -12,6 +12,7 @@ const {
   buildPaymentAllocationPendingApproval,
   buildPaymentCostingPendingApproval,
   buildRhStatusSummaryRows,
+  buildShipmentCostRows,
   buildShipmentReportExportRows,
   buildShipmentReportRows,
   buildStorageAllocationPendingApproval,
@@ -128,6 +129,7 @@ const {
   reportContains,
   requirePermission,
   RH_STATUS_SUMMARY_COLUMNS,
+  SHIPMENT_COST_COLUMNS,
   SAME_BL_ACTUAL_BL_DOCUMENT_FIELDS,
   SAME_BL_CLEARING_ADVANCE_FIELDS,
   SAME_BL_DOCUMENT_TRACKER_FIELDS,
@@ -499,6 +501,123 @@ exports.downloadRhStatusSummaryReport = async (req, res) => {
   } catch (err) {
     console.error('downloadRhStatusSummaryReport error:', err);
     return res.status(500).json({ message: 'Unable to generate shipment status summary RH report' });
+  }
+};
+
+// ── Shipment Cost Report ─────────────────────────────────────────────────────
+// BL No / Description / Actual Paid for every shipment (Payment Allocation lines with
+// Actual Paid above 0). Row mapping lives in ./shipment-cost.helpers.js. It shows amounts
+// paid, so unlike the other reports it is also enforced on the server, not only hidden in the UI.
+const SHIPMENT_COST_VIEW_KEY = 'report.shipment_cost.view';
+const SHIPMENT_COST_ALLOWED_ROLES = ['Admin', 'Manager', 'Management'];
+
+const buildShipmentCostReport = async () => {
+  const shipments = await Shipment.find({})
+    .select('shipmentNo supplierName supplierId createdAt')
+    .populate('supplierId', 'name')
+    .sort({ createdAt: -1, orderDate: -1 })
+    .lean();
+  const shipmentIds = shipments.map((s) => s._id);
+  const containers = await Container.find({ shipmentId: { $in: shipmentIds } })
+    .select('shipmentId actual.BLNo actual.paymentAllocations')
+    .sort({ createdAt: 1 })
+    .lean();
+  const containersByShipment = new Map();
+  containers.forEach((c) => {
+    const key = String(c.shipmentId);
+    if (!containersByShipment.has(key)) containersByShipment.set(key, []);
+    containersByShipment.get(key).push(c);
+  });
+  return buildShipmentCostRows(shipments, containersByShipment);
+};
+
+const canViewShipmentCostReport = (user) =>
+  hasRoleOrPermission(user, SHIPMENT_COST_VIEW_KEY, SHIPMENT_COST_ALLOWED_ROLES);
+
+exports.getShipmentCostReportData = async (req, res) => {
+  try {
+    if (!(await canViewShipmentCostReport(req.user))) {
+      return res.status(403).json({ message: 'You do not have permission to view the Shipment Cost Report.' });
+    }
+    const { rows, totalActualPaid } = await buildShipmentCostReport();
+    return res.json({ rows, totalActualPaid, generatedAt: new Date().toISOString() });
+  } catch (err) {
+    console.error('getShipmentCostReportData error:', err);
+    return res.status(500).json({ message: 'Unable to fetch shipment cost report data' });
+  }
+};
+
+exports.downloadShipmentCostReport = async (req, res) => {
+  try {
+    if (!(await canViewShipmentCostReport(req.user))) {
+      return res.status(403).json({ message: 'You do not have permission to download the Shipment Cost Report.' });
+    }
+    const { rows, totalActualPaid } = await buildShipmentCostReport();
+    const downloadedBy = req.user?.name || 'Royal Horizon User';
+    const downloadedAt = formatDateTimeValue(new Date());
+    const totalColumns = SHIPMENT_COST_COLUMNS.length;
+    const amountIndex = SHIPMENT_COST_COLUMNS.findIndex((c) => c.key === 'actualPaid') + 1;
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Shipment Cost Report', {
+      views: [{ state: 'frozen', ySplit: 4 }],
+    });
+    const border = { style: 'thin', color: { argb: 'FF94A3B8' } };
+    const fullBorder = { top: border, bottom: border, left: border, right: border };
+
+    worksheet.columns = SHIPMENT_COST_COLUMNS.map((c) => ({ key: c.key, width: c.width }));
+    const titleRow = worksheet.addRow(['Royal Horizon Group']);
+    const subtitleRow = worksheet.addRow(['Shipment Cost Report']);
+    const metaRow = worksheet.addRow([
+      `Downloaded By: ${downloadedBy}`,
+      ...Array.from({ length: totalColumns - 2 }, () => ''),
+      `Downloaded At: ${downloadedAt}`,
+    ]);
+    const headerRow = worksheet.addRow(SHIPMENT_COST_COLUMNS.map((c) => c.header));
+
+    worksheet.mergeCells(1, 1, 1, totalColumns);
+    worksheet.mergeCells(2, 1, 2, totalColumns);
+    worksheet.getCell(1, 1).font = { name: 'Calibri', size: 14, bold: true };
+    worksheet.getCell(2, 1).font = { name: 'Calibri', size: 12, bold: true };
+    titleRow.height = 20; subtitleRow.height = 18; metaRow.height = 16; headerRow.height = 22;
+
+    headerRow.eachCell((cell) => {
+      cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF334155' } };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+      cell.border = fullBorder;
+    });
+    rows.forEach((row) => {
+      const dataRow = worksheet.addRow(SHIPMENT_COST_COLUMNS.map((c) => row[c.key] ?? ''));
+      dataRow.eachCell((cell, colNumber) => {
+        cell.font = { name: 'Calibri', size: 11 };
+        cell.alignment = { vertical: 'middle', horizontal: colNumber === amountIndex ? 'right' : 'left' };
+        cell.border = fullBorder;
+        if (colNumber === amountIndex) cell.numFmt = '#,##0.00';
+      });
+    });
+
+    const totalRow = worksheet.addRow(SHIPMENT_COST_COLUMNS.map((c, i) => {
+      if (c.key === 'description') return 'TOTAL';
+      if (i === amountIndex - 1) return totalActualPaid;
+      return '';
+    }));
+    totalRow.eachCell((cell, colNumber) => {
+      cell.font = { name: 'Calibri', size: 11, bold: true };
+      cell.alignment = { vertical: 'middle', horizontal: colNumber === amountIndex ? 'right' : 'left' };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+      cell.border = fullBorder;
+      if (colNumber === amountIndex) cell.numFmt = '#,##0.00';
+    });
+
+    const filename = `shipment-cost-report-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    const buffer = await workbook.xlsx.writeBuffer();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.send(Buffer.from(buffer));
+  } catch (err) {
+    console.error('downloadShipmentCostReport error:', err);
+    return res.status(500).json({ message: 'Unable to generate shipment cost report' });
   }
 };
 

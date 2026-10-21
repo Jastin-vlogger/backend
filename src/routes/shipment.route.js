@@ -32,6 +32,8 @@ router.get('/reports/fas-document-tracking/data', authMiddleware, authorize({ ta
 router.get('/reports/fas-document-tracking/excel', authMiddleware, authorize({ tag: 'any-active' }), controller.downloadFasDocumentTrackingReport);
 router.get('/reports/rh-status-summary/data', authMiddleware, authorize({ tag: 'any-active' }), controller.getRhStatusSummaryData);
 router.get('/reports/rh-status-summary/excel', authMiddleware, authorize({ tag: 'any-active' }), controller.downloadRhStatusSummaryReport);
+router.get('/reports/shipment-cost/data', authMiddleware, authorize({ tag: 'any-active' }), controller.getShipmentCostReportData);
+router.get('/reports/shipment-cost/excel', authMiddleware, authorize({ tag: 'any-active' }), controller.downloadShipmentCostReport);
 router.get('/bl-row-definitions',  authMiddleware, authorize({ tag: 'any-active' }), controller.getBlRowDefinitions);
 router.get('/:id',                 authMiddleware, authorize({ tag: 'any-active' }), controller.getShipmentById);
 

@@ -205,14 +205,21 @@ const LEGACY_PERMISSION_TEMPLATES = [
   { key: 'shipment.action.payment_costing.generate_report',  resource: 'shipment', screen: 'shipment_tracker', tab: 'payment_costing',  type: 'action', action: 'generate_report',  label: '[Legacy] Generate Payment Report',   sortOrder: 903 },
 ];
 
-// Point 23: per-report view permissions for the three Reports-tab dropdown reports.
+// Point 23: per-report view permissions for the Reports-tab dropdown reports.
 const REPORTS_PERMISSION_TEMPLATES = [
   { key: 'report.quality_activity.view',   resource: 'reports', screen: 'reports', tab: 'quality_activity',   type: 'action', action: 'view', label: 'View Shipment Master Data Report',   sortOrder: 281 },
   { key: 'report.warehouse_activity.view', resource: 'reports', screen: 'reports', tab: 'warehouse_activity', type: 'action', action: 'view', label: 'View Warehouse Activity Status Report', sortOrder: 282 },
   { key: 'report.fas_activity.view',       resource: 'reports', screen: 'reports', tab: 'fas_activity',       type: 'action', action: 'view', label: 'View FAS Activity Status Report',       sortOrder: 283 },
   { key: 'report.rh_status_summary.view',  resource: 'reports', screen: 'reports', tab: 'rh_status_summary',  type: 'action', action: 'view', label: 'View Shipment Status Summary RH Report', sortOrder: 284 },
+  { key: 'report.shipment_cost.view',      resource: 'reports', screen: 'reports', tab: 'shipment_cost',      type: 'action', action: 'view', label: 'View Shipment Cost Report',             sortOrder: 285 },
 ];
-const REPORTS_PERMISSION_KEYS = REPORTS_PERMISSION_TEMPLATES.map((template) => template.key);
+// Reports that show amounts paid are finance-only: seeded as a permission, but NOT in the shared
+// REPORTS_PERMISSION_KEYS that Purchase/Logistic/warehouse spread. Granted explicitly to FAS and
+// FasManager below (Admin/Manager already get 'ALL').
+const FINANCE_ONLY_REPORT_KEYS = ['report.shipment_cost.view'];
+const REPORTS_PERMISSION_KEYS = REPORTS_PERMISSION_TEMPLATES
+  .map((template) => template.key)
+  .filter((key) => !FINANCE_ONLY_REPORT_KEYS.includes(key));
 
 // Local Purchase — independent screen/tab set for the new nearby-store-purchase flow
 // (menu.local_purchase.view lives in MENU_PERMISSION_TEMPLATES above). Same
@@ -347,6 +354,7 @@ const DEFAULT_ROLE_PERMISSION_MAP = {
     'menu.all_shipments.view',
     'menu.reports.view',
     ...REPORTS_PERMISSION_KEYS,
+    ...FINANCE_ONLY_REPORT_KEYS,
     'menu.settings.view',
     'settings.tab.exchange_rates.view',
     'settings.tab.exchange_rates.edit',
@@ -394,6 +402,7 @@ const DEFAULT_ROLE_PERMISSION_MAP = {
     'menu.all_shipments.view',
     'menu.reports.view',
     ...REPORTS_PERMISSION_KEYS,
+    ...FINANCE_ONLY_REPORT_KEYS,
     'menu.settings.view',
     'settings.tab.exchange_rates.view',
     'shipment.screen.shipment_tracker.view',

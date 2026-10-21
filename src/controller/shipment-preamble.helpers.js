@@ -82,6 +82,7 @@ const { isOnTransitOrLaterStatus, isAtPortOrLaterStatus } = require('./shipment-
 const { FAS_DOC_TRACKING_COLUMNS, mapFasDocumentTrackingRow, classifyFasReceiver } = require('./fas-report.helpers');
 const { buildWarehouseDashboard } = require('./warehouse-dashboard.helpers');
 const { RH_STATUS_SUMMARY_COLUMNS, buildRhStatusSummaryRows } = require('./rh-status-summary.helpers');
+const { SHIPMENT_COST_COLUMNS, buildShipmentCostRows } = require('./shipment-cost.helpers');
 const Warehouse = require('../models/warehouse.model');
 
 const toSignedDocument = async (url, name, expiresIn = 900) => {
@@ -2122,6 +2123,7 @@ module.exports = {
   buildPaymentAllocationPendingApproval,
   buildPaymentCostingPendingApproval,
   buildRhStatusSummaryRows,
+  buildShipmentCostRows,
   buildShipmentReportExportRows,
   buildShipmentReportRows,
   buildStorageAllocationPendingApproval,
@@ -2255,6 +2257,7 @@ module.exports = {
   sendWorkflowUpdateEmail,
   Shipment,
   SHIPMENT_REPORT_CHILD_COLUMNS,
+  SHIPMENT_COST_COLUMNS,
   SHIPMENT_REPORT_COLUMNS,
   slugifyKey,
   STAGE_ORDER,
