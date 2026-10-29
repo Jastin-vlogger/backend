@@ -749,6 +749,20 @@ exports.getShipmentById = async (req, res) => {
       row.additionalDocuments = additionalDocuments;
     }));
 
+    // "Additional quantity against PO" link, both directions: the base PO this shipment tops up,
+    // and any shipments that top up this one.
+    const fpoKey = String(shipment.fpoNo || '').trim();
+    const [additionalBase, additionalShipments] = await Promise.all([
+      shipment.additionalAgainstFpoNo
+        ? Shipment.findOne({ fpoNo: shipment.additionalAgainstFpoNo, _id: { $ne: shipment._id } }).select('shipmentNo fpoNo').lean()
+        : null,
+      fpoKey
+        ? Shipment.find({ additionalAgainstFpoNo: fpoKey, _id: { $ne: shipment._id } })
+            .select('shipmentNo fpoNo plannedQtyMT fcl supplierName')
+            .lean()
+        : [],
+    ]);
+
     const [signedLpoUrl, signedProformaUrl, signedS1QualityUrl] = await Promise.all([
       shipment.lpoDocumentUrl
         ? createSignedGetUrl(shipment.lpoDocumentUrl, 900).catch(() => shipment.lpoDocumentUrl)
@@ -768,6 +782,18 @@ exports.getShipmentById = async (req, res) => {
         orderNumber: shipment.poNumber,
         poNumber: shipment.poNumber,
         fpoNo: shipment.fpoNo,
+        additionalAgainstFpoNo: shipment.additionalAgainstFpoNo || '',
+        additionalBaseShipment: additionalBase
+          ? { _id: additionalBase._id, shipmentNo: additionalBase.shipmentNo, fpoNo: additionalBase.fpoNo }
+          : null,
+        additionalShipments: (additionalShipments || []).map((s) => ({
+          _id: s._id,
+          shipmentNo: s.shipmentNo,
+          fpoNo: s.fpoNo,
+          plannedQtyMT: s.plannedQtyMT,
+          fcl: s.fcl,
+          supplierName: s.supplierName || '',
+        })),
         orderDate: shipment.orderDate,
         supplier: shipment.supplierName || shipment.supplierId?.name || null,
         supplierEmail: shipment.supplierEmail || null,

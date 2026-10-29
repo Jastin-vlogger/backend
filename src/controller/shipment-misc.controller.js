@@ -237,6 +237,57 @@ exports.updateBankName = async (req, res) => {
   }
 };
 
+// Link a shipment as "additional quantity against" an existing PO (by that PO's fpoNo), or clear it.
+exports.updateAdditionalAgainst = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const value = typeof req.body.additionalAgainstFpoNo === 'string' ? req.body.additionalAgainstFpoNo.trim() : '';
+
+    const shipment = await Shipment.findById(id);
+    if (!shipment) return res.status(404).json({ message: 'Shipment not found' });
+
+    let baseShipment = null;
+    if (value) {
+      if (value.length > 60) return res.status(400).json({ message: 'PO number is too long.' });
+      if (value.toLowerCase() === String(shipment.fpoNo || '').trim().toLowerCase()) {
+        return res.status(400).json({ message: 'A shipment cannot be additional quantity against its own PO.' });
+      }
+      const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      baseShipment = await Shipment.findOne({ fpoNo: { $regex: `^${escaped}$`, $options: 'i' }, _id: { $ne: shipment._id } })
+        .select('shipmentNo fpoNo')
+        .lean();
+      if (!baseShipment) {
+        return res.status(400).json({ message: `No shipment found with PO ${value}.` });
+      }
+    }
+
+    const before = { additionalAgainstFpoNo: shipment.additionalAgainstFpoNo || '' };
+    // Store the base PO exactly as written on the base shipment so lookups stay consistent.
+    shipment.additionalAgainstFpoNo = baseShipment ? baseShipment.fpoNo : '';
+    await shipment.save();
+
+    await writeAuditLog({
+      userId: req.user._id,
+      module: 'Shipment',
+      entity: 'Shipment',
+      entityId: shipment._id,
+      action: 'Updated',
+      before,
+      after: { additionalAgainstFpoNo: shipment.additionalAgainstFpoNo },
+      remarks: 'Additional quantity link updated',
+    });
+
+    res.json({
+      message: 'Additional quantity link updated',
+      additionalAgainstFpoNo: shipment.additionalAgainstFpoNo,
+      baseShipment: baseShipment ? { _id: baseShipment._id, shipmentNo: baseShipment.shipmentNo, fpoNo: baseShipment.fpoNo } : null,
+    });
+  } catch (err) {
+    console.error('updateAdditionalAgainst error:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 // Whitelisted dot-path shapes writable inside shipment.q1Report via updateQualityReportField.
 // q1Report is a Mixed blob (populated once from Python OCR extraction, no Mongoose schema of
 // its own) — without this whitelist any arbitrary nested key could be written by a client.

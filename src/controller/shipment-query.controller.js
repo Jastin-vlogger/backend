@@ -669,6 +669,7 @@ const fetchFlatShipmentList = async ({ page = 1, limit = 20, search = '', status
         // internal reference code, kept here in case it's needed but not used for this column.
         poNumber: s.poNumber || '',
         fpoNo: s.fpoNo || s.poNumber || s.orderNumber || '',
+        additionalAgainstFpoNo: s.additionalAgainstFpoNo || '',
         foreignLocal: s.isLocal ? 'Local' : 'Foreign',
 
         // Quality

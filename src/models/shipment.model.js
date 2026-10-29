@@ -56,6 +56,9 @@ const shipmentSchema = new mongoose.Schema({
   plannedQtyMT: { type: Number, required: true },
   piNo:{type:String},
   fpoNo:{type:String},
+  // Extra quantity ordered on top of an existing PO: holds the base PO's fpoNo (e.g. "PO01/26/00124").
+  // Informational link only — the base shipment's own quantity/FCL are never changed by it.
+  additionalAgainstFpoNo: { type: String, trim: true },
   // 🔹 Assumed / Planned split
   assumedContainerCount: { type: Number },
   assumedQtyPerContainer: { type: Number },
