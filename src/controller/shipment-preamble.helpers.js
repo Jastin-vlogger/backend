@@ -1484,7 +1484,7 @@ const buildDashboardStatusPivot = (shipments, containerMap, groupBy = 'supplier'
   };
 };
 
-const buildDashboardRStatusMetrics = (shipments, containerMap) => {
+const buildDashboardRStatusMetrics = (shipments, containerMap, localPurchases = []) => {
   // Each bucket tracks the count (quantity), plus summed FCL and MT (buying qty) volume
   // so the dashboard Status Snapshot can show STATUS / QUANTITY / FCL / MT per row.
   const labelOrder = [
@@ -1609,6 +1609,16 @@ const buildDashboardRStatusMetrics = (shipments, containerMap) => {
       else if (status === REPORT_STATUS_ETD_DUE || status === 'ETD yet to Due' || status === 'ETA yet to due') add('ETA Yet To Due', 1, mt, fcl);
       else add('ETD Yet To Be Confirmed', 1, mt, fcl);
     });
+  });
+
+  // Local purchases live in their own collection (one purchase = one LPO, no container split).
+  // They count toward the LPO totals only (Total / Open / Completed LPO) — never toward the
+  // shipment-level buckets, since they have no containers, ETD or port status.
+  (localPurchases || []).forEach((purchase) => {
+    const mt = Number(purchase?.plannedQtyMT) || 0;
+    const fcl = Number(purchase?.fcl) || (mt > 0 ? Math.ceil(mt / 25) : 0);
+    add('Total LPO', 1, mt, fcl);
+    add(purchase?.currentStage === 'Completed' ? 'Completed LPO' : 'Open LPO', 1, mt, fcl);
   });
 
   return labelOrder.map((label) => ({

@@ -165,6 +165,7 @@ const {
   WORKFLOW_NOTIFICATION_ROLE_MAP,
   writeAuditLog,
 } = require('./shipment-preamble.helpers');
+const LocalPurchase = require('../models/local-purchase.model');
 
 // Shared by getShipmentSummary's "Average FC per Unit by Supplier" chart (rowKeyFn = item
 // description) and its PO-wise sibling (rowKeyFn = PO number) — columns by supplier, value =
@@ -411,7 +412,9 @@ exports.getShipmentSummary = async (req, res) => {
       };
     });
 
-    const volumeToday = buildDashboardRStatusMetrics(shipments, containerMap);
+    // Local purchases are a separate collection; they only feed the LPO totals in this snapshot.
+    const localPurchases = await LocalPurchase.find({}).select('plannedQtyMT fcl currentStage').lean();
+    const volumeToday = buildDashboardRStatusMetrics(shipments, containerMap, localPurchases);
 
     // Chart Data Generation
     // Legend/dataset-key labels shown directly on the Dynamic Metrics Explorer chart — must go

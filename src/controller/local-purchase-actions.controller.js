@@ -179,6 +179,40 @@ exports.createLocalPurchase = async (req, res) => {
   }
 };
 
+// Entry-stage correction: the order date is read from the LPO at extraction time and falls back
+// to "today" when the document has no readable date, so users must be able to fix it afterwards.
+// Only orderDate is editable here; lpNumber is intentionally left untouched (it is an identifier).
+exports.updateLocalPurchaseEntry = async (req, res) => {
+  try {
+    const { orderDate } = req.body || {};
+    const parsed = toDateOrNull(orderDate);
+    if (!parsed) return res.status(400).json({ message: 'A valid orderDate is required.' });
+
+    const localPurchase = await LocalPurchase.findById(req.params.id);
+    if (!localPurchase) return res.status(404).json({ message: 'Local Purchase not found' });
+
+    const before = { orderDate: localPurchase.orderDate };
+    localPurchase.orderDate = parsed;
+    await localPurchase.save();
+
+    await writeAuditLog({
+      userId: req.user._id,
+      module: 'Local Purchase',
+      entity: 'LocalPurchase',
+      entityId: localPurchase._id,
+      action: 'Update',
+      before,
+      after: { orderDate: localPurchase.orderDate },
+      remarks: 'Local Purchase order date updated',
+    });
+
+    return res.json({ message: 'Order date updated.', data: localPurchase });
+  } catch (error) {
+    console.error('updateLocalPurchaseEntry error:', error);
+    return res.status(500).json({ message: 'Server error' });
+  }
+};
+
 exports.getLocalPurchaseList = async (req, res) => {
   try {
     let { page = 1, limit = 20, search = '' } = req.query;

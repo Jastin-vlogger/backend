@@ -58,6 +58,9 @@ router.post(
   actionsController.createLocalPurchase
 );
 
+// ── Entry correction (order date) ─────────────────────────────────────────
+router.patch('/:id', authMiddleware, authorize({ tag: 'any-active' }), actionsController.updateLocalPurchaseEntry);
+
 // ── Storage Allocation ────────────────────────────────────────────────────
 // Approve is role-gated inside the controller (mirrors the real Shipment flow's approve route,
 // also just 'any-active' at the route level with the finer-grained check internal).

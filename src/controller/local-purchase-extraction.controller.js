@@ -31,6 +31,8 @@ const mapPythonShipmentFormResponse = (pythonRes) => {
     fcPerUnit: asNumber(lpo.price_per_mt),
     totalFC: asNumber(lpo.total_amount),
     lpoNumber: asString(lpo.po_number),
+    // PO Date printed on the LPO (YYYY-MM-DD); empty when unreadable so the form keeps its default.
+    orderDate: asString(lpo.po_date),
     fcl: asNumber(calc.fcl ?? lpo.fcl ?? lpo.no_of_containers),
   };
 };
