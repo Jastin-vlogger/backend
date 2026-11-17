@@ -165,6 +165,7 @@ const {
   WORKFLOW_NOTIFICATION_ROLE_MAP,
   writeAuditLog,
 } = require('./shipment-preamble.helpers');
+const { resolvePlannedQtyMT } = require('./planned-total.helpers');
 
 exports.createShipment = async (req, res) => {
   try {
@@ -584,14 +585,16 @@ exports.createPlannedContainersBulk = async (req, res) => {
     }
 
     // 3️⃣ Recalculate shipment totals and save noOfShipments.
-    // plannedQtyMT must reflect every real container on the shipment, not just whichever
+    // The total must still cover every real container on the shipment, not just whichever
     // subset was submitted in this save — callers now correctly omit rows that already
     // have real actual/BL data (status !== "Planned"), so summing only `currentPlannedMT`
     // would silently drop those containers' quantity from the shipment total.
     const retainedQtyMT = existingAllContainers
       .filter((container) => container.status !== "Planned")
       .reduce((sum, container) => sum + (Number(container.planned?.qtyMT) || 0), 0);
-    shipment.plannedQtyMT = retainedQtyMT + currentPlannedMT;
+    // plannedQtyMT is the ORDERED quantity: never shrink it just because the rows saved now
+    // add up to less (that is how a 2,520 MT PO became 2,270.04 MT after a save).
+    shipment.plannedQtyMT = resolvePlannedQtyMT(shipment.plannedQtyMT, retainedQtyMT + currentPlannedMT);
     shipment.assumedContainerCount = processedContainers.length;
     if (noOfShipments != null && noOfShipments !== '') shipment.noOfShipments = Number(noOfShipments);
     shipment.currentStage = "Planned Split";
