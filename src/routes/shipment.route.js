@@ -386,6 +386,32 @@ router.patch('/container/grn/:id', authMiddleware, authorize({ tag: 'any-active'
 router.post('/container/storage/bulk-save', authMiddleware, authorize({ tag: 'any-active' }), controller.bulkSaveStorageArrival);
 router.post('/container/transportation/bulk-save', authMiddleware, authorize({ tag: 'any-active' }), controller.bulkSaveTransportationArranged);
 
+// Payment Costing cost sheet (Excel import, import log, submit-lock, Admin unlock)
+const costSheetUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (/\.xlsx$/i.test(file.originalname || '')) cb(null, true);
+    else cb(new Error('Only Excel (.xlsx) files can be imported'));
+  },
+});
+router.get('/payment-cost-sheet/container/:containerId', authMiddleware, authorize({ tag: 'any-active' }), controller.getPaymentCostSheet);
+router.get('/payment-cost-sheet/container/:containerId/excel', authMiddleware, authorize({ tag: 'any-active' }), controller.downloadPaymentCostSheetExcel);
+router.post(
+  '/payment-cost-sheet/container/:containerId/import',
+  authMiddleware,
+  authorize({ tag: 'any-active' }),
+  (req, res, next) => {
+    costSheetUpload.single('costSheet')(req, res, (err) => {
+      if (err) return res.status(400).json({ message: err.message || 'Invalid file upload' });
+      next();
+    });
+  },
+  controller.importPaymentCostSheet
+);
+router.post('/payment-cost-sheet/container/:containerId/submit', authMiddleware, authorize({ tag: 'any-active' }), controller.submitPaymentCostSheet);
+router.post('/payment-cost-sheet/container/:containerId/unlock', authMiddleware, authorize({ tag: 'any-active' }), controller.unlockPaymentCostSheet);
+
 // Supplier email — Purchase team only
 router.patch('/:id/supplier-email', authMiddleware, authorize({ tag: 'any-active' }), controller.updateSupplierEmail);
 router.get('/:id/import-history', authMiddleware, authorize({ tag: 'any-active' }), controller.getShipmentImportHistory);
