@@ -14,7 +14,7 @@ const APPROVE_ALLOWED_ROLES = ['warehouse', 'Admin', 'Manager', 'Management'];
 const hasRoleOrPermission = async (user, permissionKey, allowedRoles = []) => {
   if (!user) return false;
   if (allowedRoles.includes(normalizeRole(user.role))) return true;
-  return permissionService.hasPermission(user, permissionKey);
+  return permissionService.hasPermissionKey(user, permissionKey);
 };
 
 // PATCH /local-purchase/:id/storage-allocation — save the destination warehouse. First save

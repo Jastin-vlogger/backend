@@ -535,8 +535,14 @@ const getPaymentCostingSummaryLines = (container) => {
   ];
 };
 
+// Access Control keys are dotted ('shipment.tab.x.y', 'report.x.view'); permissionService.hasPermission()
+// only understands 'resource:action', so route those through the raw-key check and keep the old path for
+// 'resource:action' callers.
 const requirePermission = async (user, permissionKey) => {
   if (!user) return false;
+  if (String(permissionKey || '').includes('.')) {
+    return permissionService.hasPermissionKey(user, permissionKey);
+  }
   return permissionService.hasPermission(user, permissionKey);
 };
 

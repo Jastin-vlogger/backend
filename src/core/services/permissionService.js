@@ -21,6 +21,10 @@ class PermissionService {
   constructor() {
     this.config = authConfig;
     this.cache = permissionCache;
+    // Raw permission keys per role (e.g. 'report.shipment_cost.view'), short TTL. Kept separate from
+    // the resource:action cache above because that one rewrites action-type keys and drops the raw key.
+    this.rawKeyCache = new Map();
+    this.rawKeyTtlMs = 15 * 1000;
   }
 
   /**
@@ -87,6 +91,48 @@ class PermissionService {
       this._logAuditEvent(user, permission, false, 'system_error', error.message);
       return false;
     }
+  }
+
+  /**
+   * Check if user's role holds an exact, raw permission key as stored in Access Control
+   * (e.g. 'shipment.tab.payment_costing.cost_sheet.import'). hasPermission() only understands the
+   * 'resource:action' form, so dotted keys could never pass it; this is the check for those keys.
+   * @param {Object} user - User object with role property
+   * @param {string} permissionKey - Raw permission key
+   * @returns {Promise<boolean>}
+   */
+  async hasPermissionKey(user, permissionKey) {
+    try {
+      if (!user || !user.role) return false;
+      if (!permissionKey || typeof permissionKey !== 'string') return false;
+      const keys = await this._getRawKeysForRole(normalizeRole(user.role));
+      return keys.has(permissionKey);
+    } catch (error) {
+      console.error('Raw permission key check error:', error);
+      return false;
+    }
+  }
+
+  async _getRawKeysForRole(roleKey) {
+    const cacheKey = String(roleKey || '').toLowerCase();
+    const hit = this.rawKeyCache.get(cacheKey);
+    if (hit && hit.expires > Date.now()) return hit.keys;
+
+    const rows = await RolePermission.aggregate([
+      {
+        $match: {
+          roleKey: { $regex: `^${String(roleKey || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' },
+          allowed: true,
+        },
+      },
+      { $lookup: { from: 'permissions', localField: 'permissionKey', foreignField: 'key', as: 'permission' } },
+      { $unwind: '$permission' },
+      { $match: { 'permission.isActive': true } },
+      { $project: { permissionKey: 1 } },
+    ]);
+    const keys = new Set(rows.map((r) => r.permissionKey));
+    this.rawKeyCache.set(cacheKey, { keys, expires: Date.now() + this.rawKeyTtlMs });
+    return keys;
   }
 
   /**
@@ -192,6 +238,7 @@ class PermissionService {
    */
   async clearCache() {
     this.cache.clearAll();
+    this.rawKeyCache.clear();
     this._logDebug('Cleared all permission caches');
   }
 

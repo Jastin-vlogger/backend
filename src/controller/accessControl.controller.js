@@ -539,6 +539,11 @@ exports.updateRolePermissions = async (req, res) => {
     if (hasAnyDashboardSection && !permissionKeys.includes('menu.dashboard.view')) {
       permissionKeys.push('menu.dashboard.view');
     }
+    // Same parent-key rule for Reports: a role granted any report would otherwise not see the Reports menu.
+    const hasAnyReport = permissionKeys.some((k) => k.startsWith('report.'));
+    if (hasAnyReport && !permissionKeys.includes('menu.reports.view')) {
+      permissionKeys.push('menu.reports.view');
+    }
     // ─────────────────────────────────────────────────────────────────────────
 
     const validPermissions = await Permission.find({ key: { $in: permissionKeys } });
@@ -555,6 +560,9 @@ exports.updateRolePermissions = async (req, res) => {
         }))
       );
     }
+
+    // Role grants changed: drop cached permissions so the change applies immediately.
+    await permissionService.clearCache();
 
     await logAudit({
       userId: req.user._id,
