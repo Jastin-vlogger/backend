@@ -203,6 +203,8 @@ Object.assign(exports, require('./shipment-misc.controller.js'));
 
 Object.assign(exports, require('./shipment-reports.controller.js'));
 
+Object.assign(exports, require('./shipment-import-history.controller.js'));
+
 if (process.env.NODE_ENV === 'test') {
   exports.__test = {
     buildDashboardRStatusMetrics,

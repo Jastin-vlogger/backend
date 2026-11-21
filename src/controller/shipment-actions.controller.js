@@ -165,6 +165,7 @@ const {
   WORKFLOW_NOTIFICATION_ROLE_MAP,
   writeAuditLog,
 } = require('./shipment-preamble.helpers');
+const { recordDocumentImports } = require('../core/utils/importLog');
 const { resolvePlannedQtyMT } = require('./planned-total.helpers');
 
 exports.createShipment = async (req, res) => {
@@ -884,6 +885,26 @@ exports.addActualContainer = async (req, res) => {
 
     container.status = "Actual";
     await container.save();
+
+    // Import log: when the BL / packing list data was saved, by whom, from which file.
+    await recordDocumentImports([
+      blDocument && {
+        shipmentId: container.shipmentId,
+        containerId: container._id,
+        source: 'bl',
+        fileName: container.actual.blDocumentName,
+        fileUrl: container.actual.blDocumentUrl,
+        summary: { blNo: container.actual.BLNo || '', containers: (container.actual.extractedContainers || []).length },
+      },
+      packagingListDocument && {
+        shipmentId: container.shipmentId,
+        containerId: container._id,
+        source: 'packing_list',
+        fileName: container.actual.packagingListDocumentName,
+        fileUrl: container.actual.packagingListDocumentUrl,
+        summary: { containers: (container.actual.packagingList?.containerInfo || []).length },
+      },
+    ], req.user);
 
     await hydrateMissingSameBlActualFields({
       ContainerModel: Container,
@@ -1829,8 +1850,10 @@ exports.updateLogisticsDetails = async (req, res) => {
     if (customClearanceRequired !== undefined) {
       container.actual.customClearanceRequired = String(customClearanceRequired) === 'true';
     }
+    let dpwImported = false;
     if (dpwCargoExtraction !== undefined) {
       container.actual.dpwCargoExtraction = parseJsonField(dpwCargoExtraction);
+      dpwImported = !!container.actual.dpwCargoExtraction;
     }
     if (dpInvoiceDocumentUrl !== undefined) {
       container.actual.dpInvoiceDocumentUrl = dpInvoiceDocumentUrl || '';
@@ -2072,6 +2095,23 @@ exports.updateLogisticsDetails = async (req, res) => {
     }
 
     await container.save();
+
+    await recordDocumentImports([
+      arrivalNoticeDocument && {
+        shipmentId: container.shipmentId,
+        containerId: container._id,
+        source: 'arrival_notice',
+        fileName: container.actual.arrivalNoticeDocumentName,
+        fileUrl: container.actual.arrivalNoticeDocumentUrl,
+      },
+      dpwImported && {
+        shipmentId: container.shipmentId,
+        containerId: container._id,
+        source: 'dpw_cargo',
+        fileName: container.actual.dpInvoiceDocumentName || '',
+        fileUrl: container.actual.dpInvoiceDocumentUrl || '',
+      },
+    ], req.user);
 
     // Advance shipment stage to Port and Clearance while keeping the stored enum value backward-compatible.
     const shipmentForLogistics = await Shipment.findById(container.shipmentId);
