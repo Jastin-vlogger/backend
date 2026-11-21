@@ -192,9 +192,17 @@ const CLEARING_ADVANCE_APPROVAL_STATUSES = {
 
 const PAYMENT_COSTING_APPROVAL_STATUSES = {
   draft: 'draft',
+  pendingFas: 'pending_fas',
+  // Legacy: rows submitted before the FS Manager stage was removed still carry this value.
   pendingFasManager: 'pending_fas_manager',
   approved: 'approved',
 };
+
+// FS (FAS) approves Clearing Advance Process / Payment Costing directly. Both the new and the legacy
+// pending value mean "waiting for FS approval".
+const isPendingFsApproval = (status) =>
+  status === PAYMENT_COSTING_APPROVAL_STATUSES.pendingFas ||
+  status === PAYMENT_COSTING_APPROVAL_STATUSES.pendingFasManager;
 
 const STORAGE_ALLOCATION_APPROVAL_STATUSES = {
   draft: 'draft',
@@ -228,9 +236,11 @@ const buildClearingAdvancePendingApproval = (user) => ({
 });
 
 const buildPaymentCostingPendingApproval = (user) => ({
-  status: PAYMENT_COSTING_APPROVAL_STATUSES.pendingFasManager,
+  status: PAYMENT_COSTING_APPROVAL_STATUSES.pendingFas,
   submittedAt: new Date(),
   submittedBy: user?._id || null,
+  fasApprovedAt: null,
+  fasApprovedBy: null,
   fasManagerApprovedAt: null,
   fasManagerApprovedBy: null,
 });
@@ -2135,6 +2145,7 @@ module.exports = {
   BLRowDefinition,
   buildClearingAdvancePendingApproval,
   buildDashboardRStatusMetrics,
+  isPendingFsApproval,
   buildDashboardStatusPivot,
   buildPaymentAllocationPendingApproval,
   buildPaymentCostingPendingApproval,

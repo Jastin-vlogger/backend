@@ -42,7 +42,7 @@ const deriveFasFlags = (actual = {}) => ({
   finalContractAttached: !!actual.documentsReleasedDocumentUrl || !!actual.documentsReleasedDate,
   // Payment phase is driven only by the Payment Allocation step (BL Details / FAS),
   // not the earlier port-clearance advance. "Created" = submitted for approval.
-  paymentRequestCreated: actual.paymentAllocationApproval?.status === 'pending_fas_manager',
+  paymentRequestCreated: ['pending_fas', 'pending_fas_manager'].includes(actual.paymentAllocationApproval?.status),
   paymentAllocationCompleted: actual.paymentAllocationApproval?.status === 'approved',
 });
 
@@ -139,11 +139,11 @@ const mapFasDocumentTrackingRow = ({ slNo, shipment = {}, actual = {}, status = 
 
   const fasStatus = computeFasDocumentStatus({ shipmentStatus: status, ...flags });
 
-  // Payment Request Status: submitted when pending_fas_manager; Approved when approved.
+  // Payment Request Status: submitted when pending FS approval (pending_fas, or legacy pending_fas_manager); Approved when approved.
   const paymentApprovalStatus = actual.paymentAllocationApproval?.status || 'draft';
   const paymentRequestStatus =
     paymentApprovalStatus === 'approved'          ? 'Approved' :
-    paymentApprovalStatus === 'pending_fas_manager' ? 'Pending Approval' : '';
+    ['pending_fas', 'pending_fas_manager'].includes(paymentApprovalStatus) ? 'Pending Approval' : '';
   const paymentAllocationStatus = paymentApprovalStatus === 'approved' ? 'Allocated' : '';
 
   // Receiver column shows capitalised label ('Bank' / 'Direct'), not the raw value.

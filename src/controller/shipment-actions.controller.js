@@ -2774,7 +2774,7 @@ exports.updatePaymentCostingDetails = async (req, res) => {
       await shipmentForPayment.save();
       if (isPaymentAllocationSave) {
         notifyPaymentAllocationRolesByEmail({
-          roles: ['FasManager'],
+          roles: ['FAS'],
           shipment: shipmentForPayment,
           container,
           actor: req.user,
@@ -2784,11 +2784,11 @@ exports.updatePaymentCostingDetails = async (req, res) => {
       }
       if (isPaymentCostingSave) {
         notifyPaymentCostingRolesByEmail({
-          roles: ['FasManager'],
+          roles: ['FAS'],
           shipment: shipmentForPayment,
           container,
           actor: req.user,
-          approvalStage: 'Pending FAS Manager Approval',
+          approvalStage: 'Pending FS Approval',
         }).catch((error) => {
           console.error(`Payment costing notification warning for ${shipmentForPayment.shipmentNo || shipmentForPayment._id}:`, error.message);
         });
@@ -2804,7 +2804,7 @@ exports.updatePaymentCostingDetails = async (req, res) => {
         action: 'SubmitPaymentCosting',
         before: beforeUpdate,
         after: cloneForAudit(container.toObject()),
-        remarks: 'Payment costing submitted for FAS manager approval'
+        remarks: 'Payment costing submitted for FS approval'
       });
     }
 
@@ -2817,7 +2817,7 @@ exports.updatePaymentCostingDetails = async (req, res) => {
         action: 'SubmitPaymentAllocation',
         before: beforeUpdate,
         after: cloneForAudit(container.toObject()),
-        remarks: 'Payment allocation submitted for FAS manager approval'
+        remarks: 'Payment allocation submitted for FS approval'
       });
     }
 

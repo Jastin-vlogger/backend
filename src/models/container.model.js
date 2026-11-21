@@ -18,11 +18,15 @@ const approvalStateSchema = new mongoose.Schema({
 const paymentCostingApprovalStateSchema = new mongoose.Schema({
   status: {
     type: String,
-    enum: ['draft', 'pending_fas_manager', 'approved'],
+    enum: ['draft', 'pending_fas', 'pending_fas_manager', 'approved'],
     default: 'draft',
   },
   submittedAt: { type: Date, default: null },
   submittedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  // FS (FAS) approves directly. fasManager* are legacy and only kept for rows approved before the
+  // FS Manager stage was removed.
+  fasApprovedAt: { type: Date, default: null },
+  fasApprovedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   fasManagerApprovedAt: { type: Date, default: null },
   fasManagerApprovedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
 }, { _id: false });

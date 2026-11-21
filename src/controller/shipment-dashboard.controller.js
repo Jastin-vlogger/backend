@@ -8,6 +8,7 @@ const {
   BLRowDefinition,
   buildClearingAdvancePendingApproval,
   buildDashboardRStatusMetrics,
+  isPendingFsApproval,
   buildDashboardStatusPivot,
   buildPaymentAllocationPendingApproval,
   buildPaymentCostingPendingApproval,
@@ -677,7 +678,7 @@ exports.getShipmentSummary = async (req, res) => {
           pendingPaymentRequested++;
         }
         const paStatus = actual.paymentAllocationApproval?.status || null;
-        if (paStatus === 'pending_fas_manager') {
+        if (isPendingFsApproval(paStatus)) {
           paymentAllocationPending++;
         }
       });
@@ -971,7 +972,7 @@ exports.getShipmentSummary = async (req, res) => {
         const additionalClearingAdvancePending = (actual.additionalClearingAdvanceRequests || []).some(
           (req) => req?.status === CLEARING_ADVANCE_APPROVAL_STATUSES.pendingFas
         );
-        const paymentAllocationPendingRow = actual.paymentAllocationApproval?.status === 'pending_fas_manager';
+        const paymentAllocationPendingRow = isPendingFsApproval(actual.paymentAllocationApproval?.status);
         if (clearingAdvancePending || additionalClearingAdvancePending || paymentAllocationPendingRow) fasPending++;
       });
 
@@ -1094,7 +1095,7 @@ exports.getShipmentSummary = async (req, res) => {
 
         // Pending Payment Costing: payment allocation submitted, FAS Manager hasn't approved yet.
         const paStatus = actual.paymentAllocationApproval?.status || null;
-        if (paStatus === 'pending_fas_manager') {
+        if (isPendingFsApproval(paStatus)) {
           tiles.pendingPaymentCosting.pending++;
           addPendingShipment(tiles.pendingPaymentCosting, container);
         }

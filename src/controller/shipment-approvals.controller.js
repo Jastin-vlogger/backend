@@ -8,6 +8,7 @@ const {
   BLRowDefinition,
   buildClearingAdvancePendingApproval,
   buildDashboardRStatusMetrics,
+  isPendingFsApproval,
   buildDashboardStatusPivot,
   buildPaymentAllocationPendingApproval,
   buildPaymentCostingPendingApproval,
@@ -455,10 +456,10 @@ exports.approvePaymentAllocation = async (req, res) => {
     const currentState = container.actual.paymentAllocationApproval || { status: PAYMENT_COSTING_APPROVAL_STATUSES.draft };
     const effectiveStatus =
       currentState.status === PAYMENT_COSTING_APPROVAL_STATUSES.draft && hasSavedPaymentAllocationData(container)
-        ? PAYMENT_COSTING_APPROVAL_STATUSES.pendingFasManager
+        ? PAYMENT_COSTING_APPROVAL_STATUSES.pendingFas
         : currentState.status;
 
-    if (effectiveStatus !== PAYMENT_COSTING_APPROVAL_STATUSES.pendingFasManager) {
+    if (!isPendingFsApproval(effectiveStatus)) {
       if (effectiveStatus === PAYMENT_COSTING_APPROVAL_STATUSES.approved) {
         return res.status(400).json({ message: 'Payment allocation is already approved.' });
       }
@@ -467,8 +468,8 @@ exports.approvePaymentAllocation = async (req, res) => {
 
     const allowed = await hasRoleOrPermission(
       req.user,
-      'shipment.tab.payment_costing.payment_allocation.approve_fas_manager',
-      ['FasManager', 'Admin', 'Manager', 'Management']
+      'shipment.tab.payment_costing.payment_allocation.approve_fas',
+      ['FAS', 'Admin', 'Manager', 'Management']
     );
     if (!allowed) {
       return res.status(403).json({ message: 'You do not have permission to approve payment allocation.' });
@@ -479,8 +480,8 @@ exports.approvePaymentAllocation = async (req, res) => {
       status: PAYMENT_COSTING_APPROVAL_STATUSES.approved,
       submittedAt: currentState.submittedAt || new Date(),
       submittedBy: currentState.submittedBy || null,
-      fasManagerApprovedAt: new Date(),
-      fasManagerApprovedBy: req.user._id,
+      fasApprovedAt: new Date(),
+      fasApprovedBy: req.user._id,
     };
     await container.save();
 
@@ -507,10 +508,10 @@ exports.approvePaymentAllocation = async (req, res) => {
       module: 'FAS',
       entity: 'Container',
       entityId: container._id,
-      action: 'ApprovePaymentAllocationFasManager',
+      action: 'ApprovePaymentAllocationFas',
       before: beforeUpdate,
       after: cloneForAudit(container.toObject()),
-      remarks: 'Payment allocation approved by FAS manager'
+      remarks: 'Payment allocation approved by FS (FAS)'
     });
 
     return res.json({ message: 'Payment allocation approved successfully', container });
@@ -530,10 +531,10 @@ exports.approvePaymentCosting = async (req, res) => {
     const currentState = container.actual.paymentCostingApproval || { status: PAYMENT_COSTING_APPROVAL_STATUSES.draft };
     const effectiveStatus =
       currentState.status === PAYMENT_COSTING_APPROVAL_STATUSES.draft && hasSavedPaymentCostingData(container)
-        ? PAYMENT_COSTING_APPROVAL_STATUSES.pendingFasManager
+        ? PAYMENT_COSTING_APPROVAL_STATUSES.pendingFas
         : currentState.status;
 
-    if (effectiveStatus !== PAYMENT_COSTING_APPROVAL_STATUSES.pendingFasManager) {
+    if (!isPendingFsApproval(effectiveStatus)) {
       if (effectiveStatus === PAYMENT_COSTING_APPROVAL_STATUSES.approved) {
         return res.status(400).json({ message: 'Payment costing is already approved.' });
       }
@@ -542,8 +543,8 @@ exports.approvePaymentCosting = async (req, res) => {
 
     const allowed = await hasRoleOrPermission(
       req.user,
-      'shipment.tab.payment_costing.costing_table.approve_fas_manager',
-      ['FasManager', 'Admin', 'Manager', 'Management']
+      'shipment.tab.payment_costing.costing_table.approve_fas',
+      ['FAS', 'Admin', 'Manager', 'Management']
     );
     if (!allowed) {
       return res.status(403).json({ message: 'You do not have permission to approve payment costing.' });
@@ -554,8 +555,8 @@ exports.approvePaymentCosting = async (req, res) => {
       status: PAYMENT_COSTING_APPROVAL_STATUSES.approved,
       submittedAt: currentState.submittedAt || new Date(),
       submittedBy: currentState.submittedBy || null,
-      fasManagerApprovedAt: new Date(),
-      fasManagerApprovedBy: req.user._id,
+      fasApprovedAt: new Date(),
+      fasApprovedBy: req.user._id,
     };
     await container.save();
 
@@ -577,10 +578,10 @@ exports.approvePaymentCosting = async (req, res) => {
       module: 'FAS',
       entity: 'Container',
       entityId: container._id,
-      action: 'ApprovePaymentCostingFasManager',
+      action: 'ApprovePaymentCostingFas',
       before: beforeUpdate,
       after: cloneForAudit(container.toObject()),
-      remarks: 'Payment costing approved by FAS manager'
+      remarks: 'Payment costing approved by FS (FAS)'
     });
 
     return res.json({ message: 'Payment costing approved successfully', container });
