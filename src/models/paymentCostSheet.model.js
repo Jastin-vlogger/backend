@@ -10,11 +10,24 @@ const actorSchema = new mongoose.Schema({
 }, { _id: false });
 
 const historySchema = new mongoose.Schema({
-  action: { type: String, enum: ['import', 'reimport', 'submit', 'unlock'], required: true },
+  action: { type: String, enum: ['import', 'reimport', 'edit', 'submit', 'unlock'], required: true },
   at: { type: Date, default: Date.now },
   by: { type: actorSchema, default: () => ({}) },
   fileName: { type: String, default: '' },
   note: { type: String, default: '' },
+}, { _id: false });
+
+// One numbered cost row of the sheet. The number of lines comes from the imported file (not fixed).
+const lineSchema = new mongoose.Schema({
+  sn: { type: Number, required: true },
+  description: { type: String, default: '' },
+  costDh: { type: Number, default: null },
+  billRefNo: { type: String, default: '' },
+  billRefParty: { type: String, default: '' },
+  paymentReference: { type: String, default: '' },
+  remarks: { type: String, default: '' },
+  borneByRhgt: { type: Number, default: null },
+  borneBySilal: { type: Number, default: null },
 }, { _id: false });
 
 const paymentCostSheetSchema = new mongoose.Schema({
@@ -25,6 +38,10 @@ const paymentCostSheetSchema = new mongoose.Schema({
   containerIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Container' }],
 
   snapshot: { type: mongoose.Schema.Types.Mixed, required: true },
+  // Editable lines (what the tab shows). The snapshot stays as the original imported file.
+  lines: [lineSchema],
+  linesUpdatedAt: { type: Date, default: null },
+  linesUpdatedBy: { type: actorSchema, default: () => ({}) },
   stats: {
     sheets: { type: Number, default: 0 },
     cells: { type: Number, default: 0 },

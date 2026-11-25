@@ -192,4 +192,192 @@ function buildWorkbookFromSnapshot(snapshot) {
   return workbook;
 }
 
-module.exports = { parseCostSheetWorkbook, buildWorkbookFromSnapshot, CostSheetParseError, LIMITS };
+// ---- Cost lines (the numbered cost rows) ---------------------------------------------------------
+
+const { round2, computeTotals } = require('./costLines');
+
+const textOf = (cell) => (cell && cell.v != null ? String(cell.v).trim() : '');
+const lower = (s) => s.toLowerCase();
+const isSnHeader = (s) => /^(sn|s\.?\s*no|sl\.?\s*no)\.?$/i.test(s.trim());
+const normFormula = (f) => String(f || '').replace(/[\s$=]/g, '').toUpperCase();
+const colLetter = (c) => { let s = ''; let n = c; while (n > 0) { s = String.fromCharCode(65 + ((n - 1) % 26)) + s; n = Math.floor((n - 1) / 26); } return s; };
+
+const numberOf = (cell) => {
+  if (!cell || cell.v == null) return null;
+  if (typeof cell.v === 'number') return Number.isFinite(cell.v) ? cell.v : null;
+  if (cell.t === 's') {
+    const n = Number(String(cell.v).replace(/,/g, '').trim());
+    return String(cell.v).trim() !== '' && Number.isFinite(n) ? n : null;
+  }
+  return null;
+};
+
+const stringOf = (cell) => {
+  if (!cell || cell.v == null) return '';
+  if (cell.t === 'd') return String(cell.v).slice(0, 10);
+  return String(cell.v).trim();
+};
+
+// Finds the cost table by its header text (SN / Description / Cost) and reads every numbered row after it
+// until the TOTAL row. The number of lines is whatever the sheet has. Everything after the TOTAL row
+// (other streams, item/landed-cost tables, signatures) is ignored.
+// Returns { found, lines, warnings, sheetName }.
+function extractCostLines(snapshot) {
+  const warnings = [];
+  for (const sheet of snapshot?.sheets || []) {
+    const rowsByNo = new Map((sheet.rows || []).map((r) => [r.r, new Map((r.cells || []).map((c) => [c.c, c]))]));
+    const rowNumbers = [...rowsByNo.keys()].sort((a, b) => a - b);
+
+    let headerRow = null;
+    for (const rn of rowNumbers) {
+      const cells = rowsByNo.get(rn);
+      const texts = [...cells.entries()].map(([c, cell]) => [c, lower(textOf(cell))]);
+      const sn = texts.find(([, t]) => isSnHeader(t));
+      const desc = texts.find(([, t]) => t.startsWith('description'));
+      const cost = texts.find(([, t]) => /\bcost\b/.test(t));
+      if (sn && desc && cost) { headerRow = { rn, texts, sn: sn[0], desc: desc[0], cost: cost[0] }; break; }
+    }
+    if (!headerRow) continue;
+
+    const { texts } = headerRow;
+    const billCols = texts.filter(([, t]) => /^bill\s*ref/.test(t)).map(([c]) => c);
+    const payCol = (texts.find(([, t]) => t.startsWith('payment')) || [])[0];
+    const remarkCol = (texts.find(([, t]) => t.startsWith('remark')) || [])[0];
+    const rhgtCol = (texts.find(([, t]) => /rhgt/.test(t)) || [])[0];
+    const silalCol = (texts.find(([, t]) => /silal/.test(t)) || [])[0];
+    const cols = {
+      sn: headerRow.sn,
+      desc: headerRow.desc,
+      cost: headerRow.cost,
+      billNo: billCols[0],
+      billParty: billCols[1],
+      pay: payCol,
+      remark: remarkCol && remarkCol !== payCol ? remarkCol : undefined,
+      rhgt: rhgtCol,
+      silal: silalCol,
+    };
+
+    const lines = [];
+    let totalRow = null;
+    let prev = headerRow.rn;
+    for (const rn of rowNumbers.filter((n) => n > headerRow.rn)) {
+      const cells = rowsByNo.get(rn);
+      const isTotal = [...cells.entries()].some(([c, cell]) => c <= Math.max(cols.desc, cols.sn) && /^total\b/i.test(textOf(cell)));
+      if (isTotal) { totalRow = cells; break; }
+      const sn = numberOf(cells.get(cols.sn));
+      if (rn !== prev + 1 || sn == null || !Number.isInteger(sn)) break;
+      prev = rn;
+
+      const get = (c) => (c ? cells.get(c) : undefined);
+      const cost = numberOf(get(cols.cost));
+      const costCell = get(cols.cost);
+      if (costCell?.f && cost == null) warnings.push(`Line ${sn}: Cost DH is a formula without a saved value; left blank.`);
+
+      let rhgt = numberOf(get(cols.rhgt));
+      let silal = numberOf(get(cols.silal));
+      if (rhgt == null && cols.rhgt && get(cols.rhgt)?.f && cost != null && normFormula(get(cols.rhgt).f) === `${colLetter(cols.cost)}${rn}`) rhgt = cost;
+      if (silal == null && cols.silal && get(cols.silal)?.f && cost != null && rhgt != null
+        && normFormula(get(cols.silal).f) === `${colLetter(cols.cost)}${rn}-${colLetter(cols.rhgt)}${rn}`) silal = round2(cost - rhgt);
+      if (cost != null) {
+        if (rhgt == null && silal != null) rhgt = round2(cost - silal);
+        else if (silal == null && rhgt != null) silal = round2(cost - rhgt);
+        else if (rhgt == null && silal == null) {
+          rhgt = cost; silal = 0; // sheet default: RHGT bears the cost unless Silal's share is stated
+          if (cols.rhgt || cols.silal) warnings.push(`Line ${sn}: Borne by could not be read from the file; RHGT bears the full cost. Check it.`);
+        }
+      }
+
+      lines.push({
+        sn,
+        description: stringOf(get(cols.desc)),
+        costDh: cost == null ? null : round2(cost),
+        billRefNo: stringOf(get(cols.billNo)),
+        billRefParty: stringOf(get(cols.billParty)),
+        paymentReference: stringOf(get(cols.pay)),
+        remarks: stringOf(get(cols.remark)),
+        borneByRhgt: rhgt == null ? null : round2(rhgt),
+        borneBySilal: silal == null ? null : round2(silal),
+      });
+    }
+
+    if (totalRow) {
+      const totals = computeTotals(lines);
+      [['cost', 'costDh', 'Cost DH'], ['rhgt', 'borneByRhgt', 'Borne By RHGT'], ['silal', 'borneBySilal', 'Borne by Silal']].forEach(([key, field, label]) => {
+        const stated = numberOf(totalRow.get(cols[key]));
+        if (cols[key] && stated != null && Math.abs(stated - totals[field]) > 0.01) {
+          warnings.push(`${label} total in the file (${stated}) differs from the imported lines (${totals[field]}). Check the lines.`);
+        }
+      });
+    }
+    if (!lines.length) warnings.push('The cost table has no numbered lines.');
+    return { found: true, lines, warnings, sheetName: sheet.name };
+  }
+  return { found: false, lines: [], warnings: ['Could not find the cost table (SN / Description / Cost DH) in the file. The sheet is imported and viewable, but there are no lines to edit.'], sheetName: '' };
+}
+
+const LINE_COLUMNS = [
+  { header: 'SN', key: 'sn', width: 6 },
+  { header: 'Description', key: 'description', width: 36 },
+  { header: 'Cost DH', key: 'costDh', width: 14, numeric: true },
+  { header: 'Bill Ref. (No / Date)', key: 'billRefNo', width: 26 },
+  { header: 'Bill Ref. (Party)', key: 'billRefParty', width: 24 },
+  { header: 'Payment Reference', key: 'paymentReference', width: 22 },
+  { header: 'Remarks', key: 'remarks', width: 24 },
+  { header: 'Borne By RHGT', key: 'borneByRhgt', width: 16, numeric: true },
+  { header: 'Borne by Silal', key: 'borneBySilal', width: 16, numeric: true },
+];
+
+// Excel of the saved (possibly edited) lines + a TOTAL row with real SUM formulas, for any number of lines.
+function buildWorkbookFromLines(lines, meta = {}) {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'Royal Shipment Tracker';
+  workbook.created = new Date();
+  const ws = workbook.addWorksheet('Payment Costing');
+  LINE_COLUMNS.forEach((col, i) => { ws.getColumn(i + 1).width = col.width; });
+
+  ws.getCell('A1').value = 'ROYAL HORIZON GENERAL TRADING';
+  ws.getCell('A1').font = { bold: true, size: 12 };
+  ws.getCell('A2').value = ['Payment Costing', meta.shipmentNo, meta.blNo ? `BL ${meta.blNo}` : ''].filter(Boolean).join(' | ');
+  ws.getCell('A2').font = { bold: true };
+
+  const headerRowNo = 4;
+  const header = ws.getRow(headerRowNo);
+  LINE_COLUMNS.forEach((col, i) => {
+    const cell = header.getCell(i + 1);
+    cell.value = col.header;
+    cell.font = { bold: true };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+    cell.border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+  });
+
+  const first = headerRowNo + 1;
+  (lines || []).forEach((line, idx) => {
+    const row = ws.getRow(first + idx);
+    LINE_COLUMNS.forEach((col, i) => {
+      const cell = row.getCell(i + 1);
+      const value = line[col.key];
+      cell.value = value === '' ? null : value;
+      if (col.numeric) cell.numFmt = '#,##0.00';
+      cell.border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+    });
+  });
+
+  const last = Math.max(first, first + (lines || []).length - 1);
+  const totals = computeTotals(lines);
+  const totalRow = ws.getRow(first + (lines || []).length);
+  totalRow.getCell(1).value = 'TOTAL';
+  [['C', 'costDh'], ['H', 'borneByRhgt'], ['I', 'borneBySilal']].forEach(([letter, field]) => {
+    const cell = totalRow.getCell(letter);
+    cell.value = { formula: `SUM(${letter}${first}:${letter}${last})`, result: totals[field] };
+    cell.numFmt = '#,##0.00';
+  });
+  for (let i = 1; i <= LINE_COLUMNS.length; i += 1) {
+    const cell = totalRow.getCell(i);
+    cell.font = { bold: true };
+    cell.border = { top: { style: 'medium' }, bottom: { style: 'medium' }, left: { style: 'thin' }, right: { style: 'thin' } };
+  }
+  ws.views = [{ state: 'frozen', ySplit: headerRowNo }];
+  return workbook;
+}
+
+module.exports = { parseCostSheetWorkbook, buildWorkbookFromSnapshot, buildWorkbookFromLines, extractCostLines, CostSheetParseError, LIMITS };

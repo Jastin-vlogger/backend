@@ -12,7 +12,10 @@ const Shipment = require('../models/shipment.model');
 const writeAuditLog = require('../core/utils/auditLogger');
 const { uploadBufferToS3 } = require('../core/utils/s3Upload');
 const { recordDocumentImports } = require('../core/utils/importLog');
-const { parseCostSheetWorkbook, buildWorkbookFromSnapshot, CostSheetParseError } = require('../core/utils/costSheetExcel');
+const {
+  parseCostSheetWorkbook, buildWorkbookFromSnapshot, buildWorkbookFromLines, extractCostLines, CostSheetParseError,
+} = require('../core/utils/costSheetExcel');
+const { sanitiseLines, computeTotals, changedLineSns, CostLinesError } = require('../core/utils/costLines');
 const { hasRoleOrPermission } = require('./shipment-preamble.helpers');
 
 const KEYS = {
@@ -54,14 +57,23 @@ const permissionsFor = async (user) => ({
   canUnlock: await hasRoleOrPermission(user, KEYS.unlock, ROLES.unlock),
 });
 
-const toResponse = (sheet) => {
+// Lines shown in the tab. A sheet imported before lines were stored derives them from its snapshot.
+const effectiveLines = (sheet) => (
+  sheet?.lines?.length ? sheet.lines.map((l) => ({ ...(l.toObject ? l.toObject() : l) })) : extractCostLines(sheet?.snapshot).lines
+);
+
+const toResponse = (sheet, extra = {}) => {
   if (!sheet) return null;
+  const lines = effectiveLines(sheet);
   return {
     _id: sheet._id,
     status: sheet.status,
     blNo: sheet.blNo,
     snapshot: sheet.snapshot,
     stats: sheet.stats,
+    lines,
+    totals: computeTotals(lines),
+    warnings: extra.warnings || [],
     source: { fileName: sheet.source?.fileName || '', size: sheet.source?.size || 0 },
     importedAt: sheet.importedAt,
     importedBy: sheet.importedBy?.name || '',
@@ -70,13 +82,9 @@ const toResponse = (sheet) => {
     unlockedAt: sheet.unlockedAt,
     unlockedBy: sheet.unlockedBy?.name || '',
     unlockReason: sheet.unlockReason || '',
-    history: (sheet.history || []).map((h) => ({
-      action: h.action,
-      at: h.at,
-      by: h.by?.name || '',
-      fileName: h.fileName || '',
-      note: h.note || '',
-    })).reverse(),
+    linesUpdatedAt: sheet.linesUpdatedAt || null,
+    linesUpdatedBy: sheet.linesUpdatedBy?.name || '',
+    historyTotal: (sheet.history || []).length,
   };
 };
 
@@ -127,6 +135,8 @@ exports.importPaymentCostSheet = async (req, res) => {
       console.error('Cost sheet original upload warning:', err.message); // the snapshot is the source of truth
     }
 
+    const extracted = extractCostLines(parsed.snapshot);
+
     const actor = actorOf(req.user);
     const action = existing ? 'reimport' : 'import';
     const fileName = file.originalname || 'cost-sheet.xlsx';
@@ -141,6 +151,9 @@ exports.importPaymentCostSheet = async (req, res) => {
     let sheet;
     if (existing) {
       existing.snapshot = parsed.snapshot;
+      existing.lines = extracted.lines;
+      existing.linesUpdatedAt = null;
+      existing.linesUpdatedBy = {};
       existing.stats = parsed.stats;
       existing.source = source;
       existing.importedAt = new Date();
@@ -158,6 +171,7 @@ exports.importPaymentCostSheet = async (req, res) => {
         blNo: target.blNo,
         containerIds: [target.container._id],
         snapshot: parsed.snapshot,
+        lines: extracted.lines,
         stats: parsed.stats,
         source,
         status: 'draft',
@@ -174,7 +188,7 @@ exports.importPaymentCostSheet = async (req, res) => {
       action,
       fileName,
       fileUrl,
-      summary: { blNo: target.blNo, sheets: parsed.stats.sheets, cells: parsed.stats.cells },
+      summary: { blNo: target.blNo, sheets: parsed.stats.sheets, cells: parsed.stats.cells, lines: extracted.lines.length },
     }, req.user);
     await writeAuditLog({
       userId: req.user._id,
@@ -183,18 +197,109 @@ exports.importPaymentCostSheet = async (req, res) => {
       entityId: sheet._id,
       action: action === 'import' ? 'ImportCostSheet' : 'ReimportCostSheet',
       before: {},
-      after: { fileName, sheets: parsed.stats.sheets, cells: parsed.stats.cells, blKey: target.blKey },
+      after: { fileName, sheets: parsed.stats.sheets, cells: parsed.stats.cells, lines: extracted.lines.length, blKey: target.blKey },
       remarks: `Payment costing sheet ${action === 'import' ? 'imported' : 're-imported'} from ${fileName}`,
     });
 
     return res.status(existing ? 200 : 201).json({
       message: existing ? 'Cost sheet re-imported.' : 'Cost sheet imported. Review it, then submit to lock it.',
-      sheet: toResponse(sheet.toObject()),
+      sheet: toResponse(sheet.toObject(), { warnings: extracted.warnings }),
       permissions: await permissionsFor(req.user),
     });
   } catch (err) {
     console.error('importPaymentCostSheet error:', err);
     return res.status(500).json({ message: 'Unable to import the cost sheet' });
+  }
+};
+
+// Saves the edited lines. Same rights as import (FS); locked sheets are refused. The number of lines is
+// pinned to the imported sheet (it can change only by re-importing).
+exports.savePaymentCostLines = async (req, res) => {
+  try {
+    if (!(await hasRoleOrPermission(req.user, KEYS.import, ROLES.import))) {
+      return res.status(403).json({ message: 'Only FS users can edit the Payment Costing lines.' });
+    }
+    const target = await loadTarget(req.params.containerId);
+    if (target.error) return res.status(target.error.code).json({ message: target.error.message });
+
+    const sheet = await PaymentCostSheet.findOne({ shipmentId: target.shipmentId, blKey: target.blKey });
+    if (!sheet) return res.status(400).json({ message: 'Import a cost sheet before editing its lines.' });
+    if (sheet.status === 'locked') return res.status(409).json({ message: LOCKED_MESSAGE });
+
+    const before = effectiveLines(sheet);
+    if (!before.length) return res.status(400).json({ message: 'This sheet has no cost lines to edit.' });
+    let lines;
+    try {
+      lines = sanitiseLines(req.body?.lines, before.length);
+    } catch (err) {
+      if (err instanceof CostLinesError) return res.status(400).json({ message: err.message });
+      throw err;
+    }
+    const beforeSns = before.map((l) => l.sn).join(',');
+    if (lines.map((l) => l.sn).join(',') !== beforeSns) {
+      return res.status(400).json({ message: 'Line numbers do not match the imported sheet.' });
+    }
+
+    const changed = changedLineSns(before, lines);
+    if (!changed.length) return res.json({ message: 'No changes to save.', sheet: toResponse(sheet.toObject()), permissions: await permissionsFor(req.user) });
+
+    const actor = actorOf(req.user);
+    sheet.lines = lines;
+    sheet.linesUpdatedAt = new Date();
+    sheet.linesUpdatedBy = actor;
+    sheet.history.push({
+      action: 'edit',
+      at: new Date(),
+      by: actor,
+      fileName: sheet.source?.fileName || '',
+      note: `${changed.length === 1 ? 'Line' : 'Lines'} ${changed.join(', ')} changed`.slice(0, 480),
+    });
+    await sheet.save();
+
+    const beforeBySn = new Map(before.map((l) => [l.sn, l]));
+    await writeAuditLog({
+      userId: req.user._id,
+      module: 'FAS',
+      entity: 'PaymentCostSheet',
+      entityId: sheet._id,
+      action: 'EditCostSheetLines',
+      before: { lines: changed.map((sn) => beforeBySn.get(sn)).filter(Boolean) },
+      after: { lines: lines.filter((l) => changed.includes(l.sn)) },
+      remarks: `Payment costing lines edited: ${changed.join(', ')}`.slice(0, 480),
+    });
+
+    return res.json({ message: 'Changes saved.', sheet: toResponse(sheet.toObject()), permissions: await permissionsFor(req.user) });
+  } catch (err) {
+    console.error('savePaymentCostLines error:', err);
+    return res.status(500).json({ message: 'Unable to save the cost lines' });
+  }
+};
+
+// Import Log: one page of the sheet's history (newest first).
+exports.getPaymentCostSheetHistory = async (req, res) => {
+  try {
+    if (!(await hasRoleOrPermission(req.user, KEYS.view, ROLES.view))) {
+      return res.status(403).json({ message: 'You do not have permission to view the Payment Costing sheet.' });
+    }
+    const target = await loadTarget(req.params.containerId);
+    if (target.error) return res.status(target.error.code).json({ message: target.error.message });
+
+    const sheet = await PaymentCostSheet.findOne({ shipmentId: target.shipmentId, blKey: target.blKey }).select('history').lean();
+    const all = [...(sheet?.history || [])].reverse();
+    const pageSize = Math.min(Math.max(parseInt(req.query.pageSize, 10) || 10, 1), 100);
+    const pages = Math.max(Math.ceil(all.length / pageSize), 1);
+    const page = Math.min(Math.max(parseInt(req.query.page, 10) || 1, 1), pages);
+    const items = all.slice((page - 1) * pageSize, page * pageSize).map((h) => ({
+      action: h.action,
+      at: h.at,
+      by: h.by?.name || '',
+      fileName: h.fileName || '',
+      note: h.note || '',
+    }));
+    return res.json({ items, total: all.length, page, pageSize });
+  } catch (err) {
+    console.error('getPaymentCostSheetHistory error:', err);
+    return res.status(500).json({ message: 'Unable to load the import log' });
   }
 };
 
@@ -305,10 +410,14 @@ exports.downloadPaymentCostSheetExcel = async (req, res) => {
 
     const shipment = await Shipment.findById(target.shipmentId).select('shipmentNo').lean();
     const stem = String(shipment?.shipmentNo || sheet.blNo || 'shipment').replace(/[^a-z0-9_-]/gi, '_');
-    const workbook = buildWorkbookFromSnapshot(sheet.snapshot);
+    // Default: the saved (edited) lines + total. ?source=original rebuilds the file exactly as imported.
+    const original = req.query.source === 'original';
+    const workbook = original
+      ? buildWorkbookFromSnapshot(sheet.snapshot)
+      : buildWorkbookFromLines(effectiveLines(sheet), { shipmentNo: shipment?.shipmentNo || '', blNo: sheet.blNo });
     const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="payment-costing-${stem}.xlsx"`);
+    res.setHeader('Content-Disposition', `attachment; filename="payment-costing-${stem}${original ? '-original' : ''}.xlsx"`);
     return res.send(buffer);
   } catch (err) {
     console.error('downloadPaymentCostSheetExcel error:', err);

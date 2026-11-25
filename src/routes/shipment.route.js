@@ -409,6 +409,8 @@ router.post(
   },
   controller.importPaymentCostSheet
 );
+router.put('/payment-cost-sheet/container/:containerId/lines', authMiddleware, authorize({ tag: 'any-active' }), controller.savePaymentCostLines);
+router.get('/payment-cost-sheet/container/:containerId/history', authMiddleware, authorize({ tag: 'any-active' }), controller.getPaymentCostSheetHistory);
 router.post('/payment-cost-sheet/container/:containerId/submit', authMiddleware, authorize({ tag: 'any-active' }), controller.submitPaymentCostSheet);
 router.post('/payment-cost-sheet/container/:containerId/unlock', authMiddleware, authorize({ tag: 'any-active' }), controller.unlockPaymentCostSheet);
 
